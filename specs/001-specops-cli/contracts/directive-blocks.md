@@ -60,12 +60,16 @@ minimum per block:
 1. **Operational Silence (§6)**: no intra-task narration; between tasks exactly one
    line — `<task-id> done (<commit-sha7>), starting <next-task-id>` — then continue
    immediately.
-2. **Ledger loop**: `specops status start-task <id>` before editing; commit work;
-   `specops status complete-task <id> --auto` to close; never edit `status.yaml` or
-   `tasks.md` checkboxes by hand.
-3. **Preflight**: `specops reconcile` before the first task; divergence = stop and
+2. **Skills**: load skill files from `skills_dir` if present; empty or absent
+   directory is not a blocker — proceed without them.
+3. **Ledger loop (per-US commit model)**: `specops status start-task <id>` before
+   editing; intermediate tasks (not the final task of the user story) close with
+   `complete-task <id> --evidence "CLI_LOG:<summary>"` (no commit required); the
+   final task of the user story: commit all accumulated work first, then
+   `complete-task <id> --auto`; never edit `status.yaml` or `tasks.md` by hand.
+4. **Preflight**: `specops reconcile` before the first task; divergence = stop and
    signal the human.
-4. **Stop-and-Ask gates (§8.2)**: persisted schema changes, secrets/auth/crypto,
+5. **Stop-and-Ask gates (§8.2)**: persisted schema changes, secrets/auth/crypto,
    public contract breaks, dependency add/remove/major-bump, root-cause ambiguity —
    halt and ask.
 

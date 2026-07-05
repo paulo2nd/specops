@@ -210,3 +210,38 @@ to `checklists/pre-plan.md`.
   rewriting it wholesale would discard working scaffolding.
 - **Alternatives considered**: argparse port of the reference scripts — rejected:
   `objective.md` mandates Typer and the skeleton exists.
+
+## R13. Skills optionality (post-implementation decision)
+
+- **Decision**: Skills are **optional** for both the implementer and the reviewer.
+  `implement.md` directive: load skill files from `skills_dir` if present; empty or
+  absent directory is not a gate. `review.md` command: same — proceed without skills
+  when `skills_dir` is empty or missing.
+- **Rationale**: SpecOps is installed before any project-specific skills exist.
+  Blocking on an empty skills directory prevents the tool from being used from day one
+  and provides no safety benefit — skills are a knowledge resource, not a safety gate.
+  The reference implementation made skills mandatory, but that assumed a mature
+  repository with skills already defined; SpecOps must work on fresh repositories.
+- **Alternatives considered**: Skills mandatory (reference behavior) — rejected:
+  blocks first-use on any repository that hasn't yet built a skills library.
+
+## R14. Review scope gate replaced by working tree check (post-implementation decision)
+
+- **Decision**: The review command's fast-rejection check is changed from
+  **file-scope enforcement** (reject files not declared in `plan.md`) to a
+  **working tree check** (reject dirty working tree or empty effective diff). The
+  file-scope check is removed entirely; the surgical diff review (Step 5) is the
+  gate for content correctness.
+  Active Learning added: when the review reveals recurring failures or knowledge gaps,
+  the reviewer records a skill creation suggestion in `revisions/revision-X.md` under
+  `## Skill Suggestions` — the reviewer never creates skills itself.
+- **Rationale**: File-scope enforcement produced systematic false positives — any
+  file legitimately touched but not anticipated in `plan.md` (an import fix, a helper,
+  a new test) triggers rejection without reading code. `plan.md` is a planning guide,
+  not a write-permission contract; the implementer must be free to create or modify
+  any file. The working tree check (dirty tree, empty diff) still provides the fast
+  rejection path without blocking legitimate work.
+- **Alternatives considered**: Scope enforcement with opt-out (Scope Expansion
+  recorded in `status.yaml`) — rejected: adds overhead per unanticipated file and
+  shifts burden to the implementer; the reference had this mechanism but it assumed a
+  more constrained codebase context.

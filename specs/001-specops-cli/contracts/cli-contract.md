@@ -57,8 +57,9 @@ requires latest cycle APPROVED. Invalid phase/jump → exit 1, ledger untouched
 
 ## `specops reconcile`
 
-Read-only. Exit 0 when every `tasks[].commits[]` hash is an ancestor of HEAD and
-every DONE task has commits + evidence; exit 1 listing each divergent entry
+Read-only. Exit 0 when every DONE task has `evidence` and every hash in
+`tasks[].commits[]` is an ancestor of HEAD (`commits[]` may be empty — valid for
+intermediate tasks closed with `--evidence`); exit 1 listing each divergent entry
 (`<task-id>: <reason>`), including `orphaned` flags. `(human)` commit values are
 exempt (R11). Warns (not fails) on `branch` mismatch and on a `baseline` absent from
 local history (reference behavior preserved).
@@ -78,8 +79,11 @@ Violation line format: `consistency: <file>:<line> - <rule and short action>`.
 ## Installed agent command: `/specops-review` (name follows the integration's invoke separator)
 
 Not a CLI command — the packaged `review.md` prompt (FR-013). Mandatory order: load
-skills from `skills_dir` → run `specops reconcile` (abort on ≠0) → `lint_command` +
-`test_command` must pass → `git status --porcelain` scope check vs plan paths
-(out-of-scope ⇒ REJECTED without reading contents; empty diff ⇒ REJECTED) → surgical
-diff review → emit `revisions/revision-X.md` findings as
-`[File]:[Line] - [rule violated and short action]`.
+skills from `skills_dir` if present (optional — empty or absent directory is not a
+blocker) → run `specops reconcile` (abort on ≠0) → `lint_command` + `test_command`
+must pass → `git status --porcelain` working tree check (uncommitted changes ⇒
+REJECTED without reading contents; empty effective diff ⇒ REJECTED) → surgical diff
+review → emit `revisions/revision-X.md` findings as
+`[File]:[Line] - [rule violated and short action]` → Active Learning: record skill
+creation suggestions in `## Skill Suggestions` when recurring gaps are detected
+(reviewer does not create skills).

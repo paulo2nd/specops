@@ -40,7 +40,7 @@ Full field-level schema with validation rules: [contracts/ledger-schema.md](cont
 | `id` | string | Speckit id verbatim (`T001`); unique |
 | `status` | enum | `PENDING → IN_PROGRESS → DONE`; only one IN_PROGRESS at a time |
 | `started_commit` | string\|null | HEAD at `start-task`; basis for evidence harvest |
-| `commits` | string[] | Filled at completion from `started_commit..HEAD`; non-empty required for DONE |
+| `commits` | string[] | Filled at completion from `started_commit..HEAD`; may be empty for DONE (valid for intermediate tasks closed with `--evidence`) |
 | `evidence` | string\|null | Required for DONE (any mode); `<CLASS>:<summary>[; …]` |
 | `completed_at` | date\|null | Set at completion |
 | `orphaned` | bool (optional) | True when id no longer exists in `tasks.md`; reported, never auto-deleted |
