@@ -11,7 +11,8 @@
 Build the `specops-cli` Python package: a pip-installable companion that layers the
 agent-guided atomic development methodology on top of GitHub Speckit. Four command
 groups (`init`, `status`, `reconcile`, `consistency`) plus one installed agent command
-(`/specops.review`). `specops init` prepares a Speckit repository additively
+(named `specops{sep}review` per the integration's invoke separator — e.g. `/specops-review`
+for Claude skills mode). `specops init` prepares a Speckit repository additively
 (marker-delimited directive blocks injected into Speckit's plan/implement prompts,
 `specops.json`, packaged assets only); the `status` group controls the physical
 execution ledger (`status.yaml`) with machine-collected evidence; `reconcile` and
