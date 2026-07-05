@@ -1,14 +1,64 @@
 # Methodology Reference — Agent-Guided Atomic Development
 
 This document is the local, self-contained source for the methodology sections cited
-by [objective.md](../objective.md), the project constitution, and the feature specs.
-The section numbering (§) is preserved so existing citations resolve here. The scripts
-in this directory (`manage-status.py`, `reconcile-status.py`,
-`scope-tasks-consistency.py`) are the reference implementations of the automation this
-methodology relies on; `status-template.yaml`, `tasks-template.md`, and
-`revision-template.md` are the reference artifact shapes.
+by [objective.md](../objective.md), the project constitution, the feature specs, and
+the vendored workflow definitions in [workflow/](workflow/). The section numbering (§)
+is preserved so existing citations resolve here. The scripts in this directory
+(`manage-status.py`, `reconcile-status.py`, `scope-tasks-consistency.py`) are the
+reference implementations of the automation this methodology relies on;
+`status-template.yaml`, `scope-template.md`, `tasks-template.md`,
+`revision-template.md`, and `fix-template.md` are the reference artifact shapes, and
+`review-prompt.md` is the assembled draft of the review prompt template.
 
 ---
+
+## §1 Repo-as-State
+
+- A session starts from a simple command (Role + Feature) or automatically via native
+  CLI commands. The AI reconstructs its context from the active Git branch and by
+  reading the workflow governance files and the active item's `status.yaml`.
+- Conflict hierarchy: governance manifest → methodology → workflow JSONs → active
+  item's `status.yaml` → remaining artifacts.
+- If role, phase, or active item is ambiguous: stop and request human clarification.
+
+### §1.1 Read Scope Policy
+
+- Each session's read scope is restricted by `workflow/kickoff-reads.json >
+  read_scope_policy`.
+- Reads outside canonical governance, the active item, required templates, and the
+  skills demanded by the preflight require explicit human authorization in chat.
+
+### §1.2 Versioned Source of Truth
+
+- Workflow concepts live exclusively in versioned files (methodology + workflow
+  JSONs).
+- System-prompt context, cross-session memory, and persistent observations are
+  non-authoritative; they must be re-verified against the current files before being
+  cited or used in a decision.
+
+## §1.5 Project Stage & Compatibility
+
+- The host project declares its stage and compatibility stance. In active development
+  without a staging environment: **no contract-regression requirement** — changes need
+  not preserve public contracts (DTOs, endpoints, event payloads, persisted formats),
+  and the reviewer cannot block a PR for "compatibility breakage"; **no transitional
+  feature flags** or compatibility-only shims — replace code directly.
+- **Database reset** to reapply migrations is a legitimate recovery path, **upon
+  explicit prior warning to the human**. Migrations remain mandatory and must be
+  correct.
+
+## §2 Canonical Flow
+
+- **Full feature**: `architect → implementer → reviewer`. Corrective cycles
+  `reviewer → implementer → reviewer` until `Decision=APPROVED`.
+- **Lightweight fix**: fixer-only lane, single session, human copiloting in real
+  time. No formal reviewer, no `revisions/`, no ledger.
+- `tasks.md` is mandatory for a full feature (single file). The technical trail
+  (commits, evidence) lives in the state ledger (`status.yaml`).
+- **Human Readiness Gate at planning:** the transition from planning to
+  implementation requires explicit human approval in chat of the generated planning
+  artifacts. The planner must not hand off or start implementation automatically
+  without this confirmation.
 
 ## §6 Operational Silence
 
@@ -83,6 +133,39 @@ The agent MUST block and ask the human before proceeding when the decision invol
 coordinating with another system, **ask**. If a local revert solves it, decide and
 continue.
 
+## §10 Artifact Contract (Parseable H2 Headers)
+
+Templates guarantee that these H2 sections exist with exact names. Agents extract
+information by header name; an artifact with a missing or renamed header is invalid
+and the reviewer must refuse it.
+
+- `scope.md`: `## Core Objective`, `## Success Criteria`, `## Required Skills & Gaps`,
+  `## Risks`, `## Critical Constraints`, `## Readiness Gate`, `## AI Impact`.
+- `tasks.md`: `## Task Backlog` (containing `### task-XX: [Goal]` blocks with bullets
+  `**Objective**`, `**Acceptance Criteria**`, `**Files to Modify**`, `**Strategy**`,
+  `**Dependencies**`). `Objective` requires 1–5 lines describing the problem and the
+  task's motivation; absence, or text that merely duplicates Acceptance Criteria,
+  invalidates the artifact.
+- `fix.md` (retrospective): `## Objective`, `## Files Touched`, `## Evidence`.
+- `revision-X.md`: `## Revision`, `## Work Item Reference`, `## PR Reference`,
+  `## PR Decision Mirror`, `## Summary`, `## Non-Conformities`, `## Approved Items`,
+  `## Corrective Handoff`, `## Required Actions`,
+  `## Correction Evidence (Self-Report)`.
+
+## §11 Reconciliation Preflight
+
+Every feature role executes these steps **before** editing any file:
+
+1. Read the active item's state ledger.
+2. Validate each invariant in `workflow/transitions.json > invariants` against the
+   current state.
+3. Reconcile `tasks[].commit` and `phases[].completed_at` against the branch's
+   `git log`. Divergence = stop and signal the human.
+4. Confirm branch and baseline.
+5. Derive the write scope from the active artifact (never copy from memory).
+
+A violated invariant or git divergence blocks any write until reconciliation.
+
 ## §11.1 Plan Consistency Gate
 
 Applies at the planning → implementation handoff. The consistency validator runs as
@@ -103,6 +186,40 @@ planning artifacts are corrected. The gate mechanically validates:
 This gate is the automation of the declarative empirical-verification rule in §17.4.
 Downstream roles do not need to re-run it; it is the planner's responsibility at the
 transition.
+
+## §12 Handoff and Closure
+
+- A role switch marks the end of a session.
+- The agent commits and pushes versioned changes within its write scope before
+  closing, unless the human explicitly directs otherwise.
+- Post-compaction resumption starts from the ledger's `recovery` block without
+  depending on the previous session's memory (automatic transition, no human gate).
+
+## §13 Commit Message
+
+Pattern: `<type>(<scope>): <summary>`
+
+- Message in English, lowercase `type`, objective `summary` without a trailing
+  period.
+- Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `security`, `audit`.
+- Include the agent identification as co-author.
+
+## §14 Templates and Structural Governance
+
+Every operational artifact is born from a template. Changing the shape of a planning,
+status, or revision artifact requires updating the corresponding template first.
+
+## §15 Skills
+
+- Relevant skills live in the client's skills directory, organized in modular
+  folders, and are loaded before each task/review in the feature lane.
+- Every skill reference in a feature artifact must use a canonical repo-relative path
+  resolving to an existing skill file; a reference that does not resolve blocks the
+  session until human reconciliation or a versioned correction.
+- If a declared skill gap is marked blocking, the handoff is blocked until a human
+  decision; non-blocking gaps proceed with canonical docs and existing skills.
+- **Fix lane**: skills are an optional consulted resource; there is no skill
+  compliance gate.
 
 ## §17.4 Empirical Verification of the Repo Before Declaring
 

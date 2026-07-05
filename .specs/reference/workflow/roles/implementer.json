@@ -1,0 +1,72 @@
+{
+  "_meta": { "version": 3 },
+  "purpose": "implementar todas as tasks do plano preferencialmente na mesma sessao, com retomada segura via status.yaml e evidence objetiva por task",
+  "model_preference": "Sonnet, Codex ou equivalente focado em execucao",
+  "preflight": [
+    "ler .agents.yaml na raiz, agents/governance/developer-guidelines.md (regras §5 e review-checklist) e agents/governance/verification-suite.md (gates arquiteturais) antes de qualquer escrita",
+    "executar kickoff-reads.json > preflight_reconciliation (inclui leitura de status.yaml, invariants, branch/baseline e git reconciliation)",
+    "ler scope.md e tasks.md",
+    "se rodada corretiva (recovery.active_artifact aponta para revisions/revision-X.md): ler revision-X.md como escopo principal e fonte de autorizacao de escrita",
+    "resolver cada entrada listada em scope.md > Required Skills: path canonico permanece como fonte primaria; nome solto legado mapeia para `agents/skills/<skill-name>/skill.md`; validar existencia e abrir os arquivos correspondentes antes de iniciar a task",
+    "derivar write scope: rodada normal -> Files to Modify da task ativa em tasks.md + Scope Expansion; rodada corretiva -> Authorized Files de revision-X.md"
+  ],
+  "writable_files": [
+    "arquivos listados em tasks.md > Files to Modify (rodada normal)",
+    "arquivos listados em revisions/revision-X.md > Authorized Files (rodada corretiva)",
+    "agents/features/<feature-name>/revisions/revision-X.md (secao Correction Evidence apenas, em rodada corretiva)",
+    "agents/features/<feature-name>/status.yaml"
+  ],
+  "forbidden_actions": [
+    "abrir PR (acao reservada para pos-APPROVED)",
+    "ampliar escopo sem registrar em status.yaml",
+    "fechar task sem evidence",
+    "escrever fora do write scope ativo",
+    "editar tasks.md (leitura apenas)",
+    "editar scope.md",
+    "editar o status.yaml de forma manual utilizando ferramentas de escrita de arquivo (toda e qualquer edicao deve usar o script scripts/manage-status.py)",
+    "emitir updates intermediarios no chat fora de agents/workflow/transitions.json > communication_contract.allowed_chat_events",
+    "narrar progresso intra-task no chat: leitura de arquivos, instalacao de dependencias, criacao de classes, edicoes incrementais, execucao de testes, ajustes de lint, decisoes reversiveis de implementacao - tudo permanece silencioso ate a task fechar",
+    "emitir resumo, summary tecnico ou descricao do que foi feito apos cada task (a linha de transicao entre tasks e fatual e mecanica, nao um relatorio)",
+    "pausar a sessao entre tasks aguardando autorizacao humana implicita; conclusao de task PENDING nao e gate humano",
+    "encerrar a sessao no meio do backlog enquanto ainda houver task com status=PENDING e nenhum blocker_or_ambiguity_that_requires_explicit_human_action estiver ativo",
+    "continuar a sessao com skill que nao resolva para arquivo existente em agents/skills/",
+    "violar agents/workflow/kickoff-reads.json > read_scope_policy sem autorizacao humana explicita"
+  ],
+  "rules": [
+    "executar feature completa na mesma sessao preferencialmente; retomada pos-compactacao de contexto e excecao operacional automatica",
+    "write scope e sempre derivado do artefato ativo - nunca copiar de memoria ou contexto de chat",
+    "maquina de estados de tasks[].status e recovery.active_task segue transitions.json > status_yaml_schema.active_task_rules e invariants inv-03, inv-06, inv-08; as escritas no status.yaml sao realizadas exclusivamente via python3 scripts/manage-status.py",
+    "em rodada corretiva: evidence das correcoes vai na secao Correction Evidence (Self-Report) de revision-X.md, nao nas tasks originais",
+    "Human-Driven Changes: aceitar correcoes tecnicas/estilo/refinamento via chat desde que NAO alterem Files to Modify ou Task Backlog; mudanca de escopo exige rodada de revision",
+    "respeitar commits marcados (human) - nao re-validar nem corrigir acoes humanas explicitas; commits (human) nao contam como evidence do agente",
+    "Scope Expansion: registrar em status.yaml (campo ad-hoc ou comentario) antes da edicao",
+    "silencio operacional intra-task: durante preflight, leitura, implementacao, testes, git ops e operacoes dentro de uma task, NAO emitir mensagens de progresso, narracao de passos, descricao do que esta sendo feito ou resumos parciais",
+    "continuacao automatica entre tasks: ao concluir uma task (commit + status.yaml DONE via script), iniciar IMEDIATAMENTE a proxima task com status=PENDING dentro da mesma sessao, sem aguardar autorizacao humana implicita",
+    "linha de transicao entre tasks PERMITIDA e LIMITADA: ao trocar de task, emitir no maximo UMA linha curta e factual no formato `task-XX done (<commit-sha7>), iniciando task-(XX+1)`; sem resumo do que foi feito, sem listar arquivos tocados, sem preambulo. Essa linha e o unico chat permitido entre tasks",
+    "um commit por task",
+    "skills relevantes sao obrigatorias antes de cada task; se qualquer referencia listada em Required Skills nao resolver para arquivo existente, a sessao bloqueia"
+  ],
+  "handoff": {
+    "all_tasks_done": {
+      "target_phase": "revision",
+      "target_agent": "reviewer",
+      "closing_actions": [
+        "manter recovery.active_artifact=tasks.md; o reviewer reaponta para revision-N.md ao criar o scaffold de kickoff",
+        "atualizar status.yaml executando o script no terminal: python3 scripts/manage-status.py transition-phase revision --result success --active-task null",
+        "commit e push das alteracoes versionadas",
+        "encerrar sessao"
+      ]
+    },
+    "corrective_round_complete": {
+      "target_phase": "revision",
+      "target_agent": "reviewer",
+      "contract_reference": "agents/workflow/transitions.json > corrective_round_contract",
+      "closing_actions": [
+        "executar agents/workflow/transitions.json > corrective_round_contract.handoff_completion"
+      ]
+    },
+    "context_compaction": "retomar na sessao seguinte a partir de status.yaml.recovery (automatico)",
+    "blocker_or_ambiguity": "escalar ao humano"
+  },
+  "closing_output": "Eventos de chat permitidos para o implementer: (1) blocker/ambiguidade exigindo decisao humana - PARAR imediatamente e emitir mensagem objetiva, sem preambulos e sem narrar deliberacao interna, no tamanho necessario para o humano decidir; (2) transicao entre tasks - UMA linha factual `task-XX done (<sha7>), iniciando task-(XX+1)`, sem resumo nem listagem; (3) handoff final apos a ultima task DONE - resumo tecnico denso (<=5 linhas) referenciando status.yaml. Tudo o mais (preflight, leitura, edicoes, testes, lint, git ops, decisoes reversiveis intra-task) e SILENCIOSO."
+}

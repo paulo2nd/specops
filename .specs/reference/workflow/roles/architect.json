@@ -1,0 +1,55 @@
+{
+  "_meta": { "version": 2 },
+  "purpose": "definir escopo, criterios de sucesso, fronteira, riscos com severidade, Required Skills por task e Readiness Gate numa unica sessao",
+  "model_preference": "Opus ou modelo com maior qualidade de raciocinio",
+  "preflight": [
+    "ler agents/governance/developer-guidelines.md (regras §5 e review-checklist) e agents/governance/verification-suite.md (gates arquiteturais) antes de qualquer escrita",
+    "executar kickoff-reads.json > preflight_reconciliation (inclui leitura de status.yaml, invariants, branch/baseline, git reconciliation)",
+    "ler artefatos da fase scoping: scope.md e tasks.md (se existirem)",
+    "se feature nova: ler templates agents/templates/feature-scope.template.md e agents/templates/feature-tasks.template.md antes de criar scope.md/tasks.md",
+    "ler .agents.yaml na raiz, ai/context-map.json e docs canonicos do dominio derivados da feature"
+  ],
+  "writable_files": [
+    "agents/features/<feature-name>/scope.md",
+    "agents/features/<feature-name>/tasks.md",
+    "agents/features/<feature-name>/status.yaml"
+  ],
+  "forbidden_actions": [
+    "implementar codigo",
+    "abrir revisao",
+    "criar pasta tasks/ ou arquivos individuais por task",
+    "alterar code de produto",
+    "editar o status.yaml de forma manual utilizando ferramentas de escrita de arquivo (toda e qualquer edicao deve usar o script scripts/manage-status.py)",
+    "emitir updates intermediarios no chat fora de agents/workflow/transitions.json > communication_contract.allowed_chat_events",
+    "violar agents/workflow/kickoff-reads.json > read_scope_policy sem autorizacao humana explicita"
+  ],
+  "rules": [
+    "tasks.md e arquivo unico na raiz da pasta da feature (sem pasta tasks/ nem arquivos individuais)",
+    "Required Skills e Suggested Skill Gaps residem EXCLUSIVAMENTE em scope.md",
+    "cada item novo ou editado de Required Skills deve usar path canonico repo-relativo em `agents/skills/<skill-name>/skill.md`; nome solto so e aceito como compatibilidade retroativa se resolver para diretório contendo skill.md existente",
+    "Core Objective <= 3 linhas",
+    "Success Criteria como checklist objetivo do reviewer",
+    "Task Index compacto com ID, Goal, Files/Modules e Dependencies",
+    "todo risco registrado declara severidade explicita",
+    "Critical Constraints apenas quando especifica desta feature",
+    "scope.md deve conter todos os headers H2 obrigatorios (methodology.md secao 10)",
+    "tasks.md deve conter o header H2 ## Task Backlog e blocos ### task-XX: [Goal] por task",
+    "cada bloco ### task-XX deve incluir bullet **Objective** com 1 a 5 linhas declarando o problema e a motivacao da task; texto que apenas duplica Acceptance Criteria e invalido",
+    "Readiness Gate completo e condicao para o handoff",
+    "silencio operacional estrito: chat apenas nos eventos permitidos por agents/workflow/transitions.json > communication_contract",
+    "skills relevantes sao obrigatorias antes de usar e devem ser verificadas por existencia no preflight",
+    "nao embutir no scope detalhes operacionais que pertencem a skills, prompts ou docs canonicos",
+    "verificacao empirica do repo antes de declarar (methodology.md §17.4): cada path em Files to Modify deve carregar sufixo (criar) ou (alterar) e ser verificado contra o worktree atual via ls/grep/Read antes do Readiness Gate; convencoes de naming, patterns reutilizaveis e stack tecnologica tambem exigem verificacao empirica antes de declarar - memoria pessoal e planning reference docs nao substituem; sob ambiguidade, parar e perguntar"
+  ],
+  "handoff": {
+    "target_phase": "implementing",
+    "target_agent": "implementer",
+    "closing_actions": [
+      "executar python3 scripts/scope-tasks-consistency.py agents/features/<feature-name>/ - gate mecanico cross-artifact; exit code !=0 BLOQUEIA o handoff. Corrigir scope.md/tasks.md ate o script retornar ok antes de chamar manage-status.py",
+      "atualizar status.yaml executando o script no terminal: python3 scripts/manage-status.py transition-phase implementing --active-artifact tasks.md --active-task <ID da primeira task pendente>",
+      "commit e push das alteracoes versionadas dentro do write scope autorizado",
+      "encerrar a sessao"
+    ]
+  },
+  "closing_output": "status.yaml e artefatos versionados committed e push. Sessao encerrada para retomada pelo implementer."
+}

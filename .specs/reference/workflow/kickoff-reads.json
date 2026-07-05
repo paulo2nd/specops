@@ -1,0 +1,57 @@
+{
+  "_meta": {
+    "version": 7,
+    "purpose": "bootstrap comum e preflight de reconciliacao. Reads por role vivem em agents/workflow/roles/<role>.json > preflight."
+  },
+  "common_kickoff": {
+    "stop_on_ambiguity": ["role_phase_mismatch", "active_item_ambiguous", "write_scope_ambiguous", "status_yaml_git_divergence"],
+    "active_item_resolution_order": ["comando humano", "status.yaml (feature)", "git branch + log (fix)", "recovery.active_artifact (feature)", "recovery.active_task (feature)"],
+    "validate_workflow_truth_source": "antes de citar conceitos de workflow, confirmar a existencia deles no estado atual de methodology.md, agents/workflow/* e CLAUDE.md",
+    "base_bootstrap_package": [
+      ".agents.yaml",
+      "methodology.md",
+      "agents/workflow/transitions.json",
+      "agents/workflow/kickoff-reads.json",
+      "ai/mandates.md",
+      "agents/governance/developer-guidelines.md",
+      "agents/governance/verification-suite.md"
+    ]
+  },
+  "read_scope_policy": {
+    "allowed": [
+      "governanca canonica versionada: .agents.yaml, methodology.md, CLAUDE.md, agents/workflow/*, agents/governance/*, ai/mandates.md, ai/index.md e ai/context-map.json quando o role/preflight exigir",
+      "item ativo (feature): status.yaml, artefato ativo da fase e apenas os arquivos derivados do write scope ou do bootstrap minimo da fase atual",
+      "item ativo (fix): git log da branch ativa e arquivos de produto necessarios para a correcao em andamento (escopo derivado pelo humano-copiloto)",
+      "templates em agents/templates/* quando a fase ou o role exigir criacao/validacao de artefatos",
+      "skills em agents/skills/* apenas quando requeridas explicitamente pelo preflight, pelo scope.md ou pela revisao ativa (lane feature). No lane fix, skills sao recurso opcional sem gate"
+    ],
+    "forbidden": [
+      "ler agents/features/<other>/ ou agents/fixes/<other>/ fora do item ativo",
+      "ler agents/archive/ como contexto operacional da sessao",
+      "expandir leitura para historico, memoria persistida ou artefatos de outros lanes sem autorizacao humana explicita"
+    ],
+    "escalation": "se o read scope minimo nao bastar, parar e solicitar no chat autorizacao humana explicita para ampliar a leitura antes de continuar, em mensagem unica e objetiva conforme transitions.json > communication_contract"
+  },
+  "preflight_reconciliation": {
+    "applies_to": "feature_complete",
+    "required_for_feature_roles": true,
+    "purpose": "detectar drift entre status.yaml, artefatos versionados e git antes de qualquer escrita no lane feature",
+    "steps": [
+      "ler status.yaml do item ativo",
+      "carregar agents/workflow/transitions.json > invariants e validar cada invariant aplicavel ao lane feature_complete contra o estado atual",
+      "comparar tasks[].commit e phases[].completed_at contra git log da branch",
+      "confirmar branch corresponde a feat/<feature-name>",
+      "confirmar baseline existe no historico",
+      "se algum invariant violado ou divergencia detectada: parar, sinalizar humano e aguardar reconciliacao"
+    ],
+    "on_violation": "registrar a divergencia no chat em mensagem unica e objetiva conforme transitions.json > communication_contract e parar a sessao; nao tentar auto-corrigir status.yaml sem aprovacao humana explicita",
+    "fix_lane_exemption": {
+      "applies_to": "lightweight_fix",
+      "rationale": "lane fix nao usa status.yaml nem revisions/; o estado vive em commits da branch e o humano copilota em tempo real",
+      "minimal_fix_preflight": [
+        "confirmar branch ativa: se ambigua, perguntar ao humano antes de qualquer escrita",
+        "ler git log da branch para entender o que ja foi feito (recovery)"
+      ]
+    }
+  }
+}

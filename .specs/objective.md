@@ -114,6 +114,12 @@ The `specops init` command configures compatibility in the client's repository:
 
 ## 6. Execution AI System Prompt (The Working Mode)
 
+> [!NOTE]
+> The complete mapping of what each Speckit/SpecOps stage runs under each role
+> (architect, implementer, reviewer) is defined in
+> [lifecycle-roles.md](lifecycle-roles.md). The state machine, invariants, and role
+> contracts are vendored in [reference/workflow/](reference/workflow/).
+
 The AI agent operating under this workflow must respect the following universal behavioral guidelines defined in [reference/methodology.md](reference/methodology.md):
 
 1. **Operational Silence (§6):** During the execution of `/speckit.implement`, the AI must act 100% silently in the chat (no step narration, no edit explanations). When switching tasks, it must print exclusively the factual line: `task-XX done (<commit-sha7>), starting task-(XX+1)` and immediately continue execution.

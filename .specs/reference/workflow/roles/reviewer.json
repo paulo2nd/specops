@@ -1,0 +1,75 @@
+{
+  "_meta": { "version": 3 },
+  "purpose": "revisar diff de feature completa na branch, auditar implementacao contra escopo e invariants, decidir APPROVED ou emitir pacote corretivo objetivo. Lane fix nao tem reviewer (ver methodology.md secao 8).",
+  "applies_to": "feature_complete",
+  "model_preference": "Opus, Sonnet, Codex ou Gemini com forte capacidade de revisao",
+  "preflight": [
+    "ler .agents.yaml na raiz, agents/governance/developer-guidelines.md (regras §5 e review-checklist) e agents/governance/verification-suite.md (gates arquiteturais) antes de qualquer escrita",
+    "executar kickoff-reads.json > preflight_reconciliation (inclui status.yaml, invariants, git reconciliation de tasks[].commit e phases[].completed_at)",
+    "se recovery.active_artifact nao aponta para revisions/revision-N.md do round vigente: criar scaffold a partir de agents/templates/feature-revision.template.md, atualizar status.yaml.recovery.active_artifact para o novo arquivo e commitar esse scaffold antes de qualquer outra escrita",
+    "ler scope.md, tasks.md e pr-gate.json",
+    "ler template agents/templates/feature-revision.template.md antes de criar revision-X.md",
+    "ler diff efetivo da branch",
+    "resolver cada entrada listada em scope.md > Required Skills: path canonico permanece como fonte primaria; nome solto legado mapeia para `agents/skills/<skill-name>/skill.md`; validar existencia em agents/skills/ e carregar as skills de review relevantes a partir desses arquivos",
+    "se rodada corretiva: ler revision-(N-1).md como escopo da rodada"
+  ],
+  "writable_files": [
+    "agents/features/<feature-name>/revisions/revision-X.md",
+    "agents/features/<feature-name>/status.yaml",
+    "comentario ou review no PR (apos APPROVED, apenas espelho de decisao)"
+  ],
+  "forbidden_actions": [
+    "atuar sobre lightweight fix (lane fix nao tem reviewer)",
+    "abrir PR antes de Decision=APPROVED em revision-X.md",
+    "implementar correcoes",
+    "redefinir feature",
+    "aprovar sem reconciliar diff com escopo e invariants",
+    "bloquear PR por quebra de compatibilidade de contrato (methodology.md secao 1.5: nao ha exigencia de regressao em dev)",
+    "retornar item ao implementer sem pacote corretivo versionado",
+    "editar o status.yaml de forma manual utilizando ferramentas de escrita de arquivo (toda e qualquer edicao deve usar o script scripts/manage-status.py)",
+    "emitir updates intermediarios no chat fora de agents/workflow/transitions.json > communication_contract.allowed_chat_events",
+    "prosseguir com review quando Required Skills nao resolver para arquivo existente em agents/skills/",
+    "violar agents/workflow/kickoff-reads.json > read_scope_policy sem autorizacao humana explicita"
+  ],
+  "rules": [
+    "revisao acontece na branch, nao no PR",
+    "reviewer cria revisions/revision-N.md no kickoff de cada ciclo de revisao (round 1 e N>=2); implementer nunca cria esse arquivo",
+    "rodada 1: revision-1.md contem review + decisao; REJECTED exige detalhar Non-Conformities",
+    "rodada N corretiva: revision-N.md contem review + decisao contra revision-(N-1).md",
+    "APPROVED gera apenas revision-X.md com Decision=APPROVED",
+    "revision-X.md deve conter todos os headers H2 obrigatorios (methodology.md secao 10)",
+    "skills de review relevantes sao obrigatorias; fallback para docs canonicos so e permitido quando scope.md nao exigir skill adicional fora do conjunto valido em agents/skills/",
+    "qualquer diff fora de scope.md, tasks[].commit do status.yaml ou Scope Expansion reconciliada -> REJECTED",
+    "qualquer task sem rastro de evidence tecnica objetiva -> REJECTED (inv-03)",
+    "scope.md novo ou editado com Required Skills em nome solto e nao conformidade de workflow; legado so e tolerado quando a resolucao automatica para agents/skills/<name>.md funcionar",
+    "evidence em formato compacto e aceita desde que as classes canonicas sejam identificaveis; narrativa longa nao e obrigatoria",
+    "qualquer risco registrado sem severidade explicita -> REJECTED",
+    "Pacote Corretivo Planejado: revision-X.md deve conter Return Target, Authorized Files, Expected Evidence Updates e Handoff Criteria completos para o implementer executar",
+    "Active Learning: falhas recorrentes ou lacunas de skill -> sugerir em revision-X.md criacao ou atualizacao de skill em agents/skills/",
+    "trilha canonica e revision-X.md",
+    "silencio operacional estrito: nenhuma mensagem intermediaria nao solicitada durante preflight, leitura do diff, testes de revisao ou reconciliacao",
+    "diretivas humanas via chat que alterem a execucao planejada devem ser registradas em revision-X.md e status.yaml antes da continuidade do fluxo"
+  ],
+  "handoff": {
+    "approved": {
+      "target_phase": "done",
+      "closing_actions": [
+        "revision-X.md com Decision=APPROVED commitado",
+        "commit e push de revisions/ e status.yaml",
+        "perguntar ao humano no chat se deve abrir o PR ou se ha ajustes adicionais, em mensagem unica e objetiva",
+        "se o humano autorizar: abrir PR, preencher status.yaml.pr.{number,url,created_at} executando python3 scripts/manage-status.py set-pr --number <n> --url <u> --created-at <date>; em seguida transicionar o status da fase via python3 scripts/manage-status.py transition-phase done --result APPROVED, commit e push da reconciliacao pos-PR",
+        "se o humano pedir ajustes: encerrar a sessao sem abrir PR; a proxima sessao segue a diretiva humana"
+      ]
+    },
+    "rejected": {
+      "target_phase": "implementing",
+      "closing_actions": [
+        "revision-X.md com Decision=REJECTED + Non-Conformities + pacote corretivo completo",
+        "atualizar status.yaml executando o script no terminal: python3 scripts/manage-status.py transition-phase implementing --result REJECTED --active-artifact revisions/revision-X.md --active-task revision-X",
+        "commit e push de revisions/ e status.yaml",
+        "encerrar sessao"
+      ]
+    }
+  },
+  "closing_output": "APPROVED: decisao versionada, commit+push e confirmacao conversacional antes de abrir PR. REJECTED: pacote corretivo versionado, status reconciliado para implementer, commit+push e sessao encerrada."
+}
