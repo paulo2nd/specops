@@ -44,10 +44,14 @@ def fake_speckit_repo(tmp_git_repo: Path) -> Path:
     (root / ".specify" / "templates").mkdir(parents=True)
     (root / ".specify" / "integrations").mkdir(parents=True)
 
-    # Claude skills prompts
+    # Claude skills prompts (full layout: specify, plan, tasks, implement)
+    (root / ".claude" / "skills" / "speckit-specify").mkdir(parents=True)
     (root / ".claude" / "skills" / "speckit-plan").mkdir(parents=True)
+    (root / ".claude" / "skills" / "speckit-tasks").mkdir(parents=True)
     (root / ".claude" / "skills" / "speckit-implement").mkdir(parents=True)
+    (root / ".claude" / "skills" / "speckit-specify" / "SKILL.md").write_text("# specify prompt\n")
     (root / ".claude" / "skills" / "speckit-plan" / "SKILL.md").write_text("# plan prompt\n")
+    (root / ".claude" / "skills" / "speckit-tasks" / "SKILL.md").write_text("# tasks prompt\n")
     (root / ".claude" / "skills" / "speckit-implement" / "SKILL.md").write_text(
         "# implement prompt\n"
     )
@@ -62,7 +66,9 @@ def fake_speckit_repo(tmp_git_repo: Path) -> Path:
     manifest = {
         "integration": "claude",
         "files": {
+            ".claude/skills/speckit-specify/SKILL.md": "-",
             ".claude/skills/speckit-plan/SKILL.md": "-",
+            ".claude/skills/speckit-tasks/SKILL.md": "-",
             ".claude/skills/speckit-implement/SKILL.md": "-",
         },
     }

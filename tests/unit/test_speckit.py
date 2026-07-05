@@ -222,6 +222,39 @@ def test_resolve_prompt_targets_missing_file(fake_speckit_repo: Path) -> None:
         speckit.resolve_prompt_targets(fake_speckit_repo)
 
 
+def test_resolve_prompt_targets_includes_specify_tasks(fake_speckit_repo: Path) -> None:
+    """Full layout: specify_path and tasks_path resolve to existing prompts."""
+    t = speckit.resolve_prompt_targets(fake_speckit_repo)[0]
+    assert t["specify_path"] is not None
+    assert "speckit-specify" in str(t["specify_path"])
+    assert t["tasks_path"] is not None
+    assert "speckit-tasks" in str(t["tasks_path"])
+
+
+def test_resolve_prompt_targets_optional_none_when_absent(tmp_path: Path) -> None:
+    """Partial layout (only plan/implement) → specify_path/tasks_path are None."""
+    root = tmp_path
+    (root / ".specify" / "integrations").mkdir(parents=True)
+    (root / ".claude" / "skills" / "speckit-plan").mkdir(parents=True)
+    (root / ".claude" / "skills" / "speckit-implement").mkdir(parents=True)
+    (root / ".claude" / "skills" / "speckit-plan" / "SKILL.md").write_text("# p\n")
+    (root / ".claude" / "skills" / "speckit-implement" / "SKILL.md").write_text("# i\n")
+    (root / ".specify" / "integration.json").write_text(json.dumps({
+        "installed_integrations": ["claude"],
+        "integration_settings": {"claude": {"invoke_separator": "-"}},
+    }))
+    (root / ".specify" / "integrations" / "claude.manifest.json").write_text(json.dumps({
+        "integration": "claude",
+        "files": {
+            ".claude/skills/speckit-plan/SKILL.md": "-",
+            ".claude/skills/speckit-implement/SKILL.md": "-",
+        },
+    }))
+    t = speckit.resolve_prompt_targets(root)[0]
+    assert t["specify_path"] is None
+    assert t["tasks_path"] is None
+
+
 # ---------------------------------------------------------------------------
 # derive_review_path
 # ---------------------------------------------------------------------------

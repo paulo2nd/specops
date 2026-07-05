@@ -145,3 +145,14 @@ def test_remove_block_second_block_unaffected(tmp_path: Path) -> None:
     text = p.read_text()
     assert "SPECOPS:BEGIN implement" in text
     assert "SPECOPS:BEGIN plan" not in text
+
+
+@pytest.mark.parametrize("block_id", ["specify", "tasks"])
+def test_inject_remove_roundtrip_specify_tasks(tmp_path: Path, block_id: str) -> None:
+    """New stage blocks are byte-identical-reversible (SC-005)."""
+    original = "# stage prompt\n"
+    p = _write(tmp_path, "SKILL.md", original)
+    inject_block(p, block_id, "stage directive content")
+    assert p.read_text() != original
+    remove_block(p, block_id)
+    assert p.read_text() == original

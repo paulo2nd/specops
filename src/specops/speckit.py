@@ -141,13 +141,20 @@ def resolve_prompt_targets(root: Path) -> list[dict]:
         "separator": str,
         "plan_path": Path,
         "implement_path": Path,
+        "specify_path": Path | None,
+        "tasks_path": Path | None,
       }
+
+    plan_path/implement_path are mandatory (fail-closed). specify_path/tasks_path
+    are best-effort: resolved when the manifest lists them and the file exists,
+    otherwise None — this keeps partial Speckit layouts working (graceful
+    degradation) while full layouts get every stage wired.
 
     Raises ManifestResolutionError (fail-closed, R2) when:
     - integration.json is missing
     - an integration lacks a manifest
     - a manifest lacks plan/implement entries
-    - a listed file is absent on disk
+    - a listed plan/implement file is absent on disk
     """
     integration_json = root / ".specify" / "integration.json"
     if not integration_json.is_file():
@@ -183,12 +190,16 @@ def resolve_prompt_targets(root: Path) -> list[dict]:
         files: dict = manifest.get("files", {})
         plan_path = _find_prompt_file(root, files, agent, sep, "plan")
         impl_path = _find_prompt_file(root, files, agent, sep, "implement")
+        specify_path = _find_optional_prompt_file(root, files, agent, sep, "specify")
+        tasks_path = _find_optional_prompt_file(root, files, agent, sep, "tasks")
         results.append(
             {
                 "integration": agent,
                 "separator": sep,
                 "plan_path": plan_path,
                 "implement_path": impl_path,
+                "specify_path": specify_path,
+                "tasks_path": tasks_path,
             }
         )
 
@@ -220,6 +231,27 @@ def _find_prompt_file(root: Path, files: dict, agent: str, sep: str, role: str) 
             f"Integration '{agent}': manifest lists '{rel}' but file does not exist."
         )
     return abs_path
+
+
+def _find_optional_prompt_file(
+    root: Path, files: dict, agent: str, sep: str, role: str
+) -> Path | None:
+    """
+    Best-effort variant of :func:`_find_prompt_file` for optional stages.
+
+    Returns the resolved path when the manifest lists a ``speckit{sep}{role}``
+    entry and the file exists; returns None otherwise (no raise). Used for the
+    specify and tasks prompts so partial Speckit layouts stay supported.
+    """
+    stem = f"speckit{sep}{role}"
+    matches = [rel for rel in files if stem in rel]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        exact = [m for m in matches if Path(m).stem == stem or stem in Path(m).parts]
+        matches = exact if exact else matches
+    abs_path = root / matches[0]
+    return abs_path if abs_path.is_file() else None
 
 
 def derive_review_path(plan_path: Path, root: Path, sep: str) -> Path:

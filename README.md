@@ -35,8 +35,15 @@ Prepares a Speckit repository for SpecOps in one run:
 4. Creates or merge-preserves `specops.json`.
 5. Installs `/specops-review` agent command at the layout-derived path
    (e.g., `.claude/skills/specops-review/SKILL.md`).
-6. Injects SpecOps directive blocks into each integration's plan and implement
-   prompts — additive, idempotent, byte-identical restore on removal.
+6. Injects SpecOps directive blocks into each integration's specify, plan,
+   tasks, and implement prompts — additive, idempotent, byte-identical restore
+   on removal. The specify and tasks blocks are best-effort: a partial layout
+   missing either prompt still succeeds (only the present stages are wired).
+
+These directives drive the ledger and phase state machine end to end: the tasks
+prompt creates the ledger (`status init-spec`) and advances it to `TASKS`, the
+implement prompt opens `IMPLEMENT` then `REVIEW`, and `/specops-review` closes
+the cycle — so a human never has to run the phase commands by hand.
 
 `--non-interactive`: declines all interactive prompts (CI-safe).
 

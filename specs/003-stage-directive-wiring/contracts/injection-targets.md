@@ -18,11 +18,17 @@ Each element of the returned list MUST contain, in addition to today's keys:
 ```
 
 **Rules**:
-- `specify_path` and `tasks_path` are resolved with the existing
-  `_find_prompt_file(root, files, agent, sep, role)` helper.
-- Fail-closed (unchanged contract): if the manifest lacks a `speckit{sep}specify`
-  or `speckit{sep}tasks` entry, or the listed file is absent, raise
-  `ManifestResolutionError`. No partial results.
+- `specify_path` and `tasks_path` are resolved with a best-effort helper
+  (`_find_optional_prompt_file`): they return a `Path` when the manifest lists a
+  `speckit{sep}specify` / `speckit{sep}tasks` entry and the file exists,
+  otherwise `None`.
+- **Refinement from the original plan** (discovered during implementation):
+  specify/tasks are best-effort, NOT fail-closed. `plan_path`/`implement_path`
+  remain fail-closed (`ManifestResolutionError`). Rationale: partial Speckit
+  layouts (e.g., a secondary integration exposing only plan/implement) must keep
+  working — this is the graceful-degradation requirement (FR-008/SC-006). A
+  fail-closed specify/tasks would break such layouts and the existing
+  second-integration test.
 - Order of existing keys and list ordering MUST NOT change (back-compat for
   current callers/tests).
 
@@ -47,8 +53,8 @@ prompt to a byte-identical pre-injection state (SC-005).
 ## Test contract
 
 - `test_speckit.py`: `resolve_prompt_targets` returns non-null `specify_path` and
-  `tasks_path` pointing at existing files for the Claude fixture; raises
-  `ManifestResolutionError` when the specify/tasks entry is missing.
+  `tasks_path` pointing at existing files for the full Claude fixture; returns
+  `None` for both when a partial layout omits the specify/tasks entries.
 - `test_init.py`: after `run`, all four stage prompts contain their block; a
   second `run` yields `unchanged`; `remove_block` on all four restores original
   bytes.

@@ -1,6 +1,11 @@
 
 ## SpecOps Implementation Directives
 
+### Graceful Degradation
+
+- If the `specops` command is not available in this environment, skip the SpecOps
+  steps in this block and implement the tasks normally.
+
 ### Operational Silence (§6)
 
 - Do NOT narrate progress inside a task — act silently.
@@ -36,6 +41,14 @@ Before starting the first task of a session:
 - Run `specops reconcile`
 - Exit code ≠ 0 → stop immediately and signal the human.
   Do not proceed until the divergence is resolved.
+
+### Phase Transitions
+
+- At session start, before the first `start-task`, advance the ledger to the
+  IMPLEMENT phase: `specops status transition-phase IMPLEMENT`. If the ledger is
+  already in IMPLEMENT, continue.
+- After the final task of the feature is DONE, open the review cycle:
+  `specops status transition-phase REVIEW`. Then hand off to `/specops-review`.
 
 ### Stop-and-Ask Gates (§8.2)
 

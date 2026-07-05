@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Stage-wide directive wiring: `specops init` now injects directive blocks into
+  the **specify** and **tasks** prompts (in addition to plan and implement). The
+  tasks directive creates the ledger (`status init-spec`), advances the phase to
+  `TASKS`, and carries the authoritative `[SC-xxx]` coverage-tag rule; the
+  implement directive opens the `IMPLEMENT` and `REVIEW` phases. The phase state
+  machine is now driven end to end by the injected prompts.
+- `resolve_prompt_targets` returns `specify_path` and `tasks_path` (best-effort:
+  `None` when a partial Speckit layout lacks the prompt).
+
+### Changed
+
+- The `[SC-xxx]` coverage-tag rule moved from the plan directive to the tasks
+  directive (where `tasks.md` is generated); the plan directive now points to it.
+- Constitution 1.1.3 → 1.2.0: Principle IV gains the **Ledger & Phase Wiring**
+  directive category.
+
 ## [0.1.0] - 2026-07-05
 
 ### Added

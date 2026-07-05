@@ -194,3 +194,126 @@ def test_init_config_merge_preserves_user_values(fake_speckit_repo: Path) -> Non
     assert cfg["custom_key"] == "custom_val"
     # template keys filled
     assert "lint_command" in cfg
+
+
+# ---------------------------------------------------------------------------
+# Feature 003: stage-wide directive wiring
+# ---------------------------------------------------------------------------
+
+def _skill(repo: Path, role: str) -> Path:
+    return repo / ".claude" / "skills" / f"speckit-{role}" / "SKILL.md"
+
+
+def test_init_injects_specify_and_tasks_blocks(fake_speckit_repo: Path) -> None:
+    """Full layout: specify and tasks prompts receive their directive blocks."""
+    result = run_init(fake_speckit_repo)
+    assert result.returncode == 0, result.stderr
+
+    specify_text = _skill(fake_speckit_repo, "specify").read_text()
+    tasks_text = _skill(fake_speckit_repo, "tasks").read_text()
+
+    assert "<!-- SPECOPS:BEGIN specify" in specify_text
+    assert "<!-- SPECOPS:BEGIN tasks" in tasks_text
+
+    # US1: ledger creation, non-blocking on already-exists
+    assert "specops status init-spec" in tasks_text
+    assert "already exists" in tasks_text
+    # US2: phase walk to TASKS
+    assert "transition-phase PLAN" in tasks_text
+    assert "transition-phase TASKS" in tasks_text
+    # US3: coverage-tag rule authored here
+    assert "[SC-xxx]" in tasks_text
+
+
+def test_init_implement_has_phase_transitions(fake_speckit_repo: Path) -> None:
+    """US2: implement block opens IMPLEMENT and REVIEW phases."""
+    run_init(fake_speckit_repo)
+    impl_text = _skill(fake_speckit_repo, "implement").read_text()
+    assert "transition-phase IMPLEMENT" in impl_text
+    assert "transition-phase REVIEW" in impl_text
+
+
+def test_init_plan_sc_rule_is_pointer(fake_speckit_repo: Path) -> None:
+    """US3: the plan block points at the tasks stage instead of restating the rule."""
+    run_init(fake_speckit_repo)
+    plan_text = _skill(fake_speckit_repo, "plan").read_text()
+    assert "authored during the tasks stage" in plan_text
+    # the concrete example line now lives only in the tasks directive
+    assert "T005 [SC-003,SC-007]" not in plan_text
+
+
+def test_init_idempotent_specify_tasks(fake_speckit_repo: Path) -> None:
+    """SC-007: re-running init does not duplicate the new stage blocks."""
+    run_init(fake_speckit_repo)
+    run_init(fake_speckit_repo)
+    specify_text = _skill(fake_speckit_repo, "specify").read_text()
+    tasks_text = _skill(fake_speckit_repo, "tasks").read_text()
+    assert specify_text.count("<!-- SPECOPS:BEGIN specify") == 1
+    assert tasks_text.count("<!-- SPECOPS:BEGIN tasks") == 1
+
+
+def test_init_block_removal_restores_specify_tasks(fake_speckit_repo: Path) -> None:
+    """SC-005: removing the new blocks restores byte-identical originals."""
+    specify_path = _skill(fake_speckit_repo, "specify")
+    tasks_path = _skill(fake_speckit_repo, "tasks")
+    orig_specify = specify_path.read_text()
+    orig_tasks = tasks_path.read_text()
+
+    run_init(fake_speckit_repo)
+
+    from specops.initializer import remove_block
+    remove_block(specify_path, "specify")
+    remove_block(tasks_path, "tasks")
+    assert specify_path.read_text() == orig_specify
+    assert tasks_path.read_text() == orig_tasks
+
+
+def test_run_in_process_wires_all_stages(fake_speckit_repo: Path) -> None:
+    """In-process run() covers the full injection flow for all four stages."""
+    from specops import initializer
+    initializer.run(fake_speckit_repo, non_interactive=True)
+    for role in ("specify", "plan", "tasks", "implement"):
+        assert f"<!-- SPECOPS:BEGIN {role}" in _skill(fake_speckit_repo, role).read_text()
+    assert (fake_speckit_repo / "specops.json").is_file()
+    review_path = fake_speckit_repo / ".claude" / "skills" / "specops-review" / "SKILL.md"
+    assert review_path.is_file()
+
+
+def test_run_in_process_partial_layout(fake_speckit_repo: Path) -> None:
+    """In-process run() with a partial layout skips missing specify/tasks stages."""
+    import shutil
+    shutil.rmtree(fake_speckit_repo / ".claude" / "skills" / "speckit-specify")
+    shutil.rmtree(fake_speckit_repo / ".claude" / "skills" / "speckit-tasks")
+    manifest_path = fake_speckit_repo / ".specify" / "integrations" / "claude.manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"] = {
+        k: v for k, v in manifest["files"].items()
+        if "speckit-specify" not in k and "speckit-tasks" not in k
+    }
+    manifest_path.write_text(json.dumps(manifest))
+
+    from specops import initializer
+    initializer.run(fake_speckit_repo, non_interactive=True)
+    assert "<!-- SPECOPS:BEGIN plan" in _skill(fake_speckit_repo, "plan").read_text()
+    assert "<!-- SPECOPS:BEGIN implement" in _skill(fake_speckit_repo, "implement").read_text()
+
+
+def test_init_partial_layout_skips_missing_stages(fake_speckit_repo: Path) -> None:
+    """Graceful degradation: a layout without specify/tasks prompts still succeeds."""
+    import shutil
+    shutil.rmtree(fake_speckit_repo / ".claude" / "skills" / "speckit-specify")
+    shutil.rmtree(fake_speckit_repo / ".claude" / "skills" / "speckit-tasks")
+    # Drop them from the manifest too
+    manifest_path = fake_speckit_repo / ".specify" / "integrations" / "claude.manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"] = {
+        k: v for k, v in manifest["files"].items()
+        if "speckit-specify" not in k and "speckit-tasks" not in k
+    }
+    manifest_path.write_text(json.dumps(manifest))
+
+    result = run_init(fake_speckit_repo)
+    assert result.returncode == 0, result.stderr
+    # plan/implement still injected
+    assert "<!-- SPECOPS:BEGIN plan" in _skill(fake_speckit_repo, "plan").read_text()
+    assert "<!-- SPECOPS:BEGIN implement" in _skill(fake_speckit_repo, "implement").read_text()

@@ -14,11 +14,9 @@
 
 ### SC Coverage Tags
 
-- Every generated task line in `tasks.md` MUST carry `[SC-xxx]` labels
-  declaring which spec Success Criteria the task covers.
-  Example: `- [ ] T005 [SC-003,SC-007] Implement reconcile.py`
-- A task may cover more than one SC; separate with commas inside the brackets.
-- Do not invent SC IDs — use only IDs from the spec's Success Criteria section.
+- Coverage tags (`[SC-xxx]`) are authored during the tasks stage — see the
+  SpecOps task-generation directive. At the plan stage, only ensure every spec
+  Success Criterion is coverable by the planned work.
 
 ### Consistency Gate
 

@@ -218,20 +218,32 @@ def run(root: Path, non_interactive: bool = False) -> None:
     # Steps 5 & 6: per integration — install review command and inject blocks
     plan_content = _read_template("directives/plan.md").strip()
     implement_content = _read_template("directives/implement.md").strip()
+    specify_content = _read_template("directives/specify.md").strip()
+    tasks_content = _read_template("directives/tasks.md").strip()
     review_content = _read_template("review.md")
 
     for target in targets:
         sep = target["separator"]
         plan_path: Path = target["plan_path"]
         impl_path: Path = target["implement_path"]
+        specify_path: Path | None = target.get("specify_path")
+        tasks_path: Path | None = target.get("tasks_path")
         # Step 5: install review.md
         review_path = speckit.derive_review_path(plan_path, root, sep)
         _install_review(review_path, review_content, sep)
         typer.echo(f"  {review_path.relative_to(root)}: installed review command")
 
-        # Step 6: inject directive blocks
+        # Step 6: inject directive blocks (specify/tasks are best-effort)
+        if specify_path is not None:
+            specify_status = inject_block(specify_path, "specify", specify_content)
+            typer.echo(f"  {specify_path.relative_to(root)}: specify directive {specify_status}")
+
         plan_status = inject_block(plan_path, "plan", plan_content)
         typer.echo(f"  {plan_path.relative_to(root)}: plan directive {plan_status}")
+
+        if tasks_path is not None:
+            tasks_status = inject_block(tasks_path, "tasks", tasks_content)
+            typer.echo(f"  {tasks_path.relative_to(root)}: tasks directive {tasks_status}")
 
         impl_status = inject_block(impl_path, "implement", implement_content)
         typer.echo(f"  {impl_path.relative_to(root)}: implement directive {impl_status}")
