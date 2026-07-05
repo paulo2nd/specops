@@ -1,8 +1,8 @@
 # SpecOps CLI
 
 [![CI](https://github.com/paulo2nd/specops/actions/workflows/ci.yml/badge.svg)](https://github.com/paulo2nd/specops/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/specops-cli.svg)](https://pypi.org/project/specops-cli/)
-[![Python](https://img.shields.io/pypi/pyversions/specops-cli.svg)](https://pypi.org/project/specops-cli/)
+[![PyPI](https://img.shields.io/pypi/v/speckit-specops.svg)](https://pypi.org/project/speckit-specops/)
+[![Python](https://img.shields.io/pypi/pyversions/speckit-specops.svg)](https://pypi.org/project/speckit-specops/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **SpecOps turns [GitHub Speckit](https://github.com/vgrecov/speckit)'s
@@ -50,10 +50,11 @@ SpecOps addresses each one:
 ## Install
 
 ```bash
-pip install specops-cli
+pip install speckit-specops
 ```
 
-Requires Python ≥ 3.10 and Git ≥ 2.30. No network I/O after install.
+Installs the `specops` command. Requires Python ≥ 3.10 and Git ≥ 2.30. No
+network I/O after install.
 
 ## Quick Start
 

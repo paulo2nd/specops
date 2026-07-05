@@ -1,6 +1,13 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.2.0 → 1.2.1
+Rationale (1.2.1, 2026-07-05): Factual correction — the PyPI distribution name
+`specops-cli` was already taken by an unrelated project, so the package is
+published as `speckit-specops` (the `specops` command and `specops` import
+package are unchanged). Updated the two package-name references. PATCH bump:
+wording/fact only, no principle change. Templates: none.
+
 Version change: 1.1.3 → 1.2.0
 Rationale (1.2.0, 2026-07-05): Principle IV expanded with a new directive
 category — **Ledger & Phase Wiring**. SpecOps now injects directives into every
@@ -86,7 +93,7 @@ Follow-up TODOs: none.
 
 # SpecOps Constitution
 
-SpecOps (`specops-cli`) is a complement installed on top of GitHub Speckit.
+SpecOps (`speckit-specops`) is a complement installed on top of GitHub Speckit.
 Its sole mission is to bring to any Speckit repository the advantages of the
 agent-guided atomic development methodology defined in `.specs/objective.md`:
 Repo-as-State, physical status control, atomic commits with evidence,
@@ -211,9 +218,9 @@ if the underlying commands are mechanically composable.
 
 ## Technical Constraints
 
-- **Packaging**: Python package `specops-cli`, installable via `pip`
-  (including `pip install -e .` for development), exposing the `specops`
-  entrypoint with functional `--help`.
+- **Packaging**: Python package published to PyPI as `speckit-specops`,
+  installable via `pip` (including `pip install -e .` for development), exposing
+  the `specops` entrypoint with functional `--help`.
 - **Dependencies**: limited to Typer (CLI), PyYAML (ledger), and GitPython
   (evidence collection). New runtime dependencies require justification in
   the plan's Complexity Tracking section.
@@ -263,4 +270,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.2.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05
+**Version**: 1.2.1 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05

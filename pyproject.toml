@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "specops-cli"
+name = "speckit-specops"
 version = "0.1.0"
 description = "A Spec-Driven Development (SDD) process enforcement CLI extending Speckit"
 readme = "README.md"
