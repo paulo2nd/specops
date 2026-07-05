@@ -63,8 +63,8 @@ Single project (per plan.md): `src/specops/` package, `tests/` at repository roo
 
 - [X] T011 [P] [US1] Author packaged asset `src/specops/templates/specops.json` (template with `test_command`, `lint_command`, `skills_dir` defaults)
 - [X] T012 [P] [US1] Author packaged asset `src/specops/templates/directives/plan.md` per contracts/directive-blocks.md: Empirical Verification with action suffixes, per-task `[SC-xxx]` coverage tags, `specops consistency` gate, stop-and-ask
-- [X] T013 [P] [US1] Author packaged asset `src/specops/templates/directives/implement.md` per contracts/directive-blocks.md: Operational Silence with `<task-id> done (<commit-sha7>), starting <next-task-id>` line, ledger loop (`start-task`/`complete-task --auto`), `specops reconcile` preflight, Stop-and-Ask gates
-- [X] T014 [P] [US1] Author packaged asset `src/specops/templates/review.md` per contracts/cli-contract.md (review command): skills load → reconcile-first abort → lint/test pre-filter → porcelain scope rejection (incl. empty diff) → surgical diff review → `[File]:[Line] - …` findings in `revisions/revision-X.md`; layout-neutral body (frontmatter added at install time for skills-mode targets)
+- [X] T013 [P] [US1] Author packaged asset `src/specops/templates/directives/implement.md` per contracts/directive-blocks.md: Operational Silence with `<task-id> done (<commit-sha7>), starting <next-task-id>` line, optional skills load (load from `skills_dir` if present, not a gate when absent), per-US commit ledger loop (`start-task` / intermediate tasks `complete-task --evidence` / final task commit then `complete-task --auto`), `specops reconcile` preflight, Stop-and-Ask gates
+- [X] T014 [P] [US1] Author packaged asset `src/specops/templates/review.md` per contracts/cli-contract.md (review command): optional skills load (load from `skills_dir` if present, not a gate when absent) → reconcile-first abort → lint/test pre-filter → working tree check (dirty tree or empty diff → reject without reading code) → surgical diff review against spec SC and plan architecture → `[File]:[Line] - …` findings in `revisions/revision-X.md` → Active Learning (suggest skill creation for recurring gaps, do not create); layout-neutral body (frontmatter added at install time for skills-mode targets)
 - [X] T015 [US1] Implement marker-injection engine in `src/specops/initializer.py`: append `<!-- SPECOPS:BEGIN <id> v<n> -->…<!-- SPECOPS:END <id> -->` blocks at EOF, replace strictly between matching markers on re-run, fail closed (exit 1, zero writes) on corrupted markers (R3)
 - [X] T016 [US1] Implement `specops init` flow in `src/specops/initializer.py` and wire in `src/specops/cli.py`: Git check with interactive offer and `--non-interactive` decline default (FR-001/016), Speckit detection abort (FR-003), manifest-driven prompt-target resolution for every installed integration failing closed (R2), `specops.json` create/merge (R10), install `review.md` per integration at the path derived from the plan-prompt pattern (`speckit{sep}plan` → `specops{sep}review`, frontmatter-wrapped for skills mode; command named `specops{sep}review`), inject both directive blocks into each integration's prompts, print created/updated/unchanged summary
 - [X] T017 [P] [US1] Unit tests for the injection engine in `tests/unit/test_injection.py`: clean append, in-place update, BEGIN-without-END, duplicate BEGIN, nested markers, version bump
@@ -105,7 +105,7 @@ Single project (per plan.md): `src/specops/` package, `tests/` at repository roo
 
 ### Implementation for User Story 3
 
-- [X] T027 [US3] Implement `src/specops/reconcile.py` and wire in `src/specops/cli.py`: every `tasks[].commits[]` hash is ancestor of HEAD, DONE tasks have commits + evidence (L1/L3), `(human)` values exempt (R11), `orphaned` entries reported, branch mismatch warns, divergences listed as `<task-id>: <reason>` → exit 1 (FR-011)
+- [X] T027 [US3] Implement `src/specops/reconcile.py` and wire in `src/specops/cli.py`: every `tasks[].commits[]` hash is ancestor of HEAD (L3), DONE tasks require evidence (L1 relaxed: `commits[]` may be empty — valid for intermediate tasks closed with `--evidence`), `(human)` values exempt (R11), `orphaned` entries reported, branch mismatch warns, divergences listed as `<task-id>: <reason>` → exit 1 (FR-011)
 - [X] T028 [P] [US3] Unit tests in `tests/unit/test_reconcile.py`: ancestor pass/fail, `(human)` exemption, DONE-without-evidence, orphan reporting
 - [X] T029 [US3] Integration test for Scenario C in `tests/integration/test_reconcile.py`: pass on real history, fail on seeded divergence (SC-003)
 
@@ -139,7 +139,7 @@ Single project (per plan.md): `src/specops/` package, `tests/` at repository roo
 
 ### Implementation for User Story 5
 
-- [X] T033 [US5] Integration test in `tests/integration/test_review_asset.py`: post-init installed review command (at the layout-derived path, e.g. `.claude/skills/specops-review/SKILL.md`) contains, in order, the mandatory directives — skills load from `skills_dir`, `specops reconcile` abort-first, lint/test zero-token pre-filter, `git status --porcelain` scope rejection including empty diff, `[File]:[Line] - [rule violated and short action]` output format, `revisions/revision-X.md` max+1 numbering
+- [X] T033 [US5] Integration test in `tests/integration/test_review_asset.py`: post-init installed review command (at the layout-derived path, e.g. `.claude/skills/specops-review/SKILL.md`) contains, in order, the mandatory directives — optional skills load (present → load, absent → proceed), `specops reconcile` abort-first, lint/test zero-token pre-filter, `git status --porcelain` working tree check (dirty tree or empty diff → reject without reading code), `[File]:[Line] - [rule violated and short action]` output format, `revisions/revision-X.md` max+1 numbering, Active Learning skill suggestion block
 - [X] T034 [US5] Document the review workflow in `README.md`: invoking the review command (name follows the integration's invoke separator, e.g. `/specops-review`), the rejection order, revision-report format, and the Scenario F manual validation walkthrough (agent-in-the-loop, not CI-automatable)
 
 **Checkpoint**: All five user stories independently functional
@@ -214,5 +214,5 @@ Task: "Author packaged asset src/specops/templates/review.md"
 ## Notes
 
 - [P] tasks = different files, no dependencies
-- Every task closes with passing tests and evidence (Constitution task gate); commit per task or logical group
+- Every task closes with passing tests and evidence (Constitution task gate); commit per user story (intermediate tasks use `--evidence`, final task uses commit + `--auto`)
 - Stop at any checkpoint to validate the story independently
