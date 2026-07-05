@@ -58,3 +58,10 @@
 - Add comments or findings inline
 - Items flagged [Conflict] (CHK012, CHK015) are the highest-priority findings — both indicate the spec inherited assumptions from the reference implementation that do not hold in the Speckit context.
 - Resolve or consciously defer all items before running `/speckit-plan`.
+- **2026-07-05 (post-plan)**: The 28 items left unchecked were consciously resolved
+  at plan level rather than by spec edits — each maps to a decision in
+  [../research.md](../research.md) (R1: CHK001; R2: CHK002/004; R3: CHK003/005/006;
+  R10: CHK007/009; R11: CHK010/026/028/029/030; R4: CHK011; R5: CHK013/014; R8:
+  CHK016; R7: CHK017/018/019; R9: CHK020/027; contracts/cli-contract.md:
+  CHK008/021/022/023/024/025). Items stay unchecked by design: they test the spec's
+  text, and the spec intentionally delegates these details to the plan.

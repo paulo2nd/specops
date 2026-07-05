@@ -65,6 +65,17 @@
   consistency command validates coverage by deterministic ID matching. A criterion
   not referenced by any task fails the gate. No natural-language heuristics (token
   overlap, stopword lists) are used anywhere in the product.
+- Q: How are Speckit's prompt files located, given that Speckit generates them in
+  different folders depending on the agent chosen at its init? → A: Never hardcoded.
+  Speckit records every installed integration in `.specify/integration.json`
+  (`installed_integrations` is a list — multiple agents may coexist) and writes a
+  per-integration manifest (`.specify/integrations/<agent>.manifest.json`) listing
+  the exact installed file paths. SpecOps resolves the planning and implementation
+  prompts from those manifests for EACH installed integration, injects its blocks
+  into all of them, derives the review-command install path by pattern substitution
+  from the located prompt path, and names the command using the integration's
+  declared invoke separator (e.g., `/specops-review` for Claude skills mode).
+  Unknown or manifest-less integrations fail closed.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -269,11 +280,16 @@ file content is read; a compliant run produces a revision report in the short fo
   the repository root declaring, at minimum: the client's test command, the client's
   lint command, and the client's skills directory.
 - **FR-005**: The initialization command MUST install the SpecOps review agent command
-  (`/specops.review`) so it is invocable inside the client's coding agent. In this
-  release, the review command is the only SpecOps agent command.
+  (`/specops.review` as the canonical name; the invocable form follows each
+  integration's separator convention — e.g., `/specops-review` in hyphen-separated
+  layouts) so it is invocable inside the client's coding agent. In this release, the
+  review command is the only SpecOps agent command.
 - **FR-006**: The initialization command MUST adjust exactly two of Speckit's existing
-  agent prompt files by injecting SpecOps directive blocks delimited by explicit
-  begin/end markers, each directive at the lifecycle stage where it acts. Adjustments
+  agent prompt files — the planning prompt and the implementation prompt — **per
+  installed Speckit integration**, locating them through Speckit's own integration
+  manifests (never hardcoded paths), by injecting SpecOps directive blocks delimited
+  by explicit begin/end markers, each directive at the lifecycle stage where it acts.
+  Adjustments
   MUST be strictly additive: no existing Speckit content may be rewritten, removed, or
   reordered, and no Speckit template may be de-characterized — deleting the marked
   blocks MUST restore the file's original Speckit behavior:
@@ -294,7 +310,10 @@ file content is read; a compliant run produces a revision report in the short fo
   exclusively: initialize the ledger inside the active Speckit feature directory
   (auto-detected from Speckit's configuration), mark a task as in progress (recording
   it as the recovery point), mark a task as done, and transition spec phases. The
-  ledger MUST NOT require hand-editing for any supported transition.
+  ledger MUST NOT require hand-editing for any supported transition. The
+  ledger-initialization command takes an optional spec name; when omitted it uses the
+  active feature directory, and when provided it MUST resolve to that same active
+  feature directory — otherwise it fails with a clear error.
 - **FR-008a**: Every ledger command MUST idempotently synchronize the ledger with the
   feature's Speckit task list before acting: tasks newly discovered in the task list
   are added as pending, and commands referencing task identifiers absent from the task
