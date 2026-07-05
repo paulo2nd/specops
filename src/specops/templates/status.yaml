@@ -1,0 +1,16 @@
+feature: "{{feature-name}}"
+branch: "{{branch}}"
+baseline: "{{commit-hash}}"
+created_at: "{{YYYY-MM-DD}}"
+updated_at: "{{YYYY-MM-DD}}"
+
+current_phase: "SPECIFY"
+
+recovery:
+  active_task: null
+  last_commit: null
+  blockers: []
+
+tasks: []
+
+review_cycles: []

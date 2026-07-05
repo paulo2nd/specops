@@ -1,0 +1,178 @@
+"""Unit tests for speckit.py — parsing and manifest resolution."""
+import json
+from pathlib import Path
+
+import pytest
+
+from specops import speckit
+
+
+# ---------------------------------------------------------------------------
+# has_speckit
+# ---------------------------------------------------------------------------
+
+def test_has_speckit_true(fake_speckit_repo: Path) -> None:
+    assert speckit.has_speckit(fake_speckit_repo)
+
+
+def test_has_speckit_false(tmp_path: Path) -> None:
+    assert not speckit.has_speckit(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# resolve_feature_dir
+# ---------------------------------------------------------------------------
+
+def test_feature_dir_from_feature_json(fake_speckit_repo: Path) -> None:
+    fd = speckit.resolve_feature_dir(fake_speckit_repo)
+    assert fd is not None
+    assert fd.name == "001-demo"
+
+
+def test_feature_dir_fallback_to_newest_specs(tmp_path: Path) -> None:
+    (tmp_path / ".specify" / "templates").mkdir(parents=True)
+    (tmp_path / "specs" / "002-second").mkdir(parents=True)
+    (tmp_path / "specs" / "001-first").mkdir(parents=True)
+    fd = speckit.resolve_feature_dir(tmp_path)
+    assert fd is not None
+    assert fd.name == "002-second"
+
+
+def test_feature_dir_none_when_nothing(tmp_path: Path) -> None:
+    assert speckit.resolve_feature_dir(tmp_path) is None
+
+
+def test_feature_dir_invalid_json_falls_to_fallback(tmp_path: Path) -> None:
+    (tmp_path / ".specify").mkdir()
+    (tmp_path / ".specify" / "feature.json").write_text("NOT JSON")
+    (tmp_path / "specs" / "001-demo").mkdir(parents=True)
+    fd = speckit.resolve_feature_dir(tmp_path)
+    assert fd is not None
+    assert fd.name == "001-demo"
+
+
+# ---------------------------------------------------------------------------
+# extract_task_ids
+# ---------------------------------------------------------------------------
+
+def test_extract_task_ids_basic() -> None:
+    text = "- [ ] T001 Do something\n- [X] T002 Already done\n- [ ] T003 Another"
+    assert speckit.extract_task_ids(text) == ["T001", "T002", "T003"]
+
+
+def test_extract_task_ids_skips_non_task_lines() -> None:
+    text = "Some header\n- [ ] T005 valid\nRandom text"
+    assert speckit.extract_task_ids(text) == ["T005"]
+
+
+def test_extract_task_ids_empty() -> None:
+    assert speckit.extract_task_ids("no tasks here") == []
+
+
+# ---------------------------------------------------------------------------
+# extract_sc_ids
+# ---------------------------------------------------------------------------
+
+def test_extract_sc_ids_basic() -> None:
+    text = "- **SC-001**: passes\n- **SC-002**: second"
+    assert speckit.extract_sc_ids(text) == ["SC-001", "SC-002"]
+
+
+def test_extract_sc_ids_empty() -> None:
+    assert speckit.extract_sc_ids("no criteria") == []
+
+
+# ---------------------------------------------------------------------------
+# extract_coverage_tags
+# ---------------------------------------------------------------------------
+
+def test_coverage_tags_single() -> None:
+    line = "- [ ] T001 [SC-001] Do something"
+    assert speckit.extract_coverage_tags(line) == ["SC-001"]
+
+
+def test_coverage_tags_multiple() -> None:
+    line = "- [ ] T002 [SC-001,SC-003] More work"
+    assert speckit.extract_coverage_tags(line) == ["SC-001", "SC-003"]
+
+
+def test_coverage_tags_none() -> None:
+    assert speckit.extract_coverage_tags("- [ ] T003 No tags here") == []
+
+
+# ---------------------------------------------------------------------------
+# extract_action_suffixes
+# ---------------------------------------------------------------------------
+
+def test_action_suffix_create() -> None:
+    text = "├── src/foo.py (create) — new module"
+    pairs = speckit.extract_action_suffixes(text)
+    assert len(pairs) == 1
+    assert pairs[0][1] == "create"
+
+
+def test_action_suffix_modify() -> None:
+    text = "├── src/bar.py (modify) — update"
+    pairs = speckit.extract_action_suffixes(text)
+    assert pairs[0][1] == "modify"
+
+
+def test_action_suffix_remove() -> None:
+    text = "├── src/old.py (remove)"
+    pairs = speckit.extract_action_suffixes(text)
+    assert pairs[0][1] == "remove"
+
+
+def test_action_suffix_mixed_line() -> None:
+    text = "├── src/baz.py (create OR modify)"
+    pairs = speckit.extract_action_suffixes(text)
+    assert len(pairs) == 1
+
+
+def test_action_suffix_missing_returns_empty() -> None:
+    assert speckit.extract_action_suffixes("src/foo.py — no suffix") == []
+
+
+# ---------------------------------------------------------------------------
+# resolve_prompt_targets
+# ---------------------------------------------------------------------------
+
+def test_resolve_prompt_targets_success(fake_speckit_repo: Path) -> None:
+    targets = speckit.resolve_prompt_targets(fake_speckit_repo)
+    assert len(targets) == 1
+    t = targets[0]
+    assert t["integration"] == "claude"
+    assert t["separator"] == "-"
+    assert t["plan_path"].name == "SKILL.md"
+    assert "speckit-plan" in str(t["plan_path"])
+    assert "speckit-implement" in str(t["implement_path"])
+
+
+def test_resolve_prompt_targets_missing_integration_json(tmp_path: Path) -> None:
+    with pytest.raises(speckit.ManifestResolutionError, match="Missing"):
+        speckit.resolve_prompt_targets(tmp_path)
+
+
+def test_resolve_prompt_targets_missing_manifest(tmp_path: Path) -> None:
+    (tmp_path / ".specify" / "integrations").mkdir(parents=True)
+    integration = {"installed_integrations": ["claude"], "integration_settings": {"claude": {"invoke_separator": "-"}}}
+    (tmp_path / ".specify" / "integration.json").write_text(json.dumps(integration))
+    with pytest.raises(speckit.ManifestResolutionError, match="Missing manifest"):
+        speckit.resolve_prompt_targets(tmp_path)
+
+
+def test_resolve_prompt_targets_missing_file(fake_speckit_repo: Path) -> None:
+    # Remove the plan SKILL.md
+    (fake_speckit_repo / ".claude" / "skills" / "speckit-plan" / "SKILL.md").unlink()
+    with pytest.raises(speckit.ManifestResolutionError, match="does not exist"):
+        speckit.resolve_prompt_targets(fake_speckit_repo)
+
+
+# ---------------------------------------------------------------------------
+# derive_review_path
+# ---------------------------------------------------------------------------
+
+def test_derive_review_path(fake_speckit_repo: Path) -> None:
+    plan_path = fake_speckit_repo / ".claude" / "skills" / "speckit-plan" / "SKILL.md"
+    review = speckit.derive_review_path(plan_path, fake_speckit_repo, sep="-")
+    assert str(review).endswith(".claude/skills/specops-review/SKILL.md")
