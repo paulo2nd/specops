@@ -26,6 +26,10 @@ For each task:
 Never edit `status.yaml` or `tasks.md` checkboxes by hand.
 The ledger is the authority; the agent is the executor.
 
+### Skills
+
+Before starting the first task, check `skills_dir` (from `specops.json`). Load any skill files present. If the directory is empty or missing, proceed — skills are optional, not a gate.
+
 ### Reconcile Preflight
 
 Before starting the first task of a session:

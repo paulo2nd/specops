@@ -217,19 +217,22 @@ modification suffix makes it fail.
 ### User Story 5 - Token-Optimized Review Inside the Agent (Priority: P5)
 
 A reviewer invokes the SpecOps review command inside their coding agent. The injected
-review prompt directs the agent to: load the skills required by the active spec from the
-client's configured skills directory; run reconciliation first and abort immediately if
-it fails; inspect the set of changed files and reject on the spot — without reading any
-file contents — if changes exist outside the scope declared in the plan; and only then
-review code, emitting each non-conformity to a revision report file in the short format
-`[File]:[Line] - [rule violated and short action]`.
+review prompt directs the agent to: load any skills present in the client's configured
+skills directory (skills are optional — an empty or absent directory is not a blocker);
+run reconciliation first and abort immediately if it fails; reject on the spot — without
+reading any file contents — if the working tree is dirty (uncommitted changes) or the
+effective diff is empty; and only then review code, emitting each non-conformity to a
+revision report file in the short format `[File]:[Line] - [rule violated and short
+action]`. If the review reveals recurring failures or knowledge gaps, the reviewer records
+skill creation suggestions in the revision report (Active Learning) but does not create
+skills itself.
 
 **Why this priority**: Review is the last stage of the lifecycle and depends on all
 prior capabilities; it delivers the token-efficiency advantage but cannot function
 without the ledger and reconciliation.
 
 **Independent Test**: Can be fully tested by invoking the review command in an agent
-against a prepared repository: a run with out-of-plan changes is rejected before any
+against a prepared repository: a run with a dirty working tree is rejected before any
 file content is read; a compliant run produces a revision report in the short format.
 
 **Acceptance Scenarios**:
@@ -237,12 +240,15 @@ file content is read; a compliant run produces a revision report in the short fo
 1. **Given** a prepared repository with a failing reconciliation, **When** the review
    command runs in the agent, **Then** the review aborts immediately without reading any
    code.
-2. **Given** changed files outside the scope declared in the plan, **When** the review
-   command runs, **Then** the review rejects the submission based on file metadata alone,
-   without reading file contents.
+2. **Given** a working tree with uncommitted changes or an empty effective diff, **When**
+   the review command runs, **Then** the review rejects the submission based on working
+   tree metadata alone, without reading file contents.
 3. **Given** a compliant change set with rule violations in the code, **When** the
    review command runs, **Then** each non-conformity is written to the revision report
    in the format `[File]:[Line] - [rule violated and short action]`.
+4. **Given** a repository with no skills defined in `skills_dir`, **When** the review
+   command runs, **Then** the review proceeds normally without any skills-related
+   blocking.
 
 ---
 
@@ -364,11 +370,15 @@ file content is read; a compliant run produces a revision report in the short fo
   reference to a nonexistent criterion fails. Natural-language matching (token
   overlap, language-specific word lists) MUST NOT be used.
 - **FR-013**: The installed review agent command MUST direct the reviewing agent to,
-  in order: load the skills required by the active spec from the configured skills
-  directory; run reconciliation and abort immediately on failure; reject change sets
-  containing files outside the plan's declared scope using file status metadata alone,
-  without reading file contents; and emit each non-conformity to a numbered revision
-  report file in the format `[File]:[Line] - [rule violated and short action]`.
+  in order: load any skills present in the configured skills directory (skills are
+  optional — an empty or absent directory MUST NOT block the review); run reconciliation
+  and abort immediately on failure; reject a dirty working tree (uncommitted changes) or
+  an empty effective diff using working tree metadata alone, without reading file
+  contents; review the effective diff against the spec's Success Criteria and the plan's
+  declared architecture; emit each non-conformity to a numbered revision report file in
+  the format `[File]:[Line] - [rule violated and short action]`; and record skill
+  creation suggestions (Active Learning) in the revision report when recurring failures
+  or knowledge gaps are detected — the review command MUST NOT create skills itself.
 - **FR-014**: All user-facing output, templates, injected prompts, configuration keys,
   ledger field names, and evidence values MUST be in English. Artifacts ported from the
   original methodology MUST be translated (see Assumptions for canonical translations).
@@ -436,8 +446,8 @@ file content is read; a compliant run produces a revision report in the short fo
   agent-narrated evidence.
 - **SC-003**: Reconciliation detects 100% of seeded ledger/history divergences (missing
   or fabricated commits) in verification testing, with zero false passes.
-- **SC-004**: Change sets containing out-of-plan files are rejected by the review flow
-  using file metadata only — zero file contents are read before rejection.
+- **SC-004**: Dirty working trees and empty effective diffs are rejected by the review
+  flow using working tree metadata only — zero file contents are read before rejection.
 - **SC-005**: Re-running initialization on an already-prepared repository produces zero
   duplicated blocks and zero losses of user content outside marked blocks.
 - **SC-006**: The same SpecOps installation prepares and operates repositories of at

@@ -4,7 +4,7 @@ Token-optimized review command for SpecOps. Follow the steps below in strict ord
 
 ### Step 1 — Load Skills
 
-Load all required skills from `skills_dir` (see `specops.json`). Do not proceed without them.
+Check `skills_dir` (from `specops.json`). If the directory contains skill files, load them before proceeding. If it is empty or missing, continue — skills are optional.
 
 ### Step 2 — Reconcile Gate
 
@@ -18,16 +18,16 @@ Run `lint_command` and `test_command` (from `specops.json`).
 
 - Either command fails → **REJECTED**. Report which command failed and its exit code. Stop here.
 
-### Step 4 — Scope Check
+### Step 4 — Working Tree Check
 
 Run `git status --porcelain`.
 
-- Any file in the output that is NOT declared in `plan.md` → **REJECTED** out of scope. Name the file(s). Stop here. Do not read any code.
-- No changed files (empty diff) → **REJECTED** no effective diff. Stop here.
+- Output is non-empty (uncommitted changes) → **REJECTED** dirty working tree. List the files. Stop here. Do not read any code.
+- No effective diff against baseline → **REJECTED** no effective diff. Stop here.
 
 ### Step 5 — Surgical Diff Review
 
-Read only the files that changed and are in scope (from `plan.md`).
+Read only the files that changed (from the effective diff).
 
 Review against:
 - The spec Success Criteria and acceptance conditions.
@@ -58,3 +58,12 @@ After writing the report, run:
 ```
 specops status transition-phase REVIEW -r <APPROVED|REJECTED>
 ```
+
+### Active Learning
+
+If the review reveals recurring failures or knowledge gaps that a skill could prevent:
+- Add a line to `revision-X.md` under a `## Skill Suggestions` section:
+  ```
+  Suggest: create skill '<name>' covering <topic> to prevent recurrence of [File]:[Line] pattern.
+  ```
+- Do not create the skill yourself — record the suggestion for the human to act on.
