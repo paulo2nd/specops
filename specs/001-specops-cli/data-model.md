@@ -47,8 +47,10 @@ Full field-level schema with validation rules: [contracts/ledger-schema.md](cont
 
 **State transitions**: `PENDING→IN_PROGRESS` (`start-task`; fails if another task is
 IN_PROGRESS); `IN_PROGRESS→DONE` (`complete-task`; fails without evidence or with
-failing/absent `test_command` in `--auto`); no other transitions. DONE is terminal
-(corrective work tracks in ReviewCycle, not by reopening tasks).
+failing/absent `test_command` in `--auto`; an empty `commits[]` is allowed when
+`--evidence` is used — intermediate tasks within a user story may have no commits
+of their own); no other transitions. DONE is terminal (corrective work tracks in
+ReviewCycle, not by reopening tasks).
 
 ### Recovery
 

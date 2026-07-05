@@ -76,10 +76,9 @@ def run(root: Path) -> None:
             if not gitops.is_ancestor(repo, sha):
                 divergences.append(f"{tid}: commit '{sha[:7]}' is not in branch history")
 
-        # L1: DONE tasks require commits[] and evidence
+        # L1 (relaxed): DONE tasks require evidence; commits[] valid if present but may be empty
+        # (intermediate tasks within a user story are closed with --evidence and no commit)
         if task.get("status") == "DONE":
-            if not task.get("commits"):
-                divergences.append(f"{tid}: DONE but no commits recorded")
             if not task.get("evidence"):
                 divergences.append(f"{tid}: DONE but no evidence recorded")
 

@@ -121,21 +121,35 @@ to `checklists/pre-plan.md`.
   decision (fuzzy, unexplainable failures); separate coverage map file — rejected:
   second source of truth to drift.
 
-## R7. Evidence for multi-commit tasks (CHK017, CHK018, CHK019)
+## R7. Commit granularity and evidence collection (CHK017, CHK018, CHK019)
 
-- **Decision**: `start-task` records `started_commit = HEAD`. `complete-task --auto`
-  runs `test_command`, then harvests `git log started_commit..HEAD` — all commit
-  hashes into `commits[]` (first also mirrored to `recovery.last_commit`) and the
-  combined name-only diff for the `CODE_DIFF` summary. Evidence classes are fixed:
-  `CLI_LOG`, `TEST_REPORT`, `SCREENSHOT_PATH`, `CODE_DIFF` (methodology §7). Auto
-  evidence: `TEST_REPORT:<one-line test outcome>; CODE_DIFF:<N files across M
-  commits: f1, f2…>`. Unusable test output → `TEST_REPORT:exit 0 (output not
-  parseable)` — the exit code, not the text, is the gate. Empty commit range → exit
-  1 ("no commits since task start").
-- **Rationale**: `started_commit..HEAD` is exact for the single-active-task model
-  from R5; the reference script's HEAD-only harvest loses commits.
-- **Alternatives considered**: One-commit-per-task enforcement — rejected: the
-  methodology prefers it but reality (fixups) shouldn't corrupt evidence.
+- **Decision**: The preferred commit granularity is **one commit per user story** (not
+  per task). An agent works through all tasks in a user story, then makes a single
+  commit when the user story is complete. Task-level evidence is still recorded:
+  intermediate tasks (all but the final task of the US) are closed with
+  `--evidence "CLI_LOG:<what was done>"` (no commit required); the final task is
+  closed with `--auto` after the US-level commit, harvesting the full
+  `started_commit..HEAD` range.
+- **Ledger mechanics**: `start-task` records `started_commit = HEAD` for every task.
+  `complete-task --auto` runs `test_command` and harvests `git log
+  started_commit..HEAD` — all commit hashes into `commits[]` and the combined
+  name-only diff for the `CODE_DIFF` summary. Empty range → exit 1 (use `--evidence`
+  for intermediate tasks). `complete-task --evidence` records the caller-supplied
+  evidence with whatever commits exist in range (may be empty); this is valid and
+  `reconcile` accepts it (L1 relaxed: evidence required, non-empty commits not
+  required).
+- **Evidence classes**: `CLI_LOG`, `TEST_REPORT`, `SCREENSHOT_PATH`, `CODE_DIFF`.
+  Auto evidence: `TEST_REPORT:<last line>; CODE_DIFF:<N files across M commits: f1…>`.
+  Unusable test output → `TEST_REPORT:exit 0 (output not parseable)`.
+- **Rationale**: Coarser commit granularity (per-US) keeps git history readable and
+  aligned with Speckit's user-story delivery model. Per-task commits were the
+  reference script's model; the Speckit context makes the user story the natural
+  atomic unit of delivery. Per-task evidence is preserved through `--evidence` so the
+  ledger remains auditable at task level even without per-task commits.
+- **Alternatives considered**: One-commit-per-task enforcement — rejected: produces
+  noisy git history in the Speckit model and makes task boundaries the unit of
+  delivery rather than user stories. HEAD-only harvest (reference script) — rejected:
+  loses commits when a task spans multiple fixup commits.
 
 ## R8. Phase machine and corrective rounds (CHK015 resolution, CHK016)
 

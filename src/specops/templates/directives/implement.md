@@ -11,11 +11,17 @@
 
 ### Ledger Loop
 
-Before editing any file for a task:
-1. `specops status start-task <task-id>`
+The preferred commit granularity is **one commit per user story**, not per task.
+Work through all tasks in a user story first, then commit once.
 
-After committing all work for the task:
-2. `specops status complete-task <task-id> --auto`
+For each task:
+1. `specops status start-task <task-id>`
+2. Implement the task.
+3. Close the task:
+   - **If this is NOT the final task of the user story**: close with evidence but no commit:
+     `specops status complete-task <task-id> --evidence "CLI_LOG:<one-line summary>"`
+   - **If this IS the final task of the user story**: commit all accumulated work first, then:
+     `specops status complete-task <task-id> --auto`
 
 Never edit `status.yaml` or `tasks.md` checkboxes by hand.
 The ledger is the authority; the agent is the executor.

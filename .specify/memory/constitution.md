@@ -1,6 +1,16 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.1.2 → 1.1.3
+Rationale (1.1.3, 2026-07-05): Commit granularity clarified: the preferred
+unit is the user story, not the task. Principle III updated to reflect that
+`complete-task --auto` is used for the final task of a user story after a
+single US-level commit; intermediate tasks within a user story are closed with
+`--evidence` (no commit required). Ledger invariant L1 relaxed: evidence is
+required for DONE tasks; non-empty commits[] is no longer required (commits
+are validated only when present). PATCH bump: clarification of existing intent.
+Templates requiring updates: implement.md directive (updated).
+
 Version change: 1.1.1 → 1.1.2
 Rationale (1.1.2, 2026-07-05): Task transition line generalized from the
 legacy `task-XX` scheme to Speckit's own task identifiers
@@ -112,7 +122,10 @@ mechanically: run the client's `test_command`, harvest commit hashes and the
 `CODE_DIFF` via Git, and record the evidence string in `status.yaml` in the
 `<CLASS>:<summary>` format (including the `TEST_REPORT`). Evidence is
 machine-collected at close time so that review can consume it without
-re-deriving context.
+re-deriving context. The preferred commit granularity is one commit per user
+story (not per task); intermediate tasks within a user story are closed with
+`--evidence` (without a commit), and the user story's final task is closed
+with `--auto` after a single user-story-level commit.
 
 **Rationale**: evidence gathered by tooling is trustworthy and cheap;
 evidence claimed by an agent is neither.
@@ -225,4 +238,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.1.2 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05
+**Version**: 1.1.3 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05

@@ -46,7 +46,7 @@ review_cycles:                       # one entry per REVIEW entry / corrective r
 
 | # | Rule | Enforced by |
 |---|---|---|
-| L1 | No task DONE without non-empty `commits[]` AND `evidence` | `complete-task` refuses; `reconcile` exit 1 |
+| L1 | No task DONE without `evidence`; `commits[]` entries, when present, must be valid ancestors of HEAD | `complete-task` refuses without evidence; `reconcile` exit 1 on invalid commits |
 | L2 | At most one task IN_PROGRESS; it equals `recovery.active_task` | `start-task` refuses |
 | L3 | Every hash in `commits[]` is an ancestor of HEAD (except literal `(human)`) | `reconcile` exit 1 |
 | L4 | `current_phase` only changes via `transition-phase` following the state machine | `transition-phase` refuses |

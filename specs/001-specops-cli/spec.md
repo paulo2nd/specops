@@ -143,8 +143,15 @@ ledger reflects each transition with the recorded evidence.
    marked as in progress and recorded as the recovery point.
 3. **Given** a task in progress, **When** the user completes it in automatic mode,
    **Then** SpecOps runs the client's test command, collects the commit identifiers and
-   diff from repository history, and records an evidence entry in the
-   `<CLASS>:<summary>` format before marking the task as done.
+   diff from repository history for the `started_commit..HEAD` range (which may span
+   multiple tasks belonging to the same user story), and records an evidence entry in
+   the `<CLASS>:<summary>` format before marking the task as done. If no commits exist
+   in the range (the task is an intermediate task within a user story whose commit is
+   deferred to the user story's final task), the caller MUST use `--evidence` instead.
+4a. **Given** a task in progress with no commits in its `started_commit..HEAD` range
+   (intermediate task within a user story), **When** the user completes it with
+   `--evidence`, **Then** the task is marked done with the supplied evidence and an
+   empty `commits[]`; `reconcile` accepts this state because evidence is present.
 4. **Given** a task in progress, **When** the client's test command fails during
    automatic completion, **Then** the task is NOT marked as done and the failure is
    reported with a failure exit code.
@@ -336,11 +343,17 @@ file content is read; a compliant run produces a revision report in the short fo
   absent. No completion path — automatic or manual — may mark a task as done without
   a recorded evidence entry.
 - **FR-010**: Automatic task completion MUST harvest the task's commit identifiers and
-  code diff from repository history and record an evidence entry in the ledger using the
-  `<CLASS>:<summary>` format, covering both the test report and the code diff.
+  code diff from the `started_commit..HEAD` range and record an evidence entry in the
+  ledger using the `<CLASS>:<summary>` format, covering both the test report and the
+  code diff. The range may contain commits from multiple tasks belonging to the same
+  user story. Automatic completion MUST fail when the range is empty; callers MUST use
+  `--evidence` for intermediate tasks within a user story whose commit is deferred to
+  the user story boundary.
 - **FR-011**: The reconciliation command MUST verify that every commit recorded in the
   ledger exists in the history of the active branch, succeeding (exit code 0) when
   consistent and failing (exit code 1) while identifying divergent entries otherwise.
+  A DONE task with an empty `commits[]` is valid when an evidence entry is present
+  (intermediate task completed with `--evidence` at user-story granularity).
 - **FR-012**: The consistency command MUST parse the active spec's business
   specification and technical plan and MUST fail (exit code 1) when any success
   criterion lacks covering tasks or when any declared path's action suffix —

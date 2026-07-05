@@ -103,6 +103,20 @@ def test_reconcile_done_without_evidence_fails(tmp_path: Path) -> None:
     assert exc.value.code == 1
 
 
+def test_reconcile_done_without_commits_but_with_evidence_passes(tmp_path: Path) -> None:
+    """L1 relaxed: DONE + evidence + empty commits[] → valid (intermediate US task)."""
+    root, feature_dir = _setup(tmp_path, [])
+    tasks = [{"id": "T001", "status": "DONE", "started_commit": None, "commits": [],
+              "evidence": "CLI_LOG:intermediate task done", "completed_at": "2026-07-05"}]
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    data["tasks"] = tasks
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+
+    with pytest.raises(SystemExit) as exc:
+        reconcile.run(root)
+    assert exc.value.code == 0
+
+
 def test_reconcile_orphaned_task_reported(tmp_path: Path, capsys) -> None:
     root, feature_dir = _setup(tmp_path, [])
     tasks = [{"id": "T099", "status": "DONE", "commits": [], "evidence": "CLI_LOG:ok",
