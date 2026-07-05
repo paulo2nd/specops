@@ -1,10 +1,11 @@
-"""Speckit layout detection, feature-dir resolution, and structural token parsing (R1, R2, R5, R6)."""
+"""Speckit layout detection, feature-dir resolution, and structural token parsing."""
 from __future__ import annotations
 
 import json
 import re
 from pathlib import Path
-from typing import Optional
+
+from specops.errors import SpecopsError
 
 # ---------------------------------------------------------------------------
 # Detection & feature-dir resolution (R1)
@@ -21,7 +22,7 @@ def has_speckit(root: Path) -> bool:
     return (root / ".specify" / "templates").is_dir()
 
 
-def resolve_feature_dir(root: Path) -> Optional[Path]:
+def resolve_feature_dir(root: Path) -> Path | None:
     """
     Return the active feature directory.
 
@@ -41,12 +42,16 @@ def resolve_feature_dir(root: Path) -> Optional[Path]:
         except (json.JSONDecodeError, OSError):
             pass
 
-    # Fallback: newest specs/NNN-* directory
+    # Fallback: newest specs/NNN-* directory (numeric prefix sort, tie-break full name)
     specs_dir = root / "specs"
     if specs_dir.is_dir():
+        def _numeric_key(d: Path) -> tuple[int, str]:
+            m = re.match(r"(\d+)", d.name)
+            return (int(m.group(1)) if m else 0, d.name)
+
         candidates = sorted(
             [d for d in specs_dir.iterdir() if d.is_dir() and re.match(r"\d+", d.name)],
-            key=lambda d: d.name,
+            key=_numeric_key,
             reverse=True,
         )
         if candidates:
@@ -91,11 +96,38 @@ def extract_action_suffixes(plan_text: str) -> list[tuple[str, str]]:
     return results
 
 
+_PATH_BEFORE_ACTION_RE = re.compile(
+    r"(`[^`]+`|[\w./\-]+\.[\w./\-]+)\s+\((?:create|modify|remove)"
+)
+_BACKTICK_PATH_RE = re.compile(r"`([^`]+)`\s+\(")
+
+
+def parse_plan_path_action(line: str) -> tuple[str, str] | None:
+    """
+    Extract (path, action) from a plan.md path-suffix declaration line.
+
+    Returns None when the line has no recognizable path-action pair.
+    """
+    m_action = _ACTION_SUFFIX_RE.search(line)
+    if not m_action:
+        return None
+    action = m_action.group(1).lower()
+
+    m_path = _PATH_BEFORE_ACTION_RE.search(line)
+    if not m_path:
+        m_path = _BACKTICK_PATH_RE.search(line)
+    if not m_path:
+        return None
+
+    raw_path = m_path.group(1).strip("`").strip()
+    return (raw_path, action)
+
+
 # ---------------------------------------------------------------------------
 # Manifest-driven prompt-target resolution (R2)
 # ---------------------------------------------------------------------------
 
-class ManifestResolutionError(Exception):
+class ManifestResolutionError(SpecopsError):
     """Raised when prompt targets cannot be resolved from Speckit manifests."""
 
 

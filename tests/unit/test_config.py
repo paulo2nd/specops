@@ -52,7 +52,9 @@ def test_create_or_merge_creates_new_file(tmp_path: Path) -> None:
 
 
 def test_create_or_merge_preserves_existing(tmp_path: Path) -> None:
-    (tmp_path / "specops.json").write_text(json.dumps({"test_command": "my_runner", "custom": "val"}))
+    (tmp_path / "specops.json").write_text(
+        json.dumps({"test_command": "my_runner", "custom": "val"})
+    )
     cfg, created = config.create_or_merge(tmp_path)
     assert created is False
     assert cfg["test_command"] == "my_runner"

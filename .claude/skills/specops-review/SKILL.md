@@ -1,3 +1,7 @@
+---
+description: SpecOps token-optimized review command
+---
+
 ## /specops-review
 
 Token-optimized review command for SpecOps. Follow the steps below in strict order — reject as early as possible to avoid reading unnecessary code.

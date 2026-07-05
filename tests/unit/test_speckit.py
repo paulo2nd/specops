@@ -6,7 +6,6 @@ import pytest
 
 from specops import speckit
 
-
 # ---------------------------------------------------------------------------
 # has_speckit
 # ---------------------------------------------------------------------------
@@ -36,6 +35,24 @@ def test_feature_dir_fallback_to_newest_specs(tmp_path: Path) -> None:
     fd = speckit.resolve_feature_dir(tmp_path)
     assert fd is not None
     assert fd.name == "002-second"
+
+
+def test_feature_dir_numeric_ordering_9_vs_10(tmp_path: Path) -> None:
+    """10-* must sort higher than 9-* (numeric, not lexicographic)."""
+    (tmp_path / "specs" / "9-old").mkdir(parents=True)
+    (tmp_path / "specs" / "10-new").mkdir(parents=True)
+    fd = speckit.resolve_feature_dir(tmp_path)
+    assert fd is not None
+    assert fd.name == "10-new"
+
+
+def test_feature_dir_numeric_ordering_large_numbers(tmp_path: Path) -> None:
+    """100-* > 20-* > 9-*."""
+    for name in ("9-a", "20-b", "100-c"):
+        (tmp_path / "specs" / name).mkdir(parents=True)
+    fd = speckit.resolve_feature_dir(tmp_path)
+    assert fd is not None
+    assert fd.name == "100-c"
 
 
 def test_feature_dir_none_when_nothing(tmp_path: Path) -> None:
@@ -134,6 +151,40 @@ def test_action_suffix_missing_returns_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
+# parse_plan_path_action (public helper, T016)
+# ---------------------------------------------------------------------------
+
+def test_parse_plan_path_action_create() -> None:
+    line = "- `src/specops/errors.py` (create) — new module"
+    result = speckit.parse_plan_path_action(line)
+    assert result is not None
+    assert result[0] == "src/specops/errors.py"
+    assert result[1] == "create"
+
+
+def test_parse_plan_path_action_modify() -> None:
+    line = "- `src/specops/status.py` (modify) — fix transition"
+    result = speckit.parse_plan_path_action(line)
+    assert result is not None
+    assert result[1] == "modify"
+
+
+def test_parse_plan_path_action_remove() -> None:
+    line = "- `src/specops/old.py` (remove)"
+    result = speckit.parse_plan_path_action(line)
+    assert result is not None
+    assert result[1] == "remove"
+
+
+def test_parse_plan_path_action_no_suffix_returns_none() -> None:
+    assert speckit.parse_plan_path_action("src/foo.py — no suffix") is None
+
+
+def test_parse_plan_path_action_no_path_returns_none() -> None:
+    assert speckit.parse_plan_path_action("(create)") is None
+
+
+# ---------------------------------------------------------------------------
 # resolve_prompt_targets
 # ---------------------------------------------------------------------------
 
@@ -155,7 +206,10 @@ def test_resolve_prompt_targets_missing_integration_json(tmp_path: Path) -> None
 
 def test_resolve_prompt_targets_missing_manifest(tmp_path: Path) -> None:
     (tmp_path / ".specify" / "integrations").mkdir(parents=True)
-    integration = {"installed_integrations": ["claude"], "integration_settings": {"claude": {"invoke_separator": "-"}}}
+    integration = {
+        "installed_integrations": ["claude"],
+        "integration_settings": {"claude": {"invoke_separator": "-"}},
+    }
     (tmp_path / ".specify" / "integration.json").write_text(json.dumps(integration))
     with pytest.raises(speckit.ManifestResolutionError, match="Missing manifest"):
         speckit.resolve_prompt_targets(tmp_path)

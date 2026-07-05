@@ -2,17 +2,15 @@
 from __future__ import annotations
 
 import datetime
+import os
 import re
 import subprocess
-import sys
 from pathlib import Path
-from typing import Optional
-
-import sys
 
 import yaml
 
 from specops import config, gitops, speckit
+from specops.errors import LedgerParseError, SpecopsError
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -22,8 +20,9 @@ LEDGER_FILENAME = "status.yaml"
 PHASES = ["SPECIFY", "PLAN", "TASKS", "IMPLEMENT", "REVIEW", "DONE"]
 TASK_STATUSES = ["PENDING", "IN_PROGRESS", "DONE"]
 EVIDENCE_CLASSES = {"CLI_LOG", "TEST_REPORT", "SCREENSHOT_PATH", "CODE_DIFF"}
-_EVIDENCE_RE = re.compile(
-    r"^(?:[A-Z_]+:.+)(?:; [A-Z_]+:.+)*$"
+
+_PART_RE = re.compile(
+    r"^(" + "|".join(re.escape(c) for c in EVIDENCE_CLASSES) + r"):(.+)$"
 )
 
 # ---------------------------------------------------------------------------
@@ -46,38 +45,33 @@ def _ledger_path(feature_dir: Path) -> Path:
 def _load_ledger(feature_dir: Path) -> dict:
     path = _ledger_path(feature_dir)
     if not path.is_file():
-        _fail(f"Ledger not found: {path}. Run 'specops status init-spec' first.", code=1)
+        raise SpecopsError(
+            f"Ledger not found: {path}. Run 'specops status init-spec' first."
+        )
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
-        _fail(f"Cannot parse ledger {path}: {exc}", code=2)
+        raise LedgerParseError(f"Cannot parse ledger {path}: {exc}") from exc
     if not isinstance(data, dict):
-        _fail(f"Ledger {path} has invalid structure.", code=2)
+        raise LedgerParseError(f"Ledger {path} has invalid structure.")
     return data
 
 
 def _save_ledger(feature_dir: Path, data: dict) -> None:
+    """Write ledger atomically: write to .tmp, flush, os.replace onto status.yaml."""
     path = _ledger_path(feature_dir)
+    tmp_path = feature_dir / (LEDGER_FILENAME + ".tmp")
     data["updated_at"] = _today()
-    path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True), encoding="utf-8")
-
-
-def _fail(msg: str, code: int = 1) -> None:
-    import typer
-    typer.echo(msg, err=True)
-    sys.exit(code)
-
-
-def _ok(msg: str = "") -> None:
-    import typer
-    if msg:
-        typer.echo(msg)
-    sys.exit(0)
+    content = yaml.dump(data, default_flow_style=False, allow_unicode=True)
+    tmp_path.write_text(content, encoding="utf-8")
+    with open(tmp_path, "rb") as fh:
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(str(tmp_path), str(path))
 
 
 def _sync_tasks(data: dict, tasks_text: str) -> None:
-    """
-    Sync ledger tasks[] from tasks.md content.
+    """Sync ledger tasks[] from tasks.md content.
 
     New IDs → PENDING; vanished IDs → orphaned: true (preserved). (R5)
     """
@@ -110,7 +104,9 @@ def _sync_tasks(data: dict, tasks_text: str) -> None:
 def _get_feature_dir(root: Path) -> Path:
     fd = speckit.resolve_feature_dir(root)
     if fd is None:
-        _fail("Cannot resolve active feature directory. Check .specify/feature.json.")
+        raise SpecopsError(
+            "Cannot resolve active feature directory. Check .specify/feature.json."
+        )
     return fd
 
 
@@ -122,15 +118,18 @@ def _read_tasks_md(feature_dir: Path) -> str:
 
 
 def _validate_evidence(evidence: str) -> bool:
-    """Return True when evidence matches `<CLASS>:<summary>[; ...]` with valid classes."""
+    """Return True when evidence matches the strict grammar: CLASS:summary[; CLASS:summary ...]."""
+    if not evidence:
+        return False
     parts = evidence.split("; ")
     for part in parts:
-        if ":" not in part:
+        m = _PART_RE.match(part)
+        if not m:
             return False
-        cls, _, _ = part.partition(":")
-        if cls not in EVIDENCE_CLASSES:
+        summary = m.group(2)
+        if not summary or summary[0] == " ":
             return False
-    return bool(parts)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -138,33 +137,30 @@ def _validate_evidence(evidence: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def cmd_init_spec(root: Path, name: Optional[str]) -> None:
+def cmd_init_spec(root: Path, name: str | None) -> str:
     """Create status.yaml for the active feature (cli-contract: init-spec)."""
-    import typer
-
     feature_dir = _get_feature_dir(root)
 
     if name is not None:
         expected = root / "specs" / name
         if expected.resolve() != feature_dir.resolve():
-            _fail(
+            raise SpecopsError(
                 f"Provided name '{name}' resolves to '{expected}' "
                 f"but active feature is '{feature_dir}'."
             )
 
     ledger_path = _ledger_path(feature_dir)
     if ledger_path.is_file():
-        _fail(f"Ledger already exists: {ledger_path}")
+        raise SpecopsError(f"Ledger already exists: {ledger_path}")
 
     repo = gitops.find_repo(root)
     if repo is None:
-        _fail("Not a Git repository.")
+        raise SpecopsError("Not a Git repository.")
 
     branch = gitops.current_branch(repo)
     baseline = gitops.head_sha(repo)
     feature_name = feature_dir.name
 
-    # Instantiate scaffold
     template = (_templates_dir() / "status.yaml").read_text(encoding="utf-8")
     content = (
         template
@@ -175,7 +171,6 @@ def cmd_init_spec(root: Path, name: Optional[str]) -> None:
     )
     data = yaml.safe_load(content)
 
-    # Sync tasks if tasks.md exists
     tasks_text = _read_tasks_md(feature_dir)
     if tasks_text:
         _sync_tasks(data, tasks_text)
@@ -185,18 +180,14 @@ def cmd_init_spec(root: Path, name: Optional[str]) -> None:
         rel = ledger_path.relative_to(root.resolve())
     except ValueError:
         rel = ledger_path
-    typer.echo(f"Ledger created: {rel}")
-    sys.exit(0)
+    return f"Ledger created: {rel}"
 
 
-def cmd_start_task(root: Path, task_id: str) -> None:
+def cmd_start_task(root: Path, task_id: str) -> str:
     """Mark task_id IN_PROGRESS (cli-contract: start-task)."""
-    import typer
-
     feature_dir = _get_feature_dir(root)
     data = _load_ledger(feature_dir)
 
-    # Re-sync tasks
     tasks_text = _read_tasks_md(feature_dir)
     _sync_tasks(data, tasks_text)
 
@@ -204,45 +195,42 @@ def cmd_start_task(root: Path, task_id: str) -> None:
     task_map = {t["id"]: t for t in tasks}
 
     if task_id not in task_map:
-        _fail(f"Task '{task_id}' not found in tasks.md.")
+        raise SpecopsError(f"Task '{task_id}' not found in tasks.md.")
 
     task = task_map[task_id]
     if task["status"] == "DONE":
-        _fail(f"Task '{task_id}' is already DONE.")
+        raise SpecopsError(f"Task '{task_id}' is already DONE.")
     if task["status"] == "IN_PROGRESS":
-        _fail(f"Task '{task_id}' is already IN_PROGRESS.")
+        raise SpecopsError(f"Task '{task_id}' is already IN_PROGRESS.")
 
     # Single-active-task rule (R5/L2)
     active = [t for t in tasks if t["status"] == "IN_PROGRESS"]
     if active:
-        _fail(
+        raise SpecopsError(
             f"Task '{active[0]['id']}' is already IN_PROGRESS. "
             "Complete or handle it before starting another."
         )
 
     repo = gitops.find_repo(root)
     if repo is None:
-        _fail("Not a Git repository.")
+        raise SpecopsError("Not a Git repository.")
 
     task["status"] = "IN_PROGRESS"
     task["started_commit"] = gitops.head_sha(repo)
     data["recovery"]["active_task"] = task_id
 
     _save_ledger(feature_dir, data)
-    typer.echo(f"Task '{task_id}' started.")
-    sys.exit(0)
+    return f"Task '{task_id}' started."
 
 
 def cmd_complete_task(
-    root: Path, task_id: str, *, auto: bool, evidence: Optional[str]
-) -> None:
+    root: Path, task_id: str, *, auto: bool, evidence: str | None
+) -> str:
     """Mark task_id DONE with evidence (cli-contract: complete-task)."""
-    import typer
-
     if not auto and not evidence:
-        _fail("Exactly one evidence source required: --auto or --evidence.")
+        raise SpecopsError("Exactly one evidence source required: --auto or --evidence.")
     if auto and evidence:
-        _fail("Provide --auto or --evidence, not both.")
+        raise SpecopsError("Provide --auto or --evidence, not both.")
 
     feature_dir = _get_feature_dir(root)
     data = _load_ledger(feature_dir)
@@ -254,38 +242,42 @@ def cmd_complete_task(
     task_map = {t["id"]: t for t in tasks}
 
     if task_id not in task_map:
-        _fail(f"Task '{task_id}' not found in tasks.md.")
+        raise SpecopsError(f"Task '{task_id}' not found in tasks.md.")
 
     task = task_map[task_id]
     if task["status"] != "IN_PROGRESS":
-        _fail(f"Task '{task_id}' is not IN_PROGRESS (status: {task['status']}).")
+        raise SpecopsError(
+            f"Task '{task_id}' is not IN_PROGRESS (status: {task['status']})."
+        )
 
     repo = gitops.find_repo(root)
     if repo is None:
-        _fail("Not a Git repository.")
+        raise SpecopsError("Not a Git repository.")
 
     started = task.get("started_commit")
     if not started:
-        _fail(f"Task '{task_id}' has no started_commit; cannot harvest evidence.")
+        raise SpecopsError(
+            f"Task '{task_id}' has no started_commit; cannot harvest evidence."
+        )
 
     if auto:
-        # Run test_command
         cfg = _load_config(root)
         test_cmd = cfg.get("test_command", "")
         if not test_cmd:
-            _fail("test_command not set in specops.json; cannot use --auto.")
+            raise SpecopsError("test_command not set in specops.json; cannot use --auto.")
 
         result = subprocess.run(test_cmd, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
-            _fail(
+            raise SpecopsError(
                 f"test_command failed (exit {result.returncode}). "
                 f"Task '{task_id}' stays IN_PROGRESS."
             )
 
-        # Harvest commits and diff
         commits = gitops.commits_in_range(repo, started)
         if not commits:
-            _fail(f"No commits since task start ({started[:7]}). Commit your work first.")
+            raise SpecopsError(
+                f"No commits since task start ({started[:7]}). Commit your work first."
+            )
 
         files = gitops.name_only_diff(repo, started)
         test_summary = result.stdout.strip().splitlines()
@@ -297,14 +289,12 @@ def cmd_complete_task(
         if commits:
             data["recovery"]["last_commit"] = commits[0]
     else:
-        # Caller-supplied evidence
-        if not _validate_evidence(evidence):
-            _fail(
+        if not evidence or not _validate_evidence(evidence):
+            raise SpecopsError(
                 f"Invalid evidence format. Expected '<CLASS>:<summary>[; ...]' "
                 f"with class in {sorted(EVIDENCE_CLASSES)}."
             )
         evidence_str = evidence
-        # Still collect commits for L1
         commits = gitops.commits_in_range(repo, started)
         task["commits"] = commits
         if commits:
@@ -316,8 +306,74 @@ def cmd_complete_task(
     data["recovery"]["active_task"] = None
 
     _save_ledger(feature_dir, data)
-    typer.echo(f"Task '{task_id}' completed. Evidence: {evidence_str}")
-    sys.exit(0)
+    return f"Task '{task_id}' completed. Evidence: {evidence_str}"
+
+
+def cmd_show(root: Path) -> str:
+    """Return the ledger summary as a plain-text string (read-only, no save)."""
+    feature_dir = speckit.resolve_feature_dir(root)
+    if feature_dir is None:
+        raise SpecopsError(
+            "Cannot resolve active feature directory. Check .specify/feature.json."
+        )
+
+    path = _ledger_path(feature_dir)
+    if not path.is_file():
+        raise SpecopsError(
+            f"Ledger not found: {path}. Run 'specops status init-spec' first."
+        )
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise LedgerParseError(f"Cannot parse ledger {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise LedgerParseError(f"Ledger {path} has invalid structure.")
+
+    feature_name = data.get("feature", feature_dir.name)
+    branch = data.get("branch", "unknown")
+    phase = data.get("current_phase", "unknown")
+
+    tasks = data.get("tasks") or []
+    pending = sum(1 for t in tasks if t.get("status") == "PENDING" and not t.get("orphaned"))
+    in_progress = sum(
+        1 for t in tasks if t.get("status") == "IN_PROGRESS" and not t.get("orphaned")
+    )
+    done = sum(1 for t in tasks if t.get("status") == "DONE" and not t.get("orphaned"))
+    orphaned = sum(1 for t in tasks if t.get("orphaned"))
+    total = len(tasks)
+
+    active = next(
+        (t["id"] for t in tasks if t.get("status") == "IN_PROGRESS" and not t.get("orphaned")),
+        "none",
+    )
+
+    cycles = data.get("review_cycles") or []
+
+    lines = [
+        f"feature: {feature_name}",
+        f"branch: {branch}",
+        f"phase: {phase}",
+        f"active task: {active}",
+        (
+            f"tasks: {total} total — "
+            f"{pending} pending, {in_progress} in progress, {done} done, {orphaned} orphaned"
+        ),
+        f"review cycles: {len(cycles)}",
+    ]
+    for cycle in cycles:
+        round_num = cycle.get("round", "?")
+        result = cycle.get("result")
+        started = cycle.get("started_at")
+        completed = cycle.get("completed_at")
+        if result is None:
+            cycle_str = f"  round {round_num}: open"
+        elif completed:
+            cycle_str = f"  round {round_num}: {result} ({started} → {completed})"
+        else:
+            cycle_str = f"  round {round_num}: {result}"
+        lines.append(cycle_str)
+
+    return "\n".join(lines)
 
 
 def _load_config(root: Path) -> dict:
@@ -327,9 +383,17 @@ def _load_config(root: Path) -> dict:
         return {}
 
 
-def cmd_transition_phase(root: Path, phase: str, *, result: Optional[str]) -> None:
+def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
     """Advance the phase state machine (cli-contract: transition-phase)."""
-    import typer
+    # R2: Validate result vocabulary BEFORE any ledger read/write
+    normalized_result: str | None = None
+    if result is not None:
+        upper = result.upper()
+        if upper not in ("APPROVED", "REJECTED"):
+            raise SpecopsError(
+                f"Invalid result '{result}'. Expected APPROVED or REJECTED."
+            )
+        normalized_result = upper
 
     feature_dir = _get_feature_dir(root)
     data = _load_ledger(feature_dir)
@@ -338,7 +402,9 @@ def cmd_transition_phase(root: Path, phase: str, *, result: Optional[str]) -> No
     target = phase.upper()
 
     if target not in PHASES:
-        _fail(f"Unknown phase '{target}'. Valid phases: {', '.join(PHASES)}.")
+        raise SpecopsError(
+            f"Unknown phase '{target}'. Valid phases: {', '.join(PHASES)}."
+        )
 
     current_idx = PHASES.index(current) if current in PHASES else -1
     target_idx = PHASES.index(target)
@@ -349,18 +415,20 @@ def cmd_transition_phase(root: Path, phase: str, *, result: Optional[str]) -> No
         valid = True
     # Special exception: REVIEW → IMPLEMENT with result=REJECTED
     elif current == "REVIEW" and target == "IMPLEMENT":
-        if result and result.upper() == "REJECTED":
+        if normalized_result == "REJECTED":
             valid = True
         else:
-            _fail(
+            raise SpecopsError(
                 "REVIEW → IMPLEMENT requires '-r REJECTED'. "
                 "Supply the result to record a corrective round."
             )
 
     if not valid:
-        _fail(
-            f"Invalid transition: {current} → {target}. "
-            f"Expected next phase: {PHASES[current_idx + 1] if current_idx + 1 < len(PHASES) else 'DONE (already at end)'}."
+        next_phase = (
+            PHASES[current_idx + 1] if current_idx + 1 < len(PHASES) else "DONE (already at end)"
+        )
+        raise SpecopsError(
+            f"Invalid transition: {current} → {target}. Expected next phase: {next_phase}."
         )
 
     # Entering REVIEW: open a review cycle
@@ -375,7 +443,7 @@ def cmd_transition_phase(root: Path, phase: str, *, result: Optional[str]) -> No
         })
 
     # Closing REVIEW via corrective REVIEW→IMPLEMENT(REJECTED)
-    if current == "REVIEW" and target == "IMPLEMENT" and result and result.upper() == "REJECTED":
+    if current == "REVIEW" and target == "IMPLEMENT" and normalized_result == "REJECTED":
         cycles = data.get("review_cycles", [])
         if cycles:
             cycles[-1]["result"] = "REJECTED"
@@ -389,27 +457,39 @@ def cmd_transition_phase(root: Path, phase: str, *, result: Optional[str]) -> No
             "result": None,
         })
 
-    # Entering DONE: require latest cycle APPROVED
-    if target == "DONE":
+    # R1: For DONE transitions, apply the result to the open cycle BEFORE the gate check
+    if current == "REVIEW" and target == "DONE":
         cycles = data.get("review_cycles", [])
+        if normalized_result == "REJECTED":
+            raise SpecopsError(
+                "Cannot enter DONE with result REJECTED. "
+                "Use 'transition-phase IMPLEMENT -r REJECTED' to record a corrective round."
+            )
+        if normalized_result == "APPROVED" and cycles and cycles[-1]["result"] is None:
+            cycles[-1]["result"] = "APPROVED"
+            cycles[-1]["completed_at"] = _today()
+
         if not cycles:
-            _fail("Cannot enter DONE: no review cycles recorded.")
+            raise SpecopsError("Cannot enter DONE: no review cycles recorded.")
         latest = cycles[-1]
         latest_result = (latest.get("result") or "").upper()
         if latest_result != "APPROVED":
-            _fail(
+            raise SpecopsError(
+                f"Cannot enter DONE: latest review cycle result is '{latest.get('result')}'. "
+                "Must be APPROVED."
+            )
+    elif target == "DONE":
+        cycles = data.get("review_cycles", [])
+        if not cycles:
+            raise SpecopsError("Cannot enter DONE: no review cycles recorded.")
+        latest = cycles[-1]
+        latest_result = (latest.get("result") or "").upper()
+        if latest_result != "APPROVED":
+            raise SpecopsError(
                 f"Cannot enter DONE: latest review cycle result is '{latest.get('result')}'. "
                 "Must be APPROVED."
             )
 
-    # Close review cycle when transitioning away from REVIEW with a result
-    if current == "REVIEW" and target == "DONE" and result:
-        cycles = data.get("review_cycles", [])
-        if cycles and cycles[-1]["result"] is None:
-            cycles[-1]["result"] = result.upper()
-            cycles[-1]["completed_at"] = _today()
-
     data["current_phase"] = target
     _save_ledger(feature_dir, data)
-    typer.echo(f"Phase transition: {current} → {target}.")
-    sys.exit(0)
+    return f"Phase transition: {current} → {target}."

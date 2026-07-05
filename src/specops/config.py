@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from specops.errors import SpecopsError
+
 CONFIG_FILENAME = "specops.json"
 
 _DEFAULTS: dict[str, Any] = {
@@ -14,7 +16,7 @@ _DEFAULTS: dict[str, Any] = {
 }
 
 
-class ConfigError(Exception):
+class ConfigError(SpecopsError):
     """Raised on missing or unreadable specops.json."""
 
 

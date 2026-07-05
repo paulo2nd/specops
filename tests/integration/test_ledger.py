@@ -3,7 +3,6 @@ import json
 import subprocess
 from pathlib import Path
 
-import pytest
 import yaml
 
 
@@ -165,3 +164,57 @@ class TestScenarioE:
         _run(repo, "status", "transition-phase", "REVIEW")
         r = _run(repo, "status", "transition-phase", "DONE")
         assert r.returncode == 1
+
+
+# ---------------------------------------------------------------------------
+# T007 — SC-001: full lifecycle SPECIFY→DONE -r APPROVED via CLI only
+# ---------------------------------------------------------------------------
+
+class TestFullLifecycleSC001:
+    def test_full_lifecycle_approve_via_cli(self, fake_speckit_repo: Path) -> None:
+        """SPECIFY→PLAN→TASKS→IMPLEMENT→REVIEW→DONE -r APPROVED with no manual ledger edits."""
+        repo = fake_speckit_repo
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 only task\n")
+        (repo / "specops.json").write_text(
+            json.dumps({"test_command": "true", "lint_command": "", "skills_dir": ""})
+        )
+
+        # Init ledger
+        r = _run(repo, "status", "init-spec")
+        assert r.returncode == 0, r.stderr
+
+        # Phase walk: SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW
+        for phase in ("PLAN", "TASKS", "IMPLEMENT", "REVIEW"):
+            r = _run(repo, "status", "transition-phase", phase)
+            assert r.returncode == 0, f"transition to {phase} failed: {r.stderr}"
+
+        # Verify in REVIEW phase
+        data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+        assert data["current_phase"] == "REVIEW"
+        assert len(data["review_cycles"]) == 1
+        assert data["review_cycles"][0]["result"] is None
+
+        # REVIEW → DONE -r APPROVED (no manual ledger edit)
+        r = _run(repo, "status", "transition-phase", "DONE", "-r", "APPROVED")
+        assert r.returncode == 0, r.stderr
+
+        data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+        assert data["current_phase"] == "DONE"
+        assert data["review_cycles"][-1]["result"] == "APPROVED"
+        assert data["review_cycles"][-1]["completed_at"] is not None
+
+    def test_invalid_result_rejected_by_cli(self, fake_speckit_repo: Path) -> None:
+        """CLI rejects invalid result vocabulary before touching the ledger."""
+        repo = fake_speckit_repo
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
+
+        _run(repo, "status", "init-spec")
+        for phase in ("PLAN", "TASKS", "IMPLEMENT", "REVIEW"):
+            _run(repo, "status", "transition-phase", phase)
+
+        original = (feature_dir / "status.yaml").read_text()
+        r = _run(repo, "status", "transition-phase", "DONE", "-r", "maybe")
+        assert r.returncode == 1
+        assert (feature_dir / "status.yaml").read_text() == original

@@ -3,8 +3,6 @@ import json
 import subprocess
 from pathlib import Path
 
-import pytest
-
 
 def _run(repo: Path) -> subprocess.CompletedProcess:
     return subprocess.run(["specops", "consistency"], cwd=repo, capture_output=True, text=True)
@@ -14,7 +12,9 @@ def _setup(tmp_path: Path) -> tuple[Path, Path]:
     root = tmp_path / "repo"
     root.mkdir()
     subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@t.com"], cwd=root, check=True, capture_output=True
+    )
     subprocess.run(["git", "config", "user.name", "T"], cwd=root, check=True, capture_output=True)
     (root / "README.md").write_text("# test")
     subprocess.run(["git", "add", "README.md"], cwd=root, check=True, capture_output=True)

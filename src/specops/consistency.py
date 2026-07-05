@@ -1,25 +1,22 @@
 """specops consistency: SC-ID coverage + plan path-suffix validation (US4, FR-012)."""
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from specops import gitops, speckit
+from specops.errors import SpecopsError
 
 
-def run(root: Path) -> None:
+def run(root: Path) -> tuple[list[str], list[str]]:
     """
     Validate SC-ID coverage traceability and plan path-suffix declarations.
 
-    Exit 0 when clean; exit 1 listing violations as:
-      consistency: <file>:<line> - <rule and short action>
+    Returns (warnings, violations). Violations map to exit 1.
+    Raises SpecopsError on blocking preconditions.
     """
-    import typer
-
     feature_dir = speckit.resolve_feature_dir(root)
     if feature_dir is None:
-        typer.echo("Cannot resolve active feature directory.", err=True)
-        sys.exit(1)
+        raise SpecopsError("Cannot resolve active feature directory.")
 
     spec_path = feature_dir / "spec.md"
     tasks_path = feature_dir / "tasks.md"
@@ -36,8 +33,14 @@ def run(root: Path) -> None:
         tasks_text = tasks_path.read_text(encoding="utf-8")
 
         spec_scs = set(speckit.extract_sc_ids(spec_text))
+        spec_lines = spec_text.splitlines()
 
-        # Build coverage map: SC-ID → list of task IDs covering it
+        def _sc_line(sc_id: str) -> int:
+            for i, line in enumerate(spec_lines, start=1):
+                if f"**{sc_id}**:" in line:
+                    return i
+            return 0
+
         covered: dict[str, list[str]] = {sc: [] for sc in spec_scs}
         unknown_refs: list[tuple[str, int, str]] = []
 
@@ -53,13 +56,15 @@ def run(root: Path) -> None:
 
         for sc, covering_tasks in covered.items():
             if not covering_tasks:
+                line_num = _sc_line(sc)
                 violations.append(
-                    f"consistency: {tasks_path.name}:0 - SC '{sc}' has no covering task"
+                    f"consistency: {spec_path.name}:{line_num} - SC '{sc}' has no covering task"
                 )
 
-        for file, lineno, tag in unknown_refs:
+        for _file, lineno, tag in unknown_refs:
             violations.append(
-                f"consistency: {tasks_path.name}:{lineno} - coverage tag '{tag}' references unknown SC"
+                f"consistency: {tasks_path.name}:{lineno}"
+                f" - coverage tag '{tag}' references unknown SC"
             )
 
     # ------------------------------------------------------------------
@@ -70,23 +75,11 @@ def run(root: Path) -> None:
         repo = gitops.find_repo(root)
 
         for lineno, line in enumerate(plan_text.splitlines(), start=1):
-            from specops.speckit import _ACTION_SUFFIX_RE
-            m = _ACTION_SUFFIX_RE.search(line)
-            if not m:
+            parsed = speckit.parse_plan_path_action(line)
+            if not parsed:
                 continue
 
-            action = m.group(1).lower()
-            # Extract the path: look for something that looks like a file/dir path before the suffix
-            # Pattern: word before the (action) marker
-            import re
-            path_m = re.search(r"(`[^`]+`|[\w./\-]+\.[\w./\-]+)\s+\((?:create|modify|remove)", line)
-            if not path_m:
-                # Try another pattern: backtick-quoted
-                path_m = re.search(r"`([^`]+)`\s+\(", line)
-            if not path_m:
-                continue
-
-            raw_path = path_m.group(1).strip("`").strip()
+            raw_path, action = parsed
             candidate = root / raw_path if not raw_path.startswith("/") else Path(raw_path)
 
             if action == "modify":
@@ -116,17 +109,4 @@ def run(root: Path) -> None:
                         f"(remove) path '{raw_path}' not in worktree or Git history"
                     )
 
-    # Emit warnings
-    for w in warnings:
-        import typer
-        typer.echo(w)
-
-    if violations:
-        import typer
-        for v in violations:
-            typer.echo(v, err=True)
-        sys.exit(1)
-
-    import typer
-    typer.echo("consistency: ok")
-    sys.exit(0)
+    return warnings, violations

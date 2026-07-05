@@ -3,7 +3,6 @@ import json
 import subprocess
 from pathlib import Path
 
-import pytest
 import yaml
 
 
@@ -12,7 +11,9 @@ def _make_repo(tmp_path: Path, suffix: str, test_cmd: str, lint_cmd: str) -> Pat
     root = tmp_path / f"repo-{suffix}"
     root.mkdir()
     subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@t.com"], cwd=root, check=True, capture_output=True
+    )
     subprocess.run(["git", "config", "user.name", "T"], cwd=root, check=True, capture_output=True)
     (root / "README.md").write_text("# test")
     subprocess.run(["git", "add", "README.md"], cwd=root, check=True, capture_output=True)
@@ -68,7 +69,8 @@ def _commit(repo: Path, msg: str = "work") -> str:
 
 class TestMultiStack:
     def test_two_stacks_behave_identically(self, tmp_path: Path) -> None:
-        """Two repos with different test/lint commands but identical SpecOps flow (SC-006, FR-015)."""
+        """Two repos with different test/lint commands but identical SpecOps flow
+        (SC-006, FR-015)."""
         npm = _make_repo(tmp_path, "npm", test_cmd="true", lint_cmd="true")
         pytest_repo = _make_repo(tmp_path, "pytest", test_cmd="true", lint_cmd="")
 

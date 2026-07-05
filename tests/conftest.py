@@ -1,11 +1,13 @@
 """
 Shared pytest fixtures: temporary Git repository and fake Speckit layout.
 """
+import datetime
 import json
 import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 @pytest.fixture()
@@ -46,7 +48,9 @@ def fake_speckit_repo(tmp_git_repo: Path) -> Path:
     (root / ".claude" / "skills" / "speckit-plan").mkdir(parents=True)
     (root / ".claude" / "skills" / "speckit-implement").mkdir(parents=True)
     (root / ".claude" / "skills" / "speckit-plan" / "SKILL.md").write_text("# plan prompt\n")
-    (root / ".claude" / "skills" / "speckit-implement" / "SKILL.md").write_text("# implement prompt\n")
+    (root / ".claude" / "skills" / "speckit-implement" / "SKILL.md").write_text(
+        "# implement prompt\n"
+    )
 
     # Speckit integration records
     integration = {
@@ -73,3 +77,41 @@ def fake_speckit_repo(tmp_git_repo: Path) -> Path:
     )
 
     return root
+
+
+@pytest.fixture()
+def ledger_in_review(tmp_git_repo: Path) -> Path:
+    """Feature repo with status.yaml at REVIEW phase, one open review cycle."""
+    root = tmp_git_repo
+    (root / ".specify" / "templates").mkdir(parents=True)
+    (root / ".specify" / "feature.json").write_text(
+        json.dumps({"feature_directory": "specs/001-review-test"})
+    )
+    feature_dir = root / "specs" / "001-review-test"
+    feature_dir.mkdir(parents=True)
+
+    data = {
+        "feature": "001-review-test",
+        "branch": "main",
+        "baseline": "abc1234",
+        "created_at": str(datetime.date.today()),
+        "updated_at": str(datetime.date.today()),
+        "current_phase": "REVIEW",
+        "recovery": {"active_task": None, "last_commit": None, "blockers": []},
+        "tasks": [],
+        "review_cycles": [
+            {
+                "round": 1,
+                "started_at": str(datetime.date.today()),
+                "completed_at": None,
+                "result": None,
+            }
+        ],
+    }
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+    return root
+
+
+def read_ledger(feature_dir: Path) -> dict:
+    """Read and return the ledger YAML from feature_dir/status.yaml."""
+    return yaml.safe_load((feature_dir / "status.yaml").read_text(encoding="utf-8"))

@@ -3,7 +3,6 @@ import json
 import subprocess
 from pathlib import Path
 
-import pytest
 import yaml
 
 
@@ -15,7 +14,9 @@ def _commit(repo: Path, msg: str = "work") -> str:
     (repo / f"{msg}.txt").write_text(msg)
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", msg], cwd=repo, check=True, capture_output=True)
-    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True
+    ).stdout.strip()
 
 
 class TestScenarioC:

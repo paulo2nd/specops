@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-import sys
 from pathlib import Path
-from typing import Optional
 
 from specops import config, gitops, speckit
 
@@ -109,10 +107,8 @@ def inject_block(file_path: Path, block_id: str, block_content: str, version: in
     # Check whether content is already identical
     current_lines = lines[begin_idx + 1: end_idx]
     current_content = "".join(current_lines).strip("\n")
-    if current_content == block_content.strip("\n"):
-        # Check version in begin marker
-        if f"v{version}" in lines[begin_idx]:
-            return "unchanged"
+    if current_content == block_content.strip("\n") and f"v{version}" in lines[begin_idx]:
+        return "unchanged"
 
     new_lines = (
         lines[:begin_idx]
@@ -184,7 +180,9 @@ def run(root: Path, non_interactive: bool = False) -> None:
     # Step 1: Git check
     if not gitops.is_git_repo(root):
         if non_interactive:
-            typer.echo("Not a Git repository. Pass --non-interactive to skip the git init offer.", err=True)
+            typer.echo(
+                "Not a Git repository. Pass --non-interactive to skip the git init offer.", err=True
+            )
             raise typer.Exit(1)
         answer = typer.confirm("Not a Git repository. Initialize one now?", default=True)
         if not answer:
@@ -210,7 +208,7 @@ def run(root: Path, non_interactive: bool = False) -> None:
         targets = speckit.resolve_prompt_targets(root)
     except speckit.ManifestResolutionError as exc:
         typer.echo(f"Manifest resolution failed: {exc}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Step 4: specops.json
     _cfg, created = config.create_or_merge(root)
@@ -226,8 +224,6 @@ def run(root: Path, non_interactive: bool = False) -> None:
         sep = target["separator"]
         plan_path: Path = target["plan_path"]
         impl_path: Path = target["implement_path"]
-        agent = target["integration"]
-
         # Step 5: install review.md
         review_path = speckit.derive_review_path(plan_path, root, sep)
         _install_review(review_path, review_content, sep)
@@ -246,10 +242,8 @@ def run(root: Path, non_interactive: bool = False) -> None:
 def _install_review(review_path: Path, content: str, sep: str) -> None:
     """Install the review prompt file, wrapping with skills-mode frontmatter when needed."""
     review_path.parent.mkdir(parents=True, exist_ok=True)
-    # Skills-mode (SKILL.md wrapper): add YAML frontmatter
     if review_path.name == "SKILL.md":
-        command_name = "specops" + sep + "review"
-        frontmatter = f"---\ndescription: SpecOps token-optimized review command\n---\n\n"
+        frontmatter = "---\ndescription: SpecOps token-optimized review command\n---\n\n"
         full_content = frontmatter + content
     else:
         full_content = content

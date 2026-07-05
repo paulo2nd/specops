@@ -26,6 +26,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "pytest-cov>=5.0",
+    "types-PyYAML>=6.0",
 ]
 
 [project.scripts]
@@ -38,3 +42,27 @@ packages = ["src/specops"]
 include = [
     "src/specops/**",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [".specs/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.10"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+check_untyped_defs = true
+exclude = ["tests/"]
+
+[[tool.mypy.overrides]]
+module = "git.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "--cov=specops --cov-report=term-missing --cov-fail-under=85"
+testpaths = ["tests"]

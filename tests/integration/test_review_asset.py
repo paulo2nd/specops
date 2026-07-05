@@ -2,11 +2,11 @@
 import subprocess
 from pathlib import Path
 
-import pytest
-
 
 def _run_init(repo: Path) -> None:
-    subprocess.run(["specops", "init", "--non-interactive"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["specops", "init", "--non-interactive"], cwd=repo, check=True, capture_output=True
+    )
 
 
 class TestReviewAsset:
@@ -75,4 +75,8 @@ class TestReviewAsset:
         _run_init(fake_speckit_repo)
         review_path = fake_speckit_repo / ".claude" / "skills" / "specops-review" / "SKILL.md"
         content = review_path.read_text()
-        assert "empty diff" in content or "no effective diff" in content or "No changed files" in content
+        assert (
+            "empty diff" in content
+            or "no effective diff" in content
+            or "No changed files" in content
+        )

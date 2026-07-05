@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import git
 from git.exc import GitCommandError, InvalidGitRepositoryError, NoSuchPathError
 
 
-def find_repo(path: Path = Path(".")) -> Optional[git.Repo]:
+def find_repo(path: Path = Path(".")) -> git.Repo | None:
     """Return the Repo for *path*, or None if not inside a Git repository."""
     try:
         return git.Repo(path, search_parent_directories=True)
@@ -33,12 +32,8 @@ def head_sha(repo: git.Repo) -> str:
 
 def commits_in_range(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> list[str]:
     """Return commit shas in *start_sha..end_sha* (exclusive start, inclusive end)."""
-    if end_sha == "HEAD":
-        end = repo.head.commit
-    else:
-        end = repo.commit(end_sha)
     try:
-        start = repo.commit(start_sha)
+        repo.commit(start_sha)
     except (GitCommandError, git.BadName, ValueError):
         return []
     commits = list(repo.iter_commits(rev=f"{start_sha}..{end_sha}"))

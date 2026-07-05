@@ -4,11 +4,6 @@ import subprocess
 import time
 from pathlib import Path
 
-import pytest
-
-from specops import initializer, speckit
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -71,7 +66,9 @@ def test_init_fresh_creates_files(fake_speckit_repo: Path) -> None:
     assert "<!-- SPECOPS:END plan -->" in plan_text
 
     # implement prompt has SPECOPS:BEGIN implement block
-    impl_text = (fake_speckit_repo / ".claude" / "skills" / "speckit-implement" / "SKILL.md").read_text()
+    impl_text = (
+        fake_speckit_repo / ".claude" / "skills" / "speckit-implement" / "SKILL.md"
+    ).read_text()
     assert "<!-- SPECOPS:BEGIN implement" in impl_text
     assert "<!-- SPECOPS:END implement -->" in impl_text
 

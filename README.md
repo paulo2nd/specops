@@ -78,13 +78,40 @@ Marks the task `DONE`. Exactly one evidence source required:
 
 Fails if `test_command` exits non-zero (`--auto`) or evidence is invalid.
 
-### `specops status transition-phase <phase> [-r <result>]`
+### `specops status show`
+
+Read-only. Prints the current ledger state as plain text: feature name, branch,
+phase, active task, task counts (pending / in progress / done / orphaned), and
+a per-round review cycle list (`open`, `APPROVED`, or `REJECTED` with dates).
+Works without a Git repository.
+
+### `specops --version`
+
+Prints `specops <version>` and exits. Works anywhere — no Git repository required.
+
+### `specops status transition-phase <phase> [-r APPROVED|REJECTED]`
 
 Advances the feature phase: `SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE`.
 
-One exception: `REVIEW → IMPLEMENT` is allowed with `-r REJECTED` (corrective
-round — opens a new `review_cycles[]` entry).
-Entering `DONE` requires the latest review cycle result to be `APPROVED`.
+The `-r` flag accepts exactly `APPROVED` or `REJECTED` (case-insensitive,
+stored uppercase). Any other value is rejected before the ledger is read.
+
+Two transitions require `-r`:
+- `REVIEW → DONE -r APPROVED`: closes the open review cycle, records `APPROVED`,
+  and advances the phase in one atomic write.
+- `REVIEW → IMPLEMENT -r REJECTED`: closes the open review cycle, records
+  `REJECTED`, opens a placeholder for the next round, and resets the phase.
+
+Entering `DONE` requires the latest review cycle to be `APPROVED`.
+
+**Review approval in practice**:
+```
+# Approved → close the feature
+specops status transition-phase DONE -r APPROVED
+
+# Rejected → send back for rework
+specops status transition-phase IMPLEMENT -r REJECTED
+```
 
 ### `specops reconcile`
 
@@ -138,6 +165,31 @@ Invoke `/specops-review` in the agent with:
 - A compliant diff — it writes `revisions/revision-1.md` with `[File]:[Line]` findings.
 
 Scenario F is validated manually (agent-in-the-loop) — not covered by `pytest`.
+
+## Ledger persistence
+
+`status.yaml` is written atomically: the new content is written to a sibling
+`status.yaml.tmp`, flushed to disk (`fsync`), then `os.replace`d onto
+`status.yaml`. A crash between flush and replace leaves the previous ledger
+intact and the stale `.tmp` is overwritten by the next successful write.
+
+## Development
+
+Prerequisites: Python ≥ 3.10, Git ≥ 2.30.
+
+```bash
+pip install -e ".[dev]"   # install project + dev tools in editable mode
+```
+
+Local quality gates (same checks as CI):
+
+```bash
+ruff check .              # lint
+mypy src/specops          # type check
+pytest                    # tests + coverage (≥ 85% required)
+```
+
+CI runs on every push and pull request, matrix Python 3.10 and 3.14.
 
 ## Language policy
 
