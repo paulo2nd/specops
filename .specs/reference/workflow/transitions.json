@@ -2,7 +2,7 @@
   "_meta": {
     "version": 4,
     "purpose": "Single source of truth for state machine, status.yaml schema and invariants. Canonical narrative in methodology.md.",
-    "scope_note": "status.yaml, invariants e transicoes formais aplicam-se exclusivamente ao lane de feature completa. O lane lightweight fix opera sem status.yaml e sem revisions/ (ver methodology.md secao 8 e roles/fixer.json)."
+    "scope_note": "status.yaml, invariants and formal transitions apply exclusively to the full-feature lane. The lightweight fix lane operates without status.yaml and without revisions/ (see methodology.md §8 and roles/fixer.json)."
   },
   "feature_status_yaml_schema": {
     "applies_to": "feature_complete",
@@ -30,7 +30,7 @@
       "phases": {
         "item_shape": {
           "phase": "enum[scoping, implementing, revision, done]",
-          "round": "integer|null (null para fases nao-revision; 1, 2, 3... para cada entrada phase=revision)",
+          "round": "integer|null (null for non-revision phases; 1, 2, 3... for each phase=revision entry)",
           "agent": "enum[architect, implementer, reviewer]",
           "started_at": "string|null",
           "completed_at": "string|null",
@@ -46,88 +46,88 @@
     "active_artifact_by_phase": {
       "scoping": "agents/features/<name>/scope.md",
       "implementing_normal": "agents/features/<name>/tasks.md",
-      "implementing_corrective": "agents/features/<name>/revisions/revision-(N-1).md da rodada corretiva em execucao; o reviewer reaponta para revision-N.md apenas quando cria a nova revisao",
-      "revision": "pre-kickoff do reviewer: herda o active_artifact vindo do implementing (tasks.md ou revisions/revision-(N-1).md em rodada corretiva); pos-kickoff: agents/features/<name>/revisions/revision-N.md criado pelo reviewer",
+      "implementing_corrective": "agents/features/<name>/revisions/revision-(N-1).md of the corrective round in execution; the reviewer repoints to revision-N.md only when creating the new revision",
+      "revision": "pre-kickoff of the reviewer: inherits the active_artifact coming from implementing (tasks.md, or revisions/revision-(N-1).md in a corrective round); post-kickoff: agents/features/<name>/revisions/revision-N.md created by the reviewer",
       "done": "agents/features/<name>/revisions/revision-X.md (Decision=APPROVED)"
     },
     "active_task_rules": [
-      "when current_phase=implementing AND rodada_normal: active_task = ID da task com status=IN_PROGRESS (ou proxima PENDING)",
-      "ao iniciar uma task: setar tasks[id].status=IN_PROGRESS e atualizar recovery.active_task ANTES de editar codigo",
-      "ao concluir uma task: setar tasks[id].status=DONE, preencher commit e evidence, avancar recovery.active_task para a proxima PENDING (ou null)",
-      "quando nao houver mais tasks PENDING nem pacote corretivo aberto: setar recovery.active_task=null e transicionar current_phase=revision (automatico, sem gate humano)",
-      "ao iniciar um ciclo de revisao (round 1 ou N>=2), o reviewer cria revisions/revision-N.md a partir do template, atualiza recovery.active_artifact para o novo arquivo e faz commit atomico desse scaffold antes de qualquer outra escrita",
-      "em rodada corretiva N>=2: durante a execucao do pacote corretivo, recovery.active_task='revision-(N-1)' e recovery.active_artifact='revisions/revision-(N-1).md'; quando o reviewer cria revision-N.md, ele reaponta recovery.active_artifact para o novo arquivo e encerra a rodada anterior",
-      "cada nova rodada corretiva adiciona uma nova entrada em phases[] com phase=revision e round incrementado; round permanece null para scoping, implementing e done"
+      "when current_phase=implementing AND normal round: active_task = ID of the task with status=IN_PROGRESS (or the next PENDING)",
+      "when starting a task: set tasks[id].status=IN_PROGRESS and update recovery.active_task BEFORE editing code",
+      "when completing a task: set tasks[id].status=DONE, fill commit and evidence, advance recovery.active_task to the next PENDING (or null)",
+      "when no PENDING tasks remain and no corrective package is open: set recovery.active_task=null and transition current_phase=revision (automatic, no human gate)",
+      "when starting a review cycle (round 1 or N>=2), the reviewer creates revisions/revision-N.md from the template, updates recovery.active_artifact to the new file and makes an atomic commit of that scaffold before any other write",
+      "in a corrective round N>=2: while the corrective package is being executed, recovery.active_task='revision-(N-1)' and recovery.active_artifact='revisions/revision-(N-1).md'; when the reviewer creates revision-N.md, they repoint recovery.active_artifact to the new file and close the previous round",
+      "each new corrective round adds a new entry to phases[] with phase=revision and an incremented round; round stays null for scoping, implementing and done"
     ]
   },
   "invariants": [
     {
       "id": "inv-01",
       "applies_to": "feature_complete",
-      "rule": "se current_phase=revision apos o kickoff do reviewer, recovery.active_artifact deve terminar com revisions/revision-N.md; antes do kickoff, o artefato herdado de implementing e permitido ate a criacao atomica do scaffold",
+      "rule": "if current_phase=revision after the reviewer's kickoff, recovery.active_artifact must end with revisions/revision-N.md; before the kickoff, the artifact inherited from implementing is allowed until the atomic creation of the scaffold",
       "violation_action": "stop_and_reconcile"
     },
     {
       "id": "inv-02",
       "applies_to": "feature_complete",
-      "rule": "se current_phase=implementing em rodada normal entao recovery.active_artifact deve ser tasks.md",
+      "rule": "if current_phase=implementing in a normal round then recovery.active_artifact must be tasks.md",
       "violation_action": "stop_and_reconcile"
     },
     {
       "id": "inv-03",
       "applies_to": "feature_complete",
-      "rule": "nenhuma task pode ter status=DONE sem commit e evidence preenchidos",
+      "rule": "no task may have status=DONE without commit and evidence filled in",
       "violation_action": "block_phase_transition"
     },
     {
       "id": "inv-04",
       "applies_to": "feature_complete",
-      "rule": "current_phase=done exige phases[revision].result=APPROVED e pr.number preenchido",
+      "rule": "current_phase=done requires phases[revision].result=APPROVED and pr.number filled in",
       "violation_action": "block_closure"
     },
     {
       "id": "inv-06",
       "applies_to": "feature_complete",
-      "rule": "git log da branch deve conter todos os commits referenciados em tasks[].commit",
+      "rule": "the branch's git log must contain every commit referenced in tasks[].commit",
       "violation_action": "stop_and_reconcile"
     },
     {
       "id": "inv-08",
       "applies_to": "feature_complete",
-      "rule": "quando current_phase=implementing e nao ha nenhuma task com status=IN_PROGRESS, recovery.active_task deve apontar para a proxima task PENDING ou ser null se nao houver",
+      "rule": "when current_phase=implementing and no task has status=IN_PROGRESS, recovery.active_task must point to the next PENDING task or be null when none remains",
       "violation_action": "stop_and_reconcile"
     },
     {
       "id": "inv-09",
       "applies_to": "feature_complete",
-      "rule": "em feature com rodadas corretivas (revisions/revision-N.md com N>1), o PR description deriva do Correction Evidence do revision-N aprovado",
+      "rule": "in a feature with corrective rounds (revisions/revision-N.md with N>1), the PR description derives from the Correction Evidence of the approved revision-N",
       "violation_action": "block_closure"
     },
     {
       "id": "inv-10",
       "applies_to": "feature_complete",
-      "rule": "o arquivo .agents.yaml na raiz do repositório deve ser sintaticamente válido e conter todas as definições das personas ativas",
+      "rule": "the governance manifest at the repository root must be syntactically valid and contain all active persona definitions",
       "violation_action": "stop_and_reconcile"
     }
   ],
   "corrective_round_contract": {
     "applies_to": "feature_complete",
-    "purpose": "contrato comum para encerramento de rodada corretiva por implementer e retomada consistente pelo reviewer",
+    "purpose": "common contract for corrective-round closure by the implementer and consistent resumption by the reviewer",
     "write_scope_derivation": [
-      "rodada corretiva sempre deriva write scope inicial de revision-X.md > Corrective Handoff > Authorized Files",
-      "qualquer ampliacao de scope dentro da mesma feature exige rastreabilidade em status.yaml e nos artefatos citados em Expected Evidence Updates"
+      "a corrective round always derives its initial write scope from revision-X.md > Corrective Handoff > Authorized Files",
+      "any scope expansion within the same feature requires traceability in status.yaml and in the artifacts listed under Expected Evidence Updates"
     ],
     "evidence_destination": [
-      "evidence das correcoes vai para revision-X.md > Correction Evidence (Self-Report)",
-      "tasks originais nao recebem evidence retrospectiva da rodada corretiva"
+      "correction evidence goes to revision-X.md > Correction Evidence (Self-Report)",
+      "the original tasks do not receive retrospective evidence from the corrective round"
     ],
     "handoff_completion": [
-      "preencher Correction Evidence em revision-(N-1).md",
-      "manter recovery.active_task='revision-(N-1)' ate o reviewer publicar a nova revisao",
-      "manter recovery.active_artifact apontando para revisions/revision-(N-1).md; o reviewer reaponta para revision-N.md ao criar a nova revisao",
-      "atualizar status.yaml: current_phase=revision, current_agent=reviewer",
-      "commit e push das alteracoes versionadas",
-      "encerrar sessao"
+      "fill in Correction Evidence in revision-(N-1).md",
+      "keep recovery.active_task='revision-(N-1)' until the reviewer publishes the new revision",
+      "keep recovery.active_artifact pointing to revisions/revision-(N-1).md; the reviewer repoints to revision-N.md when creating the new revision",
+      "update status.yaml: current_phase=revision, current_agent=reviewer",
+      "commit and push the versioned changes",
+      "close the session"
     ]
   },
   "communication_contract": {
@@ -141,78 +141,78 @@
       "fix_lane_destructive_db_action_warning"
     ],
     "rules": [
-      "durante preflight, leitura, implementacao, testes, revisao e operacoes de git: nao emitir updates intermediarios nao solicitados",
-      "implementer - intra-task: silencio total. Narrar progresso (leitura, edicao, teste, lint, decisao reversivel) e workflow_non_conformity",
-      "implementer - transicao entre tasks: emitir UMA linha factual `task-XX done (<commit-sha7>), iniciando task-(XX+1)`. Sem resumo do que foi feito, sem listar arquivos, sem preambulo. A transicao nao e gate humano - continuar a execucao apos a linha",
-      "salvo quando o humano fizer pergunta direta, cada sessao emite no maximo uma mensagem de encerramento; mensagens adicionais so sao permitidas quando ocorrer um allowed_chat_event",
-      "mensagens de blocker/ambiguity e de PR confirmation devem ser objetivas, sem preambulos sociais e sem narrar deliberacao interna - o tamanho e o necessario para o humano decidir, nao um limite arbitrario",
-      "mensagem de encerramento ou handoff: resumo tecnico denso com maximo de 5 linhas",
-      "quando evidence, decisao ou plano ja estiverem versionados, o chat deve apenas referenciar o artefato; nao duplicar narrativa longa",
-      "fix_lane_reversible_decision_narration: no lane fix, narrar em <=1 linha decisao tecnica reversivel antes de aplicar; decisao irreversivel exige stop-and-ask formal (methodology.md secao 8.2)",
-      "fix_lane_destructive_db_action_warning: avisar explicitamente o humano antes de instruir reset de banco, drop de tabela ou descarte equivalente, conforme methodology.md secao 1.5"
+      "during preflight, reading, implementation, tests, review and git operations: do not emit unsolicited intermediate updates",
+      "implementer - intra-task: total silence. Narrating progress (reading, editing, testing, lint, reversible decisions) is a workflow_non_conformity",
+      "implementer - between-tasks transition: emit ONE factual line `<task-id> done (<commit-sha7>), starting <next-task-id>`. No summary of what was done, no file list, no preamble. The transition is not a human gate - continue executing after the line",
+      "except when the human asks a direct question, each session emits at most one closing message; additional messages are only allowed when an allowed_chat_event occurs",
+      "blocker/ambiguity and PR-confirmation messages must be objective, without social preamble and without narrating internal deliberation - their length is whatever the human needs to decide, not an arbitrary limit",
+      "closing or handoff message: dense technical summary, maximum 5 lines",
+      "when evidence, a decision or a plan is already versioned, chat must only reference the artifact; do not duplicate long narrative",
+      "fix_lane_reversible_decision_narration: in the fix lane, narrate in <=1 line a reversible technical decision before applying it; an irreversible decision requires a formal stop-and-ask (methodology.md §8.2)",
+      "fix_lane_destructive_db_action_warning: explicitly warn the human before instructing a database reset, table drop or equivalent discard, per methodology.md §1.5"
     ],
     "violation_action": "workflow_non_conformity"
   },
   "skill_resolution_contract": {
     "applies_to": "feature_complete",
     "canonical_reference_format": "repo-relative path `agents/skills/<skill-name>/skill.md`",
-    "legacy_compatibility": "entrada em nome solto ou terminando em .md resolve para `agents/skills/<skill-name>/skill.md` quando a pasta existir",
+    "legacy_compatibility": "a bare-name entry, or one ending in .md, resolves to `agents/skills/<skill-name>/skill.md` when the folder exists",
     "invalid_references": [
-      "path fora de agents/skills/",
-      "referencia que nao resolve para diretório contendo skill.md existente"
+      "a path outside agents/skills/",
+      "a reference that does not resolve to a directory containing an existing skill.md"
     ],
     "preflight_requirements": [
-      "todo role de feature que consumir artifact com Required Skills deve resolver cada path antes de continuar e validar a integridade da .agents.yaml",
-      "cada path resolvido deve existir no worktree atual",
-      "para artefatos novos ou editados, path canonico de pasta com skill.md é obrigatorio; compatibilidade por nome solto existe apenas para legado",
-      "referencia invalida de skill bloqueia a sessao ate reconciliacao humana ou correcao versionada"
+      "every feature role consuming an artifact with Required Skills must resolve each path before continuing and validate the integrity of the governance manifest",
+      "each resolved path must exist in the current worktree",
+      "for new or edited artifacts, the canonical folder path with skill.md is mandatory; bare-name compatibility exists only for legacy",
+      "an invalid skill reference blocks the session until human reconciliation or a versioned correction"
     ],
-    "fix_lane_exemption": "lane lightweight fix nao tem skill compliance gate; skills sao recurso opcional consultado por necessidade tecnica (methodology.md secao 8 e 15)"
+    "fix_lane_exemption": "the lightweight fix lane has no skill compliance gate; skills are an optional resource consulted by technical need (methodology.md §8 and §15)"
   },
   "feature_complete_transitions": [
     {
       "id": "scoping_to_implementing",
       "from_phase": "scoping",
       "to_phase": "implementing",
-      "required_inputs": ["scope.md preenchido", "tasks.md com backlog atomico", "Readiness Gate completo"],
+      "required_inputs": ["scope.md filled in", "tasks.md with an atomic backlog", "Readiness Gate complete"],
       "validation_gates": [
-        "Required Skills declaradas por task em scope.md",
-        "Suggested Skill Gaps com blocking=yes bloqueia ate decisao humana; blocking=no segue",
-        "todo risco registrado declara severidade explicita",
-        "scope.md contem todos os headers H2 obrigatorios (ver methodology.md secao 10)",
-        "python3 scripts/scope-tasks-consistency.py agents/features/<feature-name>/ retorna exit code 0 (gate mecanico cross-artifact entre scope.md e tasks.md)",
-        "inv-01, inv-02, inv-03, inv-04, inv-06, inv-08 e inv-09 validados quando aplicaveis"
+        "Required Skills declared per task in scope.md",
+        "Suggested Skill Gaps with blocking=yes blocks until a human decision; blocking=no proceeds",
+        "every registered risk declares an explicit severity",
+        "scope.md contains all mandatory H2 headers (see methodology.md §10)",
+        "the scope-tasks-consistency script returns exit code 0 against the feature folder (mechanical cross-artifact gate between scope.md and tasks.md)",
+        "inv-01, inv-02, inv-03, inv-04, inv-06, inv-08 and inv-09 validated when applicable"
       ]
     },
     {
       "id": "implementing_to_revision",
       "from_phase": "implementing",
       "to_phase": "revision",
-      "required_inputs": ["todas as tasks com status=DONE", "branch com diff reconciliavel", "build e testes executados"],
-      "validation_gates": ["inv-03", "inv-06", "inv-08: recovery.active_task=null apos conclusao da ultima task"]
+      "required_inputs": ["all tasks with status=DONE", "branch with a reconcilable diff", "build and tests executed"],
+      "validation_gates": ["inv-03", "inv-06", "inv-08: recovery.active_task=null after the last task completes"]
     },
     {
       "id": "revision_to_implementing",
       "from_phase": "revision",
       "to_phase": "implementing",
-      "required_inputs": ["revision-X.md com Decision=REJECTED", "pacote corretivo completo: Return Target + Authorized Files + Expected Evidence Updates + Handoff Criteria"],
-      "validation_gates": ["recovery.active_artifact apontando para revision-X.md", "Authorized Files derivado como write scope inicial do implementer", "revision-X.md contem todos os headers H2 obrigatorios"]
+      "required_inputs": ["revision-X.md with Decision=REJECTED", "complete corrective package: Return Target + Authorized Files + Expected Evidence Updates + Handoff Criteria"],
+      "validation_gates": ["recovery.active_artifact pointing to revision-X.md", "Authorized Files derived as the implementer's initial write scope", "revision-X.md contains all mandatory H2 headers"]
     },
     {
       "id": "revision_to_done",
       "from_phase": "revision",
       "to_phase": "done",
-      "required_inputs": ["revision-X.md com Decision=APPROVED", "branch com diff reconciliado com tasks[].commit"],
+      "required_inputs": ["revision-X.md with Decision=APPROVED", "branch with its diff reconciled against tasks[].commit"],
       "validation_gates": [
-        "PR aberto somente apos APPROVED versionado e enquanto status.yaml ainda estiver em current_phase=revision",
-        "pr.number, pr.url e pr.created_at preenchidos na abertura; transicao para done ocorre somente depois disso",
-        "phases[revision].completed_at e phases[revision].result=APPROVED preenchidos",
+        "PR opened only after the versioned APPROVED and while status.yaml is still at current_phase=revision",
+        "pr.number, pr.url and pr.created_at filled in at opening; the transition to done happens only after that",
+        "phases[revision].completed_at and phases[revision].result=APPROVED filled in",
         "inv-04"
       ]
     }
   ],
   "lightweight_fix_lane": {
-    "model": "fixer-only, sessao unica copilotada pelo humano em tempo real",
+    "model": "fixer-only, single session copiloted by the human in real time",
     "no_status_yaml": true,
     "no_revisions_folder": true,
     "no_reviewer_phase": true,
@@ -220,41 +220,41 @@
     "branch": {
       "created_by": "human",
       "fixer_creates_branch": false,
-      "if_active_branch_unclear": "fixer pergunta no chat antes de qualquer escrita"
+      "if_active_branch_unclear": "the fixer asks in chat before any write"
     },
-    "execution_state_source": "commits da branch",
-    "recovery_after_compaction": "git log da branch",
+    "execution_state_source": "the branch's commits",
+    "recovery_after_compaction": "the branch's git log",
     "documentation": {
-      "when": "ao receber sinal humano explicito de fechamento (ex.: 'fechar fix')",
+      "when": "upon an explicit human closure signal (e.g., 'close fix')",
       "artifact_path": "agents/fixes/<branch-suffix>/fix.md",
-      "branch_suffix_rule": "parte apos 'fix/' no nome da branch; conflito ou incompatibilidade de nome exige decisao humana",
+      "branch_suffix_rule": "the part after 'fix/' in the branch name; a name conflict or incompatibility requires a human decision",
       "headers": ["## Objective", "## Files Touched", "## Evidence"],
       "retrospective": true
     },
     "stop_and_ask_gates": [
-      "migration de banco (qualquer alteracao em schema persistido)",
-      "auth, sessao, token, permissao, crypto, secrets",
-      "quebra de contrato publico consumido por outro processo (request/response, payload de evento, formato persistido)",
-      "adicionar, remover ou subir major de dependencia",
-      "ambiguidade de causa raiz (sintoma admite 2+ causas plausiveis com correcoes diferentes)"
+      "database migration (any change to persisted schema)",
+      "auth, session, token, permission, crypto, secrets",
+      "breaking a public contract consumed by another process (request/response, event payload, persisted format)",
+      "adding, removing, or major-bumping a dependency",
+      "root-cause ambiguity (the symptom admits 2+ plausible causes with different fixes)"
     ],
-    "golden_rule": "se a decisao for dificil de reverter sem rebase ou sem coordenar com outro sistema: pergunta. se um revert local resolve: decide e narra em <=1 linha no chat",
-    "skills": "opcionais, recurso de consulta. Nao ha skill compliance gate",
-    "preflight": "trivial: confirmar branch alvo (informada pelo humano); usar git log como recovery",
-    "promotion_to_feature": "apenas por diretiva humana explicita no chat"
+    "golden_rule": "if the decision is hard to revert without a rebase or without coordinating with another system: ask. if a local revert solves it: decide and narrate in <=1 line in chat",
+    "skills": "optional, a consulted resource. There is no skill compliance gate",
+    "preflight": "trivial: confirm the target branch (given by the human); use git log as recovery",
+    "promotion_to_feature": "only by an explicit human directive in chat"
   },
   "promotion_transition": {
     "id": "lightweight_fix_to_feature",
-    "trigger": "determinacao humana explicita no chat",
+    "trigger": "explicit human determination in chat",
     "target_phase": "scoping",
     "target_agent": "architect",
     "preserve_branch_when_possible": true,
     "steps": [
-      "criar agents/features/<feature-name>/ a partir dos templates de feature",
-      "se houver fix.md retrospectivo previo do mesmo bundle, usa-lo como insumo inicial para scope.md (nao move-lo automaticamente)",
-      "inicializar tasks.md vazio (architect preenche)",
-      "inicializar status.yaml de feature com current_phase=scoping, current_agent=architect, recovery.active_artifact=scope.md, recovery.active_task=null",
-      "registrar promocao em status.yaml.promotion.trigger e promotion.promoted_from_fix_branch"
+      "create agents/features/<feature-name>/ from the feature templates",
+      "if a prior retrospective fix.md exists for the same bundle, use it as initial input for scope.md (do not move it automatically)",
+      "initialize an empty tasks.md (the architect fills it in)",
+      "initialize the feature status.yaml with current_phase=scoping, current_agent=architect, recovery.active_artifact=scope.md, recovery.active_task=null",
+      "record the promotion in status.yaml.promotion.trigger and promotion.promoted_from_fix_branch"
     ]
   }
 }

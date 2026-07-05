@@ -1,83 +1,83 @@
 {
   "_meta": {
     "version": 3,
-    "purpose": "executar lightweight fix em sessao unica copilotada pelo humano: fluido, baixo overhead, foco no codigo. Nada em agents/fixes/ durante a execucao; documentacao retrospectiva apenas ao fechar."
+    "purpose": "execute a lightweight fix in a single human-copiloted session: fluid, low overhead, code-focused. Nothing in agents/fixes/ during execution; retrospective documentation only at closure."
   },
-  "model_preference": "Sonnet ou equivalente focado em execucao",
+  "model_preference": "Sonnet or an execution-focused equivalent",
   "operating_model": {
-    "branch_creation": "humano cria a branch e informa o nome ao fixer",
-    "session_state": "vive nos commits da branch; nada em agents/fixes/ enquanto a sessao esta aberta",
-    "recovery": "git log da branch (sem status.yaml)",
-    "bundling": "permitido acumular fixes adjacentes na mesma branch sem abrir branch nova nem editar md a cada commit",
-    "closure": "humano sinaliza explicitamente o fechamento; fixer entao cria fix.md retrospectivo e abre PR (ou aguarda autorizacao humana)"
+    "branch_creation": "the human creates the branch and tells the fixer its name",
+    "session_state": "lives in the branch's commits; nothing in agents/fixes/ while the session is open",
+    "recovery": "the branch's git log (no status.yaml)",
+    "bundling": "accumulating adjacent fixes on the same branch is allowed, without opening a new branch or editing md at every commit",
+    "closure": "the human explicitly signals closure; the fixer then creates the retrospective fix.md and opens the PR (or awaits human authorization)"
   },
   "preflight": [
-    "ler .agents.yaml na raiz, agents/governance/developer-guidelines.md (regras §5 e review-checklist) e agents/governance/verification-suite.md (gates arquiteturais) antes de qualquer escrita",
-    "confirmar a branch ativa: se ambigua, perguntar ao humano antes de qualquer escrita",
-    "ler git log da branch para entender o que ja foi feito (recovery)",
-    "ler methodology.md secao 1.5 (estagio do projeto) e secao 8 (regras do lane fix)",
-    "nao executar preflight de reconciliacao de feature; nao validar invariants de status.yaml; nao resolver skill compliance gate"
+    "read the governance manifest at the root, agents/governance/developer-guidelines.md (§5 rules and review-checklist) and agents/governance/verification-suite.md (architectural gates) before any write",
+    "confirm the active branch: if ambiguous, ask the human before any write",
+    "read the branch's git log to understand what has been done (recovery)",
+    "read methodology.md §1.5 (project stage) and §8 (fix lane rules)",
+    "do not run the feature reconciliation preflight; do not validate status.yaml invariants; do not resolve the skill compliance gate"
   ],
   "writable_files": [
-    "arquivos de produto necessarios para a correcao (sem lista pre-derivada; humano e copiloto e interrompe se o escopo desviar)",
-    "agents/fixes/<branch-suffix>/fix.md (apenas no fechamento, retrospectivo)"
+    "product files needed for the correction (no pre-derived list; the human copilots and interrupts if scope drifts)",
+    "agents/fixes/<branch-suffix>/fix.md (at closure only, retrospective)"
   ],
   "forbidden_actions": [
-    "criar branch (acao reservada ao humano)",
-    "criar agents/fixes/<branch-suffix>/ ou fix.md antes do sinal humano de fechamento",
-    "criar status.yaml ou pasta revisions/ no lane fix",
-    "abrir PR sem autorizacao humana explicita",
-    "tomar decisao listada em stop_and_ask_gates sem perguntar ao humano",
-    "executar reset de banco, drop de tabela ou descarte equivalente sem aviso explicito previo no chat (methodology.md secao 1.5)",
-    "emitir updates intermediarios fora dos eventos permitidos em transitions.json > communication_contract.allowed_chat_events"
+    "create a branch (action reserved for the human)",
+    "create agents/fixes/<branch-suffix>/ or fix.md before the human closure signal",
+    "create status.yaml or a revisions/ folder in the fix lane",
+    "open a PR without explicit human authorization",
+    "make a decision listed in stop_and_ask_gates without asking the human",
+    "run a database reset, table drop or equivalent discard without an explicit prior warning in chat (methodology.md §1.5)",
+    "emit intermediate updates outside the events allowed by transitions.json > communication_contract.allowed_chat_events"
   ],
   "stop_and_ask_gates": [
-    "migration de banco (qualquer alteracao em schema persistido)",
-    "auth, sessao, token, permissao, crypto, secrets",
-    "quebra de contrato publico consumido por outro processo (request/response, payload de evento, formato persistido)",
-    "adicionar, remover ou subir major de dependencia",
-    "ambiguidade de causa raiz (sintoma admite 2+ causas plausiveis com correcoes diferentes)"
+    "database migration (any change to persisted schema)",
+    "auth, session, token, permission, crypto, secrets",
+    "breaking a public contract consumed by another process (request/response, event payload, persisted format)",
+    "adding, removing, or major-bumping a dependency",
+    "root-cause ambiguity (the symptom admits 2+ plausible causes with different fixes)"
   ],
-  "golden_rule": "se a decisao for dificil de reverter sem rebase ou sem coordenar com outro sistema: pergunta. se um revert local resolve: decide e narra em <=1 linha no chat",
+  "golden_rule": "if the decision is hard to revert without a rebase or without coordinating with another system: ask. if a local revert solves it: decide and narrate in <=1 line in chat",
   "rules": [
-    "humano esta copilotando em tempo real (logs, aplicacao); a velocidade e a prioridade",
-    "nao crie abstracao especulativa nem refactor amplo; resolva o sintoma com o menor delta possivel",
-    "decisoes reversiveis seguem 'narra e segue' (chat <=1 linha) conforme golden_rule",
-    "decisoes em stop_and_ask_gates exigem pergunta direta ao humano antes de qualquer escrita",
-    "antes de instruir reset de DB ou acao destrutiva equivalente, avisar o humano e aguardar confirmacao",
-    "respeitar commits marcados (human); commits (human) sao parte do bundle mas nao contam como evidence do agente",
-    "se o escopo comecar a virar refactor amplo ou design nao trivial, sinalizar ao humano e oferecer promocao para feature (methodology.md secao 8.4)",
-    "skills sao recurso opcional; consulte agents/skills/<name>.md por necessidade tecnica, sem gate"
+    "the human is copiloting in real time (logs, application); speed is the priority",
+    "do not create speculative abstraction or broad refactors; solve the symptom with the smallest possible delta",
+    "reversible decisions follow 'narrate and continue' (chat <=1 line) per the golden_rule",
+    "decisions in stop_and_ask_gates require a direct question to the human before any write",
+    "before instructing a DB reset or equivalent destructive action, warn the human and await confirmation",
+    "respect commits marked (human); (human) commits are part of the bundle but do not count as agent evidence",
+    "if the scope starts becoming a broad refactor or non-trivial design, signal the human and offer promotion to feature (methodology.md §8.4)",
+    "skills are an optional resource; consult agents/skills/<name>.md by technical need, without a gate"
   ],
   "closure_protocol": {
-    "trigger": "sinal humano explicito de fechamento do bundle (ex.: 'fechar fix', 'pode encerrar', equivalente)",
-    "branch_suffix_resolution": "extrair parte apos 'fix/' do nome da branch; se houver conflito de nome ou incompatibilidade, perguntar ao humano antes de criar a pasta",
+    "trigger": "explicit human closure signal for the bundle (e.g., 'close fix', 'you can wrap up', equivalent)",
+    "branch_suffix_resolution": "extract the part after 'fix/' from the branch name; on a name conflict or incompatibility, ask the human before creating the folder",
     "steps": [
-      "criar agents/fixes/<branch-suffix>/fix.md a partir do template lightweight-fix",
-      "preencher Objective (1-3 linhas), Files Touched (lista enxuta) e Evidence (commits relevantes da branch + comandos de teste executados, se houver)",
-      "commit do fix.md na propria branch",
-      "perguntar ao humano em mensagem unica e objetiva se deve abrir o PR ou se ha ajustes adicionais",
-      "se autorizado: abrir PR usando o fix.md + git log como base do description; encerrar sessao"
+      "create agents/fixes/<branch-suffix>/fix.md from the lightweight-fix template",
+      "fill in Objective (1-3 lines), Files Touched (lean list) and Evidence (relevant branch commits + test commands executed, if any)",
+      "commit fix.md on the branch itself",
+      "ask the human in a single objective message whether to open the PR or whether there are further adjustments",
+      "if authorized: open the PR using fix.md + git log as the description base; close the session"
     ]
   },
   "handoff": {
     "ready_to_close": {
-      "trigger": "humano declarou fechamento",
-      "closing_actions": ["executar closure_protocol.steps"]
+      "trigger": "the human declared closure",
+      "closing_actions": ["execute closure_protocol.steps"]
     },
     "promotion": {
       "target_lane": "feature_complete",
       "target_phase": "scoping",
       "target_agent": "architect",
-      "trigger": "diretiva humana explicita",
+      "trigger": "explicit human directive",
       "closing_actions": [
-        "executar transitions.json > promotion_transition.steps",
-        "commit e push das alteracoes versionadas",
-        "encerrar sessao"
+        "execute transitions.json > promotion_transition.steps",
+        "commit and push the versioned changes",
+        "close the session"
       ]
     },
-    "context_compaction": "retomar na sessao seguinte a partir de git log da branch (sem status.yaml)",
-    "blocker_or_ambiguity": "escalar ao humano em mensagem unica e objetiva"
+    "context_compaction": "resume in the next session from the branch's git log (no status.yaml)",
+    "blocker_or_ambiguity": "escalate to the human in a single objective message"
   },
-  "closing_output": "Mensagem unica e densa (<=5 linhas): branch ativa, resumo do que foi corrigido, PR aberto/aguardando autorizacao, ou pendencia que bloqueia o fechamento."
+  "closing_output": "Single dense message (<=5 lines): active branch, summary of what was fixed, PR opened/awaiting authorization, or the blocker preventing closure."
 }

@@ -50,6 +50,21 @@
   the single explicit exception: `REVIEW → IMPLEMENT` is a valid transition when
   recorded with result `REJECTED` (corrective round). All other backward or skipping
   transitions remain invalid.
+- Q: What is the language boundary between SpecOps and client content? → A: All of
+  SpecOps' operationalization is in English — CLI output, installed assets, injected
+  directives, ledger fields, evidence values, structural tokens. Client-authored
+  definition artifacts (specification, plan, tasks prose) MAY be written in any
+  language: SpecOps MUST NOT depend on the natural language of their prose, parsing
+  exclusively via the canonical structural tokens (parseable headers, task
+  identifiers, action suffixes), which remain in English regardless of the
+  artifact's language.
+- Q: How does success-criterion coverage validation work without depending on
+  language? → A: By explicit ID traceability, not text matching. Speckit already
+  assigns stable identifiers to success criteria (`SC-001`, …); the injected planning
+  directive requires each task to declare which criterion IDs it covers, and the
+  consistency command validates coverage by deterministic ID matching. A criterion
+  not referenced by any task fails the gate. No natural-language heuristics (token
+  overlap, stopword lists) are used anywhere in the product.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -268,8 +283,10 @@ file content is read; a compliant run produces a revision report in the short fo
     ledger state transitions at task boundaries, and Stop-and-Ask gates (persisted
     schema changes, secrets, public contract breaks, technical ambiguities);
   - the **planning prompt** receives Empirical Verification of declared paths and
-    conventions (action suffixes proven against the working tree) and the consistency
-    gate. Other Speckit prompt files MUST be left untouched.
+    conventions (action suffixes proven against the working tree), the requirement to
+    declare per task the success-criterion IDs it covers (enabling FR-012's
+    deterministic coverage validation), and the consistency gate. Other Speckit
+    prompt files MUST be left untouched.
 - **FR-007**: The initialization command MUST be idempotent: re-running it updates
   marked directive blocks in place, never duplicates content, and preserves user content
   outside the marked blocks.
@@ -309,6 +326,11 @@ file content is read; a compliant run produces a revision report in the short fo
   specification and technical plan and MUST fail (exit code 1) when any success
   criterion lacks covering tasks or when any declared path's action suffix —
   `(create)`, `(modify)`, and related forms — contradicts the repository working tree.
+  Coverage MUST be validated by explicit identifier traceability: each task declares
+  the success-criterion IDs (`SC-001`, …) it covers, and the command matches those
+  references deterministically — a criterion referenced by no task fails, and a
+  reference to a nonexistent criterion fails. Natural-language matching (token
+  overlap, language-specific word lists) MUST NOT be used.
 - **FR-013**: The installed review agent command MUST direct the reviewing agent to,
   in order: load the skills required by the active spec from the configured skills
   directory; run reconciliation and abort immediately on failure; reject change sets
@@ -318,6 +340,13 @@ file content is read; a compliant run produces a revision report in the short fo
 - **FR-014**: All user-facing output, templates, injected prompts, configuration keys,
   ledger field names, and evidence values MUST be in English. Artifacts ported from the
   original methodology MUST be translated (see Assumptions for canonical translations).
+- **FR-014a**: Client-authored definition artifacts (specification, plan, and tasks
+  prose) MAY be written in any language. SpecOps commands MUST NOT depend on the
+  natural language of that prose: all parsing MUST rely exclusively on the canonical
+  structural tokens — parseable headers, task identifiers, and action suffixes
+  (`(create)`, `(modify)`, `(remove)`) — which remain in English regardless of the
+  artifact's language, and coverage validation is deterministic by criterion-ID
+  traceability (FR-012) — no natural-language heuristics anywhere in the product.
 - **FR-015**: SpecOps MUST remain agnostic to the client's technology stack and business
   rules; all client-specific behavior MUST enter exclusively through the client
   configuration file.

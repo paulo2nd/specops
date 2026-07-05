@@ -2,7 +2,7 @@
 
 ## Core Objective
 
-> Máximo de 3 linhas. Decisão final operacional.
+> Maximum of 3 lines. Final operational decision.
 
 ## Success Criteria
 
@@ -10,7 +10,7 @@
 
 ## Required Skills & Gaps
 
-> Centralizado: matriz de skills e bloqueios para a feature toda.
+> Centralized: skills matrix and blockers for the whole feature.
 
 - Skills: `agents/skills/skill-a/skill.md`, `agents/skills/skill-b/skill.md`
 - Gaps: `N/A`
@@ -22,11 +22,11 @@
 
 ## Critical Constraints
 
-> Apenas restricoes locais e objetivas desta feature. Detalhes operacionais estaveis devem viver em skills ou docs canonicos.
+> Only local, objective constraints of this feature. Stable operational details must live in skills or canonical docs.
 
 ## Readiness Gate
 
-- [ ] Matriz de Skills e Backlog validados.
-- [ ] Diretivas humanas relevantes reconciliadas no chat, se houver.
+- [ ] Skills matrix and Backlog validated.
+- [ ] Relevant human directives reconciled in chat, if any.
 
 ## AI Impact

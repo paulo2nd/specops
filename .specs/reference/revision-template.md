@@ -4,8 +4,8 @@
 
 ## Work Item Reference
 
-- Type: `feature` ou `lightweight-fix`
-- Path: `agents/features/<feature-name>/` ou `agents/fixes/<fix-name>/`
+- Type: `feature` or `lightweight-fix`
+- Path: `agents/features/<feature-name>/` or `agents/fixes/<fix-name>/`
 
 ## PR Reference
 
@@ -14,36 +14,36 @@
 - Decision Comment URL: ``
 - Decision Comment Summary: ``
 
-Toda decisao formal, inclusive `APPROVED`, nasce primeiro neste artefato. Quando `Decision=APPROVED`, este bloco deve apontar para o comentario no PR que espelha a decisao versionada e referencia os artefatos aprovados. `Approve` nativo pode existir por conveniencia, mas nao substitui esse registro.
+Every formal decision, including `APPROVED`, is born first in this artifact. When `Decision=APPROVED`, this block must point to the PR comment that mirrors the versioned decision and references the approved artifacts. A native `Approve` may exist for convenience, but it does not replace this record.
 
 ## Summary
 
 ## Non-Conformities
 
-| # | Artefato afetado | Descricao | Severidade | Correcao esperada |
+| # | Affected Artifact | Description | Severity | Expected Correction |
 | :--- | :--- | :--- | :--- | :--- |
 
 ## Approved Items
 
 - ``
 
-Quando `Decision=APPROVED`, listar apenas os artefatos versionados realmente reconciliados antes da publicacao do comentario no PR.
+When `Decision=APPROVED`, list only the versioned artifacts actually reconciled before the PR comment is published.
 
 ## Corrective Handoff
 
 | Field | Value |
 | :--- | :--- |
-| Return Target | `implementer` ou `fixer` |
-| Scope Status | `approved_scope` ou `scope_expanded_by_revision` |
+| Return Target | `implementer` or `fixer` |
+| Scope Status | `approved_scope` or `scope_expanded_by_revision` |
 | Authorized Files | `` |
 | Expected Evidence Updates | `` |
 | Handoff Criteria | `` |
 
-`Authorized Files` definem o escopo corretivo inicial. Se a implementacao precisar ampliar o scope dentro da mesma feature, a rastreabilidade dessa ampliacao deve aparecer nos artefatos citados em `Expected Evidence Updates`.
+`Authorized Files` define the initial corrective scope. If the implementation needs to expand scope within the same feature, the traceability of that expansion must appear in the artifacts listed under `Expected Evidence Updates`.
 
-Quando `Decision=APPROVED`, esta secao deve permanecer `N/A` e nao autoriza retorno para `implementer` nem `fixer`.
+When `Decision=APPROVED`, this section must remain `N/A` and does not authorize a return to `implementer` or `fixer`.
 
-Quando o item revisado for lightweight fix, `Authorized Files` podem apontar para `fix.md`, `status.yaml` do fix e os arquivos de produto estritamente necessarios. Se surgir qualquer novo gatilho de exclusao, o pacote corretivo deve exigir promocao para o workflow completo em vez de manter o fix no lane leve.
+When the reviewed item is a lightweight fix, `Authorized Files` may point to `fix.md`, the fix's `status.yaml`, and the strictly necessary product files. If any new exclusion trigger appears, the corrective package must require promotion to the full workflow instead of keeping the fix in the light lane.
 
 ## Required Actions
 
@@ -54,4 +54,4 @@ Quando o item revisado for lightweight fix, `Authorized Files` podem apontar par
 | # | NC Ref | Evidence (Tests/Logs/Links) | Commit Hash |
 | :--- | :--- | :--- | :--- |
 
-Seção preenchida pelo `implementer` ou `fixer` durante a rodada corretiva para comprovar a resolução das Non-Conformities citadas acima.
+Section filled in by the `implementer` or `fixer` during the corrective round to prove the resolution of the Non-Conformities listed above.

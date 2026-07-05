@@ -1,10 +1,10 @@
 # Lightweight Fix
 
-> Documento retrospectivo, criado pelo fixer apenas ao receber sinal humano explicito de fechamento do bundle. Headers H2 minimos.
+> Retrospective document, created by the fixer only upon an explicit human closure signal for the bundle. Minimal H2 headers.
 
 ## Objective
 
-> 1-3 linhas resumindo o sintoma corrigido e o resultado esperado.
+> 1–3 lines summarizing the corrected symptom and the expected outcome.
 
 ## Files Touched
 

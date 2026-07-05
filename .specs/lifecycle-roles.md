@@ -52,7 +52,9 @@ review cycle in the ledger.
 - **Speckit runs**: technical plan generation.
 - **Injected directives (agent-side)**: Empirical Verification (§17.4) — every
   declared path carries an action suffix (`(create)`, `(modify)`, `(remove)`) proven
-  against the worktree; no memory-based declarations; stop-and-ask on ambiguity.
+  against the worktree; each task declares the success-criterion IDs (`SC-001`, …) it
+  covers, enabling deterministic coverage validation; no memory-based declarations;
+  stop-and-ask on ambiguity.
 - **SpecOps runs**: `specops status transition-phase PLAN` at stage entry;
   `specops consistency` (terminal) as the **closing gate** — exit code 1 blocks the
   handoff until spec/plan are corrected.

@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": 5,
-    "purpose": "regras de gate formal e abertura de PR. Feature: PR canonico abre apenas apos APPROVED versionado. Fix: PR abre por autorizacao humana, sem revisao formal."
+    "purpose": "formal gate and PR-opening rules. Feature: the canonical PR opens only after a versioned APPROVED. Fix: the PR opens by human authorization, without a formal review."
   },
   "pr_shape": {
     "branch_per_item": true,
@@ -13,31 +13,31 @@
   "feature_complete_gate": {
     "applies_to": "feature_complete",
     "review_preconditions": [
-      "existe uma branch com diff efetivo para o item",
-      "todas as tasks com status=DONE no status.yaml com commit e evidence preenchidos (inv-03)",
-      "build e testes executados na branch",
-      "preflight_reconciliation passou sem divergencias"
+      "a branch with an effective diff exists for the item",
+      "all tasks with status=DONE in status.yaml, with commit and evidence filled in (inv-03)",
+      "build and tests executed on the branch",
+      "preflight_reconciliation passed without divergences"
     ],
     "pr_open_preconditions": [
-      "reviewer emitiu Decision=APPROVED em revision-X.md",
-      "status.yaml permanece em current_phase=revision e current_agent=reviewer ate a abertura efetiva do PR",
-      "branch com diff reconciliado com tasks[].commit (inv-06)"
+      "the reviewer issued Decision=APPROVED in revision-X.md",
+      "status.yaml remains at current_phase=revision and current_agent=reviewer until the PR is effectively opened",
+      "branch with its diff reconciled against tasks[].commit (inv-06)"
     ],
     "pr_open_confirmation": {
-      "reviewer_prompt": "apos versionar revision-X.md com Decision=APPROVED, perguntar ao humano no chat se deve abrir o PR ou se ha ajustes adicionais, em mensagem unica e objetiva conforme transitions.json > communication_contract",
+      "reviewer_prompt": "after versioning revision-X.md with Decision=APPROVED, ask the human in chat whether to open the PR or whether there are further adjustments, in a single objective message per transitions.json > communication_contract",
       "open_only_after_affirmative_reply": true,
-      "note": "a confirmacao conversacional nao altera a maquina de estados; apenas autoriza a abertura efetiva do PR"
+      "note": "the conversational confirmation does not change the state machine; it only authorizes the effective opening of the PR"
     },
     "pr_description_source": {
       "canonical": "status.yaml",
       "assembly": [
-        "Core Objective extraido de scope.md",
-        "Success Criteria extraido de scope.md",
-        "Sumario consolidado de tasks[].evidence do status.yaml",
-        "quando houver rodadas corretivas N>1, substituir o sumario de tasks[].evidence pelo Correction Evidence (Self-Report) do revision-N.md aprovado",
-        "Referencia ao revision-X.md aprovado"
+        "Core Objective extracted from scope.md",
+        "Success Criteria extracted from scope.md",
+        "Consolidated summary of tasks[].evidence from status.yaml",
+        "when there are corrective rounds N>1, replace the tasks[].evidence summary with the Correction Evidence (Self-Report) of the approved revision-N.md",
+        "Reference to the approved revision-X.md"
       ],
-      "note": "tasks.md nao contem evidence; evidence vive exclusivamente em status.yaml"
+      "note": "tasks.md contains no evidence; evidence lives exclusively in status.yaml"
     },
     "canonical_review_trail": {
       "versioned_artifacts": ["revisions/revision-X.md", "status.yaml"],
@@ -47,62 +47,62 @@
     },
     "decision_mirror_rules": {
       "rejected": [
-        "revision-X.md contem review + Non-Conformities + Corrective Handoff + Required Actions",
-        "status.yaml transiciona diretamente para implementing com current_agent=implementer, recovery.active_artifact=revisions/revision-X.md e recovery.active_task=revision-X",
-        "commit e push das alteracoes versionadas de revisions/ e status.yaml"
+        "revision-X.md contains the review + Non-Conformities + Corrective Handoff + Required Actions",
+        "status.yaml transitions directly to implementing with current_agent=implementer, recovery.active_artifact=revisions/revision-X.md and recovery.active_task=revision-X",
+        "commit and push of the versioned changes to revisions/ and status.yaml"
       ],
       "approved": [
-        "revision-X.md com Decision=APPROVED commitado antes da abertura do PR",
-        "reviewer confirma no chat se deve abrir o PR ou se ha ajustes adicionais, em mensagem unica e objetiva",
-        "apos autorizacao afirmativa: abrir PR, preencher status.yaml.pr.number/url/created_at e so entao atualizar phases[revision].result=APPROVED e current_phase=done",
-        "commit e push das alteracoes versionadas de revisions/ e status.yaml"
+        "revision-X.md with Decision=APPROVED committed before the PR is opened",
+        "the reviewer confirms in chat whether to open the PR or whether there are further adjustments, in a single objective message",
+        "after an affirmative authorization: open the PR, fill status.yaml.pr.number/url/created_at and only then update phases[revision].result=APPROVED and current_phase=done",
+        "commit and push of the versioned changes to revisions/ and status.yaml"
       ]
     },
     "closure_checklist": [
-      "acceptance criteria de todas as tasks verificados",
-      "build e testes passando sem falhas bloqueantes",
-      "tasks[].commit e tasks[].evidence preenchidos para todas as tasks DONE",
-      "todos os invariants aplicaveis de transitions.json validados",
-      "status.yaml.pr.number, pr.url e pr.created_at preenchidos",
-      "docs atualizados quando a feature altera modelo operacional ou workflow",
-      "prompts e contratos de IA atualizados quando houver impacto de IA"
+      "acceptance criteria of all tasks verified",
+      "build and tests passing without blocking failures",
+      "tasks[].commit and tasks[].evidence filled in for all DONE tasks",
+      "all applicable invariants from transitions.json validated",
+      "status.yaml.pr.number, pr.url and pr.created_at filled in",
+      "docs updated when the feature changes the operating model or workflow",
+      "AI prompts and contracts updated when there is AI impact"
     ]
   },
   "lightweight_fix_gate": {
     "applies_to": "lightweight_fix",
     "review_preconditions": [
-      "branch fix/<suffix> existe com diff efetivo",
-      "humano-copiloto declarou fechamento explicito do bundle",
-      "fix.md retrospectivo criado em agents/fixes/<branch-suffix>/ com Objective, Files Touched e Evidence preenchidos"
+      "the fix/<suffix> branch exists with an effective diff",
+      "the human copilot declared explicit closure of the bundle",
+      "the retrospective fix.md was created in agents/fixes/<branch-suffix>/ with Objective, Files Touched and Evidence filled in"
     ],
     "pr_open_preconditions": [
-      "autorizacao humana explicita no chat (sem revision-X.md, sem reviewer formal)",
-      "fix.md commitado na branch antes da abertura do PR"
+      "explicit human authorization in chat (no revision-X.md, no formal reviewer)",
+      "fix.md committed on the branch before the PR is opened"
     ],
     "pr_open_confirmation": {
-      "fixer_prompt": "apos commitar fix.md, perguntar ao humano em mensagem unica e objetiva se deve abrir o PR ou se ha ajustes adicionais",
+      "fixer_prompt": "after committing fix.md, ask the human in a single objective message whether to open the PR or whether there are further adjustments",
       "open_only_after_affirmative_reply": true
     },
     "pr_description_source": {
-      "canonical": "fix.md + git log da branch",
+      "canonical": "fix.md + the branch's git log",
       "assembly": [
-        "Objective extraido de fix.md",
-        "Files Touched extraido de fix.md",
-        "Evidence (commits + tests) extraido de fix.md",
-        "Quando o humano nao pediu fix.md formal, o description usa apenas git log + 1-2 linhas de contexto"
+        "Objective extracted from fix.md",
+        "Files Touched extracted from fix.md",
+        "Evidence (commits + tests) extracted from fix.md",
+        "when the human did not request a formal fix.md, the description uses only the git log + 1-2 lines of context"
       ]
     },
     "canonical_review_trail": {
-      "versioned_artifacts": ["agents/fixes/<branch-suffix>/fix.md (quando produzido)"],
+      "versioned_artifacts": ["agents/fixes/<branch-suffix>/fix.md (when produced)"],
       "no_revisions_folder": true,
       "no_status_yaml": true
     },
-    "stop_and_ask_remind": "antes de qualquer commit que cruze um stop_and_ask_gate (methodology.md secao 8.2 / roles/fixer.json), o fixer pergunta ao humano e aguarda resposta. Reset de DB ou acao destrutiva equivalente exige aviso previo (methodology.md secao 1.5)."
+    "stop_and_ask_remind": "before any commit that crosses a stop_and_ask_gate (methodology.md §8.2 / roles/fixer.json), the fixer asks the human and awaits a reply. A DB reset or equivalent destructive action requires a prior warning (methodology.md §1.5)."
   },
   "merge_rules": [
-    "aprovacao formal e merge sao eventos distintos",
-    "merge final ocorre por squash commit, acao manual do humano",
-    "fechamento formal ocorre antes do merge, ainda na branch",
-    "nao depender de merged_at ou auto-merge para encerrar formalmente"
+    "formal approval and merge are distinct events",
+    "the final merge happens via squash commit, a manual human action",
+    "formal closure happens before the merge, still on the branch",
+    "do not depend on merged_at or auto-merge to close formally"
   ]
 }

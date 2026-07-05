@@ -50,7 +50,7 @@
 
 - [ ] CHK029 Are supported Speckit versions/layouts documented as a dependency or assumption (what happens on an unknown future layout)? [Dependency, Gap]
 - [ ] CHK030 Is offline operation specified for all commands, or only for initialization (SC-009)? [Coverage, Spec §SC-009]
-- [ ] CHK031 Can the English-only requirement be objectively verified for generated content vs client-authored configuration values (which are outside SpecOps control)? [Measurability, Spec §FR-014]
+- [x] CHK031 Can the English-only requirement be objectively verified for generated content vs client-authored configuration values (which are outside SpecOps control)? [Measurability, Spec §FR-014] — **Resolved 2026-07-05**: FR-014a draws the boundary — English applies to all SpecOps operationalization (output, assets, tokens); client-authored prose may be in any language, and parsing relies only on canonical English structural tokens.
 
 ## Notes
 

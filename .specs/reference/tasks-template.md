@@ -1,21 +1,21 @@
 # Feature Tasks: {{feature-name}}
 
-> Artefato unificado de planejamento de execução.
-> O rastro técnico (status, commit, evidence) vive no `status.yaml`.
-> Headers H2 e blocos `### task-XX` sao obrigatorios e parseados pela IA (methodology.md secao 10).
-> **Objective** e obrigatorio em cada task: 1 a 5 linhas descrevendo o que sera feito e por que importa, sem repetir Acceptance Criteria.
-> **Files to Modify** exige sufixo `(criar)` ou `(alterar)` em cada path e verificacao empirica contra o worktree atual antes do handoff (methodology.md §17.4). O gate `scripts/scope-tasks-consistency.py` bloqueia paths inexistentes para `(alterar)` e pasta-pai inexistente para `(criar)`.
+> Unified execution planning artifact.
+> The technical trail (status, commit, evidence) lives in `status.yaml`.
+> H2 headers and `### task-XX` blocks are mandatory and parsed by the AI (methodology.md §10).
+> **Objective** is mandatory in every task: 1 to 5 lines describing what will be done and why it matters, without repeating Acceptance Criteria.
+> **Files to Modify** requires a `(create)` or `(modify)` suffix on every path and empirical verification against the current worktree before the handoff (methodology.md §17.4). The `scope-tasks-consistency.py` gate blocks nonexistent paths marked `(modify)` and missing parent folders for `(create)`.
 
 ## Task Backlog
 
 ### task-01: [Goal]
 
 - **Objective**:
-  - 1 a 5 linhas descrevendo o problema concreto que a task resolve, o resultado esperado e a motivacao operacional. Nao repetir Acceptance Criteria nem descrever passos de implementacao.
+  - 1 to 5 lines describing the concrete problem this task solves, the expected outcome, and the operational motivation. Do not repeat Acceptance Criteria or describe implementation steps.
 - **Acceptance Criteria**:
   - [ ]
 - **Files to Modify**:
-  - `path/para/arquivo.cs` (criar|alterar) — verificado contra o worktree atual antes do handoff
+  - `path/to/file.ext` (create|modify) — verified against the current worktree before the handoff
 - **Strategy**:
   -
 - **Dependencies**:
@@ -24,11 +24,11 @@
 ### task-02: [Goal]
 
 - **Objective**:
-  - 1 a 5 linhas descrevendo o problema concreto que a task resolve, o resultado esperado e a motivacao operacional. Nao repetir Acceptance Criteria nem descrever passos de implementacao.
+  - 1 to 5 lines describing the concrete problem this task solves, the expected outcome, and the operational motivation. Do not repeat Acceptance Criteria or describe implementation steps.
 - **Acceptance Criteria**:
   - [ ]
 - **Files to Modify**:
-  - `path/para/arquivo.cs` (criar|alterar) — verificado contra o worktree atual antes do handoff
+  - `path/to/file.ext` (create|modify) — verified against the current worktree before the handoff
 - **Strategy**:
   -
 - **Dependencies**:

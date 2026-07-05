@@ -15,7 +15,7 @@ def get_git_branch():
         )
         return result.stdout.strip()
     except Exception as e:
-        print(f"Erro ao obter a branch git: {e}", file=sys.stderr)
+        print(f"Error getting the git branch: {e}", file=sys.stderr)
         return None
 
 def find_status_file(branch_name, file_path_arg=None):
@@ -23,17 +23,17 @@ def find_status_file(branch_name, file_path_arg=None):
         if os.path.exists(file_path_arg):
             return file_path_arg
         else:
-            print(f"Erro: Arquivo especificado nao existe: {file_path_arg}", file=sys.stderr)
+            print(f"Error: Specified file does not exist: {file_path_arg}", file=sys.stderr)
             sys.exit(1)
 
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     features_dir = os.path.join(repo_root, "agents", "features")
 
     if not os.path.exists(features_dir):
-        print(f"Erro: Diretorio de features nao encontrado: {features_dir}", file=sys.stderr)
+        print(f"Error: Features directory not found: {features_dir}", file=sys.stderr)
         sys.exit(1)
 
-    # 1. Tenta buscar pelo nome da branch correspondente no status.yaml
+    # 1. Try to find the status.yaml whose branch matches the active branch
     if branch_name:
         for root, dirs, files in os.walk(features_dir):
             if "status.yaml" in files:
@@ -46,21 +46,21 @@ def find_status_file(branch_name, file_path_arg=None):
                 except Exception:
                     pass
 
-    # 2. Fallback: Se a branch for feat/nome-da-feature, busca a pasta correspondente
+    # 2. Fallback: if the branch is feat/<feature-name>, look for the matching folder
     if branch_name and branch_name.startswith("feat/"):
         feature_name = branch_name[5:]
         fallback_path = os.path.join(features_dir, feature_name, "status.yaml")
         if os.path.exists(fallback_path):
             return fallback_path
 
-    print("Erro: Nao foi possivel determinar o status.yaml ativo para a branch atual.", file=sys.stderr)
+    print("Error: Could not determine the active status.yaml for the current branch.", file=sys.stderr)
     sys.exit(1)
 
 def check_commit_in_history(commit_hash):
     if not commit_hash or commit_hash == "(human)":
         return True
     try:
-        # Verifica se o commit existe e se faz parte do historico da branch atual (HEAD)
+        # Checks that the commit exists and is part of the current branch history (HEAD)
         res = subprocess.run(
             ["git", "merge-base", "--is-ancestor", commit_hash, "HEAD"],
             stdout=subprocess.DEVNULL,
@@ -71,8 +71,8 @@ def check_commit_in_history(commit_hash):
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description="Verificador de reconciliacao de status.yaml contra o historico Git")
-    parser.add_argument("-f", "--file", help="Caminho direto para o status.yaml ativo")
+    parser = argparse.ArgumentParser(description="Reconciliation checker for status.yaml against the Git history")
+    parser.add_argument("-f", "--file", help="Direct path to the active status.yaml")
     args = parser.parse_args()
 
     branch = get_git_branch()
@@ -82,11 +82,11 @@ def main():
         with open(status_file, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except Exception as e:
-        print(f"Erro ao ler status.yaml: {e}", file=sys.stderr)
+        print(f"Error reading status.yaml: {e}", file=sys.stderr)
         sys.exit(1)
 
     if not data:
-        print("Erro: status.yaml vazio ou invalido.", file=sys.stderr)
+        print("Error: status.yaml is empty or invalid.", file=sys.stderr)
         sys.exit(1)
 
     failures = 0
@@ -99,7 +99,7 @@ def main():
                 stderr=subprocess.DEVNULL
             )
             if res.returncode != 0:
-                print(f"Aviso: Commit de baseline '{baseline}' nao foi encontrado no repositorio local.", file=sys.stderr)
+                print(f"Warning: Baseline commit '{baseline}' was not found in the local repository.", file=sys.stderr)
         except Exception:
             pass
 
@@ -111,14 +111,14 @@ def main():
 
         if status == "DONE":
             if not commit_hash:
-                print(f"Erro: Tarefa '{task_id}' marcada como DONE mas nao possui 'commit' hash registrado.", file=sys.stderr)
+                print(f"Error: Task '{task_id}' is marked DONE but has no 'commit' hash recorded.", file=sys.stderr)
                 failures += 1
             elif not check_commit_in_history(commit_hash):
-                print(f"Erro: Commit '{commit_hash}' da tarefa '{task_id}' nao faz parte do historico da branch atual.", file=sys.stderr)
+                print(f"Error: Commit '{commit_hash}' of task '{task_id}' is not part of the current branch history.", file=sys.stderr)
                 failures += 1
 
     if failures > 0:
-        print(f"reconcile-status: falhou com {failures} erro(s) de consistência.", file=sys.stderr)
+        print(f"reconcile-status: failed with {failures} consistency error(s).", file=sys.stderr)
         sys.exit(1)
 
     print("reconcile-status: ok")
