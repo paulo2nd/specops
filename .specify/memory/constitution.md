@@ -1,7 +1,12 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.1.0 → 1.1.1
+Version change: 1.1.1 → 1.1.2
+Rationale (1.1.2, 2026-07-05): Task transition line generalized from the
+legacy `task-XX` scheme to Speckit's own task identifiers
+(`<task-id> done (<commit-sha7>), starting <next-task-id>`), resolving the
+CHK012 conflict found by the pre-plan checklist. PATCH bump: clarification.
+
 Rationale (1.1.1, 2026-07-05): Provenance rewording — reference scripts and
 methodology are now vendored locally under .specs/reference/; all mentions
 of the originating external project were removed (the projects are distinct
@@ -121,7 +126,8 @@ blocks it injects into Speckit's existing prompts (starting with
 
 - **Operational Silence (§6)**: during `/speckit.implement`, agents act 100%
   silently in chat; on task transition they print exclusively
-  `task-XX done (<commit-sha7>), starting task-(XX+1)` and continue.
+  `<task-id> done (<commit-sha7>), starting <next-task-id>` (Speckit task
+  identifiers, e.g., `T001 done (a1b2c3d), starting T002`) and continue.
 - **Empirical Verification (§17.4)**: agents MUST NOT declare paths or code
   conventions in `plan.md` from memory; declared paths carry action suffixes
   (`(create)`, `(modify)`, etc.) and are validated against the worktree by
@@ -219,4 +225,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.1.1 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05
+**Version**: 1.1.2 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05

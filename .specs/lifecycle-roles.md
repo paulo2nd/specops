@@ -22,7 +22,9 @@ and plan prompts) are what make agents call the terminal CLI at the right moment
 
 The ledger's fixed phase set maps onto the Speckit lifecycle:
 `SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE` (ordered transitions enforced by
-`specops status transition-phase`).
+`specops status transition-phase`). Single exception: `REVIEW → IMPLEMENT` with
+result `REJECTED` opens a corrective round; each corrective round registers a new
+review cycle in the ledger.
 
 ## Stage-by-Stage Execution Map
 
@@ -79,8 +81,9 @@ The ledger's fixed phase set maps onto the Speckit lifecycle:
      `test_command`, harvests commit hashes and diff, records the
      `<CLASS>:<summary>` evidence entry; failing tests keep the task
      `IN_PROGRESS`.
-  4. Emit exactly one chat line — `task-XX done (<commit-sha7>), starting
-     task-(XX+1)` — and continue immediately (Operational Silence §6).
+  4. Emit exactly one chat line — `<task-id> done (<commit-sha7>), starting
+     <next-task-id>` (Speckit identifiers, e.g., `T001 done (a1b2c3d), starting
+     T002`) — and continue immediately (Operational Silence §6).
 - **Stop-and-Ask gates (§8.2)**: persisted schema changes, secrets, public contract
   breaks, dependency changes, root-cause ambiguity — halt and ask the human.
 - **Exit**: when no `PENDING` tasks remain, `specops status transition-phase REVIEW`.

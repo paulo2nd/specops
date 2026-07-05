@@ -30,6 +30,26 @@
 - Q: What is the contract of task completion without automatic mode? → A: The caller
   must supply the `<CLASS>:<summary>` evidence string explicitly; completion without
   evidence fails. No task is ever marked done without evidence, in any mode.
+- Q: Where do the files that SpecOps installs into client repositories live? → A:
+  Self-contained in the SpecOps package: every asset installed or injected on top of
+  Speckit (agent command, directive blocks, ledger scaffold, configuration template)
+  ships in its final form inside the package itself. Installation requires nothing
+  beyond the installed package — no network, no external repositories.
+- Q: How far may initialization modify Speckit's existing files? → A: Strictly
+  additively. SpecOps MUST NOT de-characterize any existing Speckit template or
+  prompt: no rewriting, removing, or reordering of Speckit content — only the
+  insertion of marker-delimited SpecOps blocks. Removing those blocks must restore
+  the Speckit files to their pre-initialization behavior.
+- Q: How are ledger task identifiers matched against Speckit's task list? → A: Task
+  identifiers are Speckit's own (e.g., `T001`), extracted from the task checklist
+  lines of the feature's `tasks.md`. The ledger stores them verbatim; the checkbox
+  state in `tasks.md` is not consumed — the ledger is the sole authority for
+  execution status. The task transition line uses these identifiers:
+  `<task-id> done (<commit-sha7>), starting <next-task-id>`.
+- Q: Does the ordered phase machine allow the corrective review loop? → A: Yes, as
+  the single explicit exception: `REVIEW → IMPLEMENT` is a valid transition when
+  recorded with result `REJECTED` (corrective round). All other backward or skipping
+  transitions remain invalid.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -238,11 +258,15 @@ file content is read; a compliant run produces a revision report in the short fo
   release, the review command is the only SpecOps agent command.
 - **FR-006**: The initialization command MUST adjust exactly two of Speckit's existing
   agent prompt files by injecting SpecOps directive blocks delimited by explicit
-  begin/end markers, each directive at the lifecycle stage where it acts:
+  begin/end markers, each directive at the lifecycle stage where it acts. Adjustments
+  MUST be strictly additive: no existing Speckit content may be rewritten, removed, or
+  reordered, and no Speckit template may be de-characterized — deleting the marked
+  blocks MUST restore the file's original Speckit behavior:
   - the **implementation prompt** receives Operational Silence (including the exact
-    task transition line `task-XX done (<commit-sha7>), starting task-(XX+1)`), ledger
-    state transitions at task boundaries, and Stop-and-Ask gates (persisted schema
-    changes, secrets, public contract breaks, technical ambiguities);
+    task transition line `<task-id> done (<commit-sha7>), starting <next-task-id>`,
+    using Speckit's task identifiers — e.g., `T001 done (a1b2c3d), starting T002`),
+    ledger state transitions at task boundaries, and Stop-and-Ask gates (persisted
+    schema changes, secrets, public contract breaks, technical ambiguities);
   - the **planning prompt** receives Empirical Verification of declared paths and
     conventions (action suffixes proven against the working tree) and the consistency
     gate. Other Speckit prompt files MUST be left untouched.
@@ -258,10 +282,16 @@ file content is read; a compliant run produces a revision report in the short fo
   feature's Speckit task list before acting: tasks newly discovered in the task list
   are added as pending, and commands referencing task identifiers absent from the task
   list MUST fail with a clear error. The ledger never diverges from its source.
+  Task identifiers are Speckit's own, extracted from the task checklist lines of the
+  feature's `tasks.md` (e.g., `T001`) and stored verbatim in the ledger; the checkbox
+  state in `tasks.md` is NOT consumed — the ledger is the sole authority for
+  execution status.
 - **FR-008b**: Phase transitions MUST be validated against a fixed phase set aligned to
   the Speckit lifecycle (SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE) with
   ordered progression; an unknown phase name or an out-of-order jump MUST fail with a
-  clear error and leave the ledger unchanged.
+  clear error and leave the ledger unchanged. Single exception: `REVIEW → IMPLEMENT`
+  is a valid transition when recorded with result `REJECTED`, opening a corrective
+  round; each corrective round is registered as a new review cycle in the ledger.
 - **FR-009**: Automatic task completion MUST run the client's configured test command
   and MUST refuse to mark the task as done when the test command fails or is not
   configured.
@@ -296,6 +326,12 @@ file content is read; a compliant run produces a revision report in the short fo
   failure) so they can gate automated and agent-driven workflows. Initialization is the
   only command permitted to prompt the user (for the Git initialization offer), and it
   MUST support a non-interactive mode that declines by default.
+- **FR-017**: Every file SpecOps installs or injects into a client repository — the
+  review agent command, the directive block contents, the ledger scaffold, and the
+  client configuration template — MUST ship in its final form as an asset bundled
+  inside the SpecOps package. Initialization MUST succeed with no resources beyond the
+  installed package: no network access, no external repositories, no files generated
+  from sources outside the package.
 
 ### Key Entities
 
@@ -312,7 +348,13 @@ file content is read; a compliant run produces a revision report in the short fo
   `<CLASS>:<summary>` format, carrying the machine-collected test report and code diff
   references (commit identifiers).
 - **Directive Block**: A marker-delimited region SpecOps injects into Speckit's agent
-  prompt files, owned and updated by SpecOps across re-initializations.
+  prompt files, owned and updated by SpecOps across re-initializations. Blocks are
+  purely additive: they never replace Speckit content, and removing them restores the
+  original Speckit behavior.
+- **Packaged Assets**: The final-form files bundled inside the SpecOps package that
+  initialization installs into client repositories (review agent command, directive
+  block contents, ledger scaffold, configuration template). The package is the sole
+  source of installed content.
 - **Review Agent Command**: The `/specops.review` prompt installed into the client's
   agent, encoding the token-optimized review order.
 - **Revision Report**: A numbered file produced by review runs listing non-conformities
@@ -344,14 +386,21 @@ file content is read; a compliant run produces a revision report in the short fo
   content is in English; no Portuguese strings remain in any product artifact.
 - **SC-008**: Running any non-initialization command outside a Git repository fails
   within 1 second with an actionable English error message.
+- **SC-009**: 100% of the files installed by initialization originate from assets
+  bundled in the installed package; initialization completes successfully with
+  network access fully disabled.
+- **SC-010**: Deleting the SpecOps marker blocks from the adjusted Speckit prompt
+  files restores them byte-identical to their pre-initialization state; zero Speckit
+  templates are modified outside marked blocks.
 
 ## Assumptions
 
 - English is the canonical language for all product artifacts. Legacy Portuguese terms
   from the original methodology are translated as follows: action suffixes `(criar)` →
   `(create)`, `(alterar)` → `(modify)`; the task transition line
-  `task-XX done (<commit-sha7>), iniciando task-(XX+1)` →
-  `task-XX done (<commit-sha7>), starting task-(XX+1)`.
+  `task-XX done (<commit-sha7>), iniciando task-(XX+1)` is translated and generalized
+  to `<task-id> done (<commit-sha7>), starting <next-task-id>`, where identifiers are
+  Speckit's own task ids (`T001`, `T002`, …) rather than the legacy `task-XX` scheme.
 - Speckit is always initialized before SpecOps; SpecOps initialization is a second step
   that layers on top of an existing Speckit setup and never replaces it.
 - In this release, `/specops.review` is the only agent-side command; ledger,
