@@ -1,6 +1,21 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.1.3 → 1.2.0
+Rationale (1.2.0, 2026-07-05): Principle IV expanded with a new directive
+category — **Ledger & Phase Wiring**. SpecOps now injects directives into every
+phase-bearing Speckit stage (specify, plan, tasks, implement), not only plan and
+implement, so the execution ledger is created and the phase state machine is
+advanced through the SpecOps CLI at each stage seam (closing the gaps where the
+human had to run `status init-spec` and `transition-phase` manually). The review
+cycle is opened at implement completion so `/specops-review` has an open cycle to
+record into. Injected directives degrade to no-ops where SpecOps is not
+initialized. MINOR bump: new directive added under an existing principle; no
+principle removed or redefined. Templates requiring updates (delivered by
+feature 003-stage-directive-wiring): src/specops/templates/directives/specify.md
+(new), tasks.md (new), plan.md (SC-tag rule → pointer), implement.md (phase
+transitions added).
+
 Version change: 1.1.2 → 1.1.3
 Rationale (1.1.3, 2026-07-05): Commit granularity clarified: the preferred
 unit is the user story, not the task. Principle III updated to reflect that
@@ -155,6 +170,16 @@ blocks it injects into Speckit's existing prompts (starting with
 - **Stop-and-Ask Gates (§8.2)**: agents halt and ask the human on persisted
   schema changes (migrations), secrets, public contract breaks, or technical
   ambiguities.
+- **Ledger & Phase Wiring**: SpecOps injects directives into every phase-bearing
+  Speckit stage (specify, plan, tasks, implement) — not only plan and implement —
+  so the execution ledger is created and the phase state machine
+  (SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE) is advanced exclusively
+  through the SpecOps CLI (`status init-spec`, `status transition-phase`) at each
+  stage seam, never left to the human to trigger manually. The ledger is created
+  at the tasks stage (after `tasks.md` exists), and the review cycle is opened at
+  implement completion so `/specops-review` has an open cycle to record into.
+  Where SpecOps is not initialized, the injected directives degrade to no-ops and
+  the underlying Speckit prompt still works standalone.
 
 Any change to these directives MUST be made in the SpecOps templates so all
 client repositories receive it on the next `specops init`.
@@ -238,4 +263,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.1.3 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05
+**Version**: 1.2.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05
