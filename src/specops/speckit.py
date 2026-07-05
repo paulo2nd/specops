@@ -206,24 +206,36 @@ def resolve_prompt_targets(root: Path) -> list[dict]:
     return results
 
 
+def _matches_role(rel: str, stem: str) -> bool:
+    """
+    True when manifest path *rel* is the prompt file for *stem*.
+
+    Matches on an exact path component (``.../speckit-tasks/SKILL.md``) or a
+    filename that is ``stem`` optionally followed by suffixes
+    (``speckit.tasks.md``, ``speckit.tasks.prompt.md``). Exact-component
+    matching — never a substring — so ``speckit-tasks`` does NOT match
+    ``speckit-taskstoissues``.
+    """
+    p = Path(rel)
+    if stem in p.parts:
+        return True
+    name = p.name
+    return name == stem or name.startswith(f"{stem}.")
+
+
 def _find_prompt_file(root: Path, files: dict, agent: str, sep: str, role: str) -> Path:
     """
-    Locate the prompt file for *role* ('plan' or 'implement') inside *files*.
+    Locate the prompt file for *role* inside *files* (fail-closed).
 
-    Matches entries whose path contains the ``speckit{sep}{role}`` stem
+    Matches an exact ``speckit{sep}{role}`` path component or filename
     (handles SKILL.md wrappers, .prompt.md variants, etc.).
     """
     stem = f"speckit{sep}{role}"
-    matches = [rel for rel in files if stem in rel]
+    matches = [rel for rel in files if _matches_role(rel, stem)]
     if not matches:
         raise ManifestResolutionError(
             f"Integration '{agent}': no '{stem}' entry found in manifest files."
         )
-    if len(matches) > 1:
-        # prefer exact stem match to avoid ambiguity
-        exact = [m for m in matches if Path(m).stem == stem or stem in Path(m).parts]
-        matches = exact if exact else matches
-
     rel = matches[0]
     abs_path = root / rel
     if not abs_path.is_file():
@@ -239,17 +251,15 @@ def _find_optional_prompt_file(
     """
     Best-effort variant of :func:`_find_prompt_file` for optional stages.
 
-    Returns the resolved path when the manifest lists a ``speckit{sep}{role}``
-    entry and the file exists; returns None otherwise (no raise). Used for the
-    specify and tasks prompts so partial Speckit layouts stay supported.
+    Returns the resolved path when the manifest lists a matching
+    ``speckit{sep}{role}`` entry (exact component/filename, never substring) and
+    the file exists; returns None otherwise (no raise). Used for the specify and
+    tasks prompts so partial Speckit layouts stay supported.
     """
     stem = f"speckit{sep}{role}"
-    matches = [rel for rel in files if stem in rel]
+    matches = [rel for rel in files if _matches_role(rel, stem)]
     if not matches:
         return None
-    if len(matches) > 1:
-        exact = [m for m in matches if Path(m).stem == stem or stem in Path(m).parts]
-        matches = exact if exact else matches
     abs_path = root / matches[0]
     return abs_path if abs_path.is_file() else None
 

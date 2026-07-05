@@ -49,9 +49,15 @@ def fake_speckit_repo(tmp_git_repo: Path) -> Path:
     (root / ".claude" / "skills" / "speckit-plan").mkdir(parents=True)
     (root / ".claude" / "skills" / "speckit-tasks").mkdir(parents=True)
     (root / ".claude" / "skills" / "speckit-implement").mkdir(parents=True)
+    # speckit-taskstoissues shares the 'speckit-tasks' prefix — kept in the
+    # fixture so resolution must not confuse it with the tasks prompt.
+    (root / ".claude" / "skills" / "speckit-taskstoissues").mkdir(parents=True)
     (root / ".claude" / "skills" / "speckit-specify" / "SKILL.md").write_text("# specify prompt\n")
     (root / ".claude" / "skills" / "speckit-plan" / "SKILL.md").write_text("# plan prompt\n")
     (root / ".claude" / "skills" / "speckit-tasks" / "SKILL.md").write_text("# tasks prompt\n")
+    (root / ".claude" / "skills" / "speckit-taskstoissues" / "SKILL.md").write_text(
+        "# taskstoissues prompt\n"
+    )
     (root / ".claude" / "skills" / "speckit-implement" / "SKILL.md").write_text(
         "# implement prompt\n"
     )
@@ -69,6 +75,7 @@ def fake_speckit_repo(tmp_git_repo: Path) -> Path:
             ".claude/skills/speckit-specify/SKILL.md": "-",
             ".claude/skills/speckit-plan/SKILL.md": "-",
             ".claude/skills/speckit-tasks/SKILL.md": "-",
+            ".claude/skills/speckit-taskstoissues/SKILL.md": "-",
             ".claude/skills/speckit-implement/SKILL.md": "-",
         },
     }

@@ -255,6 +255,42 @@ def test_resolve_prompt_targets_optional_none_when_absent(tmp_path: Path) -> Non
     assert t["tasks_path"] is None
 
 
+def test_resolve_tasks_not_confused_by_taskstoissues(fake_speckit_repo: Path) -> None:
+    """Full layout: role='tasks' resolves to speckit-tasks, never speckit-taskstoissues."""
+    t = speckit.resolve_prompt_targets(fake_speckit_repo)[0]
+    assert t["tasks_path"] is not None
+    assert t["tasks_path"].parent.name == "speckit-tasks"
+    assert "taskstoissues" not in str(t["tasks_path"])
+
+
+def test_resolve_tasks_none_when_only_taskstoissues_present(tmp_path: Path) -> None:
+    """Regression: 'speckit-tasks' substring must not match 'speckit-taskstoissues'.
+
+    Partial layout with taskstoissues but no tasks prompt → tasks_path is None,
+    NOT the taskstoissues file.
+    """
+    root = tmp_path
+    (root / ".specify" / "integrations").mkdir(parents=True)
+    for name in ("speckit-plan", "speckit-implement", "speckit-taskstoissues"):
+        d = root / ".claude" / "skills" / name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("# prompt\n")
+    (root / ".specify" / "integration.json").write_text(json.dumps({
+        "installed_integrations": ["claude"],
+        "integration_settings": {"claude": {"invoke_separator": "-"}},
+    }))
+    (root / ".specify" / "integrations" / "claude.manifest.json").write_text(json.dumps({
+        "integration": "claude",
+        "files": {
+            ".claude/skills/speckit-plan/SKILL.md": "-",
+            ".claude/skills/speckit-implement/SKILL.md": "-",
+            ".claude/skills/speckit-taskstoissues/SKILL.md": "-",
+        },
+    }))
+    t = speckit.resolve_prompt_targets(root)[0]
+    assert t["tasks_path"] is None
+
+
 # ---------------------------------------------------------------------------
 # derive_review_path
 # ---------------------------------------------------------------------------
