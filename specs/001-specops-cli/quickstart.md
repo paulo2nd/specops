@@ -67,12 +67,19 @@ Prereq: sandbox from A with a feature dir `specs/001-demo/`, `tasks.md` containi
    T001/T002 PENDING.
 2. `specops status start-task T001` → IN_PROGRESS, `recovery.active_task: T001`.
 3. `specops status start-task T002` → **exit 1** (another task active).
-4. Commit any change, then `specops status complete-task T001 --auto` → DONE with
-   `TEST_REPORT:…; CODE_DIFF:…` evidence and harvested commit hashes.
-5. Set `test_command` to `false`, start T002, commit, `complete-task T002 --auto` →
-   **exit 1**, T002 stays IN_PROGRESS (FR-009).
-6. `specops status complete-task T002 --evidence "CLI_LOG:manual check ok"` →
-   **exit 0** (FR-009a); without `--evidence` → **exit 1**.
+4. `specops status complete-task T001 --evidence "CLI_LOG:first task done"` →
+   **exit 0**, T001 DONE with evidence, no commit required (intermediate task in
+   the user story — per-US commit model).
+4a. `specops status complete-task T001 --auto` with no new commits since
+   `started_commit` → **exit 1** (empty range; use `--evidence` for intermediate tasks).
+5. `specops status start-task T002`, commit any change, then
+   `specops status complete-task T002 --auto` → DONE with
+   `TEST_REPORT:…; CODE_DIFF:…` evidence and harvested commit hashes (final task
+   of the user story — commits accumulated since T001 started are harvested).
+6. Set `test_command` to `false`, re-run the flow on a fresh task, commit,
+   `complete-task --auto` → **exit 1**, task stays IN_PROGRESS (FR-009).
+7. `specops status complete-task <id> --evidence "CLI_LOG:manual check ok"` →
+   **exit 0** (FR-009a); without `--evidence` or `--auto` → **exit 1**.
 
 ## Scenario C — Reconcile gate (US3)
 
@@ -100,10 +107,18 @@ declaring paths with suffixes.
 
 ## Scenario F — Review command (US5, agent-side)
 
-In a prepared repo, invoke `/specops.review` in the agent: with a seeded ledger
-divergence it aborts before reading any code; with an out-of-plan changed file it
-rejects from `git status --porcelain` alone; with a compliant diff it writes
-`revisions/revision-1.md` using the `[File]:[Line] - …` format (SC-004).
+In a prepared repo, invoke `/specops.review` in the agent:
+
+1. Seeded ledger divergence (`specops reconcile` fails) → aborts immediately before
+   reading any code (Step 2 gate).
+2. Dirty working tree (uncommitted changes present) → rejected from
+   `git status --porcelain` alone, zero file contents read (SC-004).
+3. Empty effective diff (no changes since baseline) → rejected without reading code.
+4. Empty `skills_dir` (or directory absent) → review proceeds normally, no
+   skills-related blocking (FR-013).
+5. Compliant diff with rule violations → writes `revisions/revision-1.md` using
+   the `[File]:[Line] - …` format; recurring patterns may produce a
+   `## Skill Suggestions` section recommending new skills (Active Learning).
 
 ## Automated equivalent
 
