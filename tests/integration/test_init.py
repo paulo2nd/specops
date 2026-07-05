@@ -225,6 +225,15 @@ def test_init_injects_specify_and_tasks_blocks(fake_speckit_repo: Path) -> None:
     assert "[SC-xxx]" in tasks_text
 
 
+def test_init_all_blocks_have_graceful_guard(fake_speckit_repo: Path) -> None:
+    """FR-008: every injected stage block carries the graceful-degradation guard."""
+    run_init(fake_speckit_repo)
+    for role in ("specify", "plan", "tasks", "implement"):
+        text = _skill(fake_speckit_repo, role).read_text()
+        block = text.split(f"<!-- SPECOPS:BEGIN {role}")[1]
+        assert "not available in this environment" in block, f"{role} block missing guard"
+
+
 def test_init_implement_has_phase_transitions(fake_speckit_repo: Path) -> None:
     """US2: implement block opens IMPLEMENT and REVIEW phases."""
     run_init(fake_speckit_repo)

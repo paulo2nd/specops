@@ -1,6 +1,12 @@
 
 ## SpecOps Planning Directives
 
+### Graceful Degradation
+
+- If the `specops` command is not available in this environment, skip the SpecOps
+  steps in this block (including the consistency gate) and write `plan.md`
+  normally.
+
 ### Empirical Verification (§17.4)
 
 - Do NOT declare file paths or code conventions from memory.

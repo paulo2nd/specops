@@ -14,13 +14,16 @@ Returned per integration by `speckit.resolve_prompt_targets()`.
 | `separator` | str | ✓ | ✓ |
 | `plan_path` | Path | ✓ | ✓ |
 | `implement_path` | Path | ✓ | ✓ |
-| `specify_path` | Path | — | **added** |
-| `tasks_path` | Path | — | **added** |
+| `specify_path` | Path \| None | — | **added** |
+| `tasks_path` | Path \| None | — | **added** |
 
-**Resolution rule**: each new path is located with the existing
-`_find_prompt_file(root, files, agent, sep, role)` using `role="specify"` and
-`role="tasks"`. Fail-closed: a missing manifest entry or absent file raises
-`ManifestResolutionError` (same contract as plan/implement).
+**Resolution rule**: each new path is located with the best-effort helper
+`_find_optional_prompt_file(root, files, agent, sep, role)` using
+`role="specify"` and `role="tasks"`. Best-effort: it returns a `Path` when the
+manifest lists the entry and the file exists, otherwise `None` — a missing
+specify/tasks prompt is skipped, not an error. `plan_path`/`implement_path`
+remain fail-closed (`ManifestResolutionError`). This keeps partial Speckit
+layouts working (graceful degradation, FR-008/SC-006).
 
 ## Entity: Stage directive asset
 
