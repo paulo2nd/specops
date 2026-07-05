@@ -39,5 +39,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulosegundo/specops/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/paulosegundo/specops/releases/tag/v0.1.0
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/paulo2nd/specops/releases/tag/v0.1.0
