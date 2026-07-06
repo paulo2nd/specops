@@ -163,9 +163,11 @@ Gate somente leitura. Executa os gates determinísticos de revisão do-mais-bara
 primeiro com parada antecipada: **reconcile → lint → test → working
 tree/diff efetivo**. O primeiro gate que falha interrompe a execução e imprime
 sua evidência no stderr (saída 1); passando tudo, imprime um relatório por gate
-no stdout (saída 0). Erros de parse do ledger mantêm a saída 2. Nunca escreve no
-ledger nem em qualquer arquivo do repositório, não exige fase específica e nunca
-pergunta nada — seguro como step de CI.
+no stdout (saída 0) que lista os arquivos do diff efetivo — exatamente o escopo
+que o agente de revisão lê em seguida. Erros de parse do ledger mantêm a saída 2.
+Roda de qualquer diretório dentro do repo, nunca escreve no ledger nem em
+qualquer arquivo do repositório, não exige fase específica e nunca pergunta
+nada — seguro como step de CI.
 
 ```bash
 specops review                # local: valida os gates da mudança atual

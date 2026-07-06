@@ -154,9 +154,11 @@ specops reconcile || exit 1   # preflight before review
 Read-only gate. Runs the deterministic review gates cheapest-first with early
 stop: **reconcile → lint → test → working tree/effective diff**. The first
 failing gate stops the run and prints its evidence to stderr (exit 1); a full
-pass prints a per-gate report to stdout (exit 0). Ledger parse errors keep
-exit 2. Never writes to the ledger or any repository file, needs no specific
-ledger phase, and never prompts — safe as a CI step.
+pass prints a per-gate report to stdout (exit 0) that lists the effective-diff
+files — the exact scope the review agent then reads. Ledger parse errors keep
+exit 2. Runs from any directory inside the repo, never writes to the ledger or
+any repository file, needs no specific ledger phase, and never prompts — safe
+as a CI step.
 
 ```bash
 specops review                # local: gate-check the current change
