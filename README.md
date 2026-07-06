@@ -5,6 +5,8 @@
 [![Python](https://img.shields.io/pypi/pyversions/speckit-specops.svg)](https://pypi.org/project/speckit-specops/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+Read this in: **English** | [Português (BR)](README.pt-br.md)
+
 **SpecOps turns [GitHub Speckit](https://github.com/vgrecov/speckit)'s
 spec-driven workflow into an enforced, auditable process.** It layers an
 agent-guided *atomic development* methodology on top of any Speckit repository —
