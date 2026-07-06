@@ -4,9 +4,9 @@ created_at: '2026-07-06'
 current_phase: IMPLEMENT
 feature: 004-review-gates-cli
 recovery:
-  active_task: T016
+  active_task: T019
   blockers: []
-  last_commit: 6e8f6d76b7e0ab177d9a9e72b4bcfc8e14f8fbf9
+  last_commit: 13fa77c67117cc5fd0d4448365472b02cd9b2953
 review_cycles: []
 tasks:
 - commits: []
@@ -117,28 +117,31 @@ tasks:
   id: T015
   started_commit: 6e8f6d76b7e0ab177d9a9e72b4bcfc8e14f8fbf9
   status: DONE
-- commits: []
-  completed_at: null
-  evidence: null
+- commits:
+  - 13fa77c67117cc5fd0d4448365472b02cd9b2953
+  completed_at: '2026-07-06'
+  evidence: 'TEST_REPORT:253 passed in 47.94s; CODE_DIFF:3 files across 1 commit(s):
+    README.md, specs/004-review-gates-cli/status.yaml, tests/integration/test_review_cli.py'
   id: T016
   started_commit: 6e8f6d76b7e0ab177d9a9e72b4bcfc8e14f8fbf9
-  status: IN_PROGRESS
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:CHANGELOG Unreleased entry for specops review command and template
+    delegation
   id: T017
-  started_commit: null
-  status: PENDING
+  started_commit: 13fa77c67117cc5fd0d4448365472b02cd9b2953
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:README.pt-br.md mirrors the specops review docs and template delegation
   id: T018
-  started_commit: null
-  status: PENDING
+  started_commit: 13fa77c67117cc5fd0d4448365472b02cd9b2953
+  status: DONE
 - commits: []
   completed_at: null
   evidence: null
   id: T019
-  started_commit: null
-  status: PENDING
+  started_commit: 13fa77c67117cc5fd0d4448365472b02cd9b2953
+  status: IN_PROGRESS
 updated_at: '2026-07-06'
