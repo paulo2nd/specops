@@ -1,13 +1,17 @@
 baseline: bb90e721ac0502e54b232fac6ea2cd1f84d14436
 branch: 004-review-gates-cli
 created_at: '2026-07-06'
-current_phase: IMPLEMENT
+current_phase: REVIEW
 feature: 004-review-gates-cli
 recovery:
-  active_task: T019
+  active_task: null
   blockers: []
-  last_commit: 13fa77c67117cc5fd0d4448365472b02cd9b2953
-review_cycles: []
+  last_commit: bd25adde453d6e137e4639a35eb28c01f1f6dac9
+review_cycles:
+- completed_at: null
+  result: null
+  round: 1
+  started_at: '2026-07-06'
 tasks:
 - commits: []
   completed_at: '2026-07-06'
@@ -138,10 +142,12 @@ tasks:
   id: T018
   started_commit: 13fa77c67117cc5fd0d4448365472b02cd9b2953
   status: DONE
-- commits: []
-  completed_at: null
-  evidence: null
+- commits:
+  - bd25adde453d6e137e4639a35eb28c01f1f6dac9
+  completed_at: '2026-07-06'
+  evidence: 'TEST_REPORT:253 passed in 45.32s; CODE_DIFF:3 files across 1 commit(s):
+    CHANGELOG.md, README.pt-br.md, specs/004-review-gates-cli/status.yaml'
   id: T019
   started_commit: 13fa77c67117cc5fd0d4448365472b02cd9b2953
-  status: IN_PROGRESS
+  status: DONE
 updated_at: '2026-07-06'
