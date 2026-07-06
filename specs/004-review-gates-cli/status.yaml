@@ -1,0 +1,127 @@
+baseline: bb90e721ac0502e54b232fac6ea2cd1f84d14436
+branch: 004-review-gates-cli
+created_at: '2026-07-06'
+current_phase: IMPLEMENT
+feature: 004-review-gates-cli
+recovery:
+  active_task: T004
+  blockers: []
+  last_commit: null
+review_cycles: []
+tasks:
+- commits: []
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:dirty_files unit tests added and failing (AttributeError) as required
+  id: T001
+  started_commit: bb90e721ac0502e54b232fac6ea2cd1f84d14436
+  status: DONE
+- commits: []
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:read_baseline unit tests added and failing (AttributeError) as
+    required
+  id: T002
+  started_commit: bb90e721ac0502e54b232fac6ea2cd1f84d14436
+  status: DONE
+- commits: []
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:gitops.dirty_files implemented, test_gitops.py 15 passed
+  id: T003
+  started_commit: bb90e721ac0502e54b232fac6ea2cd1f84d14436
+  status: DONE
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T004
+  started_commit: bb90e721ac0502e54b232fac6ea2cd1f84d14436
+  status: IN_PROGRESS
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T005
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T006
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T007
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T008
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T009
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T010
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T011
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T012
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T013
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T014
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T015
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T016
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T017
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T018
+  started_commit: null
+  status: PENDING
+- commits: []
+  completed_at: null
+  evidence: null
+  id: T019
+  started_commit: null
+  status: PENDING
+updated_at: '2026-07-06'

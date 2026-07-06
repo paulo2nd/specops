@@ -75,6 +75,25 @@ def test_name_only_diff_empty_range(tmp_git_repo: Path) -> None:
     assert gitops.name_only_diff(repo, sha) == []
 
 
+def test_dirty_files_clean_tree_returns_empty(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    assert gitops.dirty_files(repo) == []
+
+
+def test_dirty_files_lists_modified_file(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    (tmp_git_repo / "README.md").write_text("# changed\n")
+    lines = gitops.dirty_files(repo)
+    assert any("README.md" in line for line in lines)
+
+
+def test_dirty_files_lists_untracked_file(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    (tmp_git_repo / "new.txt").write_text("x\n")
+    lines = gitops.dirty_files(repo)
+    assert any("new.txt" in line for line in lines)
+
+
 def test_name_only_diff_captures_changed_file(tmp_git_repo: Path) -> None:
     repo = gitops.find_repo(tmp_git_repo)
     start = gitops.head_sha(repo)

@@ -55,6 +55,12 @@ def is_ancestor(repo: git.Repo, sha: str) -> bool:
         return False
 
 
+def dirty_files(repo: git.Repo) -> list[str]:
+    """Return `git status --porcelain` lines; empty list means a clean tree."""
+    out = repo.git.status("--porcelain")
+    return [line for line in out.splitlines() if line.strip()]
+
+
 def name_only_diff(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> list[str]:
     """Return deduplicated list of changed file paths between *start_sha* and *end_sha*."""
     try:

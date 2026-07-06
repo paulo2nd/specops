@@ -132,6 +132,13 @@ def _validate_evidence(evidence: str) -> bool:
     return True
 
 
+def read_baseline(root: Path) -> str:
+    """Return the ledger's baseline commit hash, or '' when absent. Read-only."""
+    feature_dir = _get_feature_dir(root)
+    data = _load_ledger(feature_dir)
+    return str(data.get("baseline") or "")
+
+
 # ---------------------------------------------------------------------------
 # Command implementations
 # ---------------------------------------------------------------------------
