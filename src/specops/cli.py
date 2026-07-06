@@ -126,6 +126,16 @@ def consistency() -> None:
     typer.echo("consistency: ok")
 
 
+@app.command("review")
+@_handle_errors
+def review() -> None:
+    """Run the deterministic review gates (reconcile → lint → test → working tree)."""
+    root = Path(".")
+    _require_git(root)
+    from specops import review as review_mod
+    typer.echo(review_mod.run_gates(root))
+
+
 # ---------------------------------------------------------------------------
 # status subcommands
 # ---------------------------------------------------------------------------

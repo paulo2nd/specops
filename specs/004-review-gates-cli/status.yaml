@@ -4,9 +4,9 @@ created_at: '2026-07-06'
 current_phase: IMPLEMENT
 feature: 004-review-gates-cli
 recovery:
-  active_task: T004
+  active_task: T012
   blockers: []
-  last_commit: null
+  last_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
 review_cycles: []
 tasks:
 - commits: []
@@ -28,60 +28,70 @@ tasks:
   id: T003
   started_commit: bb90e721ac0502e54b232fac6ea2cd1f84d14436
   status: DONE
-- commits: []
-  completed_at: null
-  evidence: null
+- commits:
+  - 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  completed_at: '2026-07-06'
+  evidence: 'TEST_REPORT:230 passed in 39.19s; CODE_DIFF:17 files across 1 commit(s):
+    .specify/feature.json, specops.json, specs/004-review-gates-cli/checklists/requirements.md,
+    specs/004-review-gates-cli/contracts/review-command.md, specs/004-review-gates-cli/contracts/review-template.md'
   id: T004
   started_commit: bb90e721ac0502e54b232fac6ea2cd1f84d14436
-  status: IN_PROGRESS
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:13 gate-pipeline unit tests added, failing on missing review module
+    as required
   id: T005
-  started_commit: null
-  status: PENDING
+  started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:6 integration tests added (exit codes, streams, ledger immutability),
+    failing on unknown command as required
   id: T006
-  started_commit: null
-  status: PENDING
+  started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:GateResult/GateReport dataclasses and renderer in review.py, render
+    tests green
   id: T007
-  started_commit: null
-  status: PENDING
+  started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:reconcile gate reusing reconcile.run in-process, warnings echo
+    and pass
   id: T008
-  started_commit: null
-  status: PENDING
+  started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:lint/test command gates with shell=True capture, tail-50 truncation
+    note, SKIPPED on empty
   id: T009
-  started_commit: null
-  status: PENDING
+  started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:working-tree gate via dirty_files and name_only_diff vs ledger
+    baseline, missing-baseline FAIL
   id: T010
-  started_commit: null
-  status: PENDING
+  started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:run_gates orchestration fixed-order early-stop, test_review.py
+    12 passed
   id: T011
-  started_commit: null
-  status: PENDING
+  started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  status: DONE
 - commits: []
   completed_at: null
   evidence: null
   id: T012
-  started_commit: null
-  status: PENDING
+  started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  status: IN_PROGRESS
 - commits: []
   completed_at: null
   evidence: null
