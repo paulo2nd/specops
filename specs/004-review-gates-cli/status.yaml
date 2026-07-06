@@ -4,9 +4,9 @@ created_at: '2026-07-06'
 current_phase: IMPLEMENT
 feature: 004-review-gates-cli
 recovery:
-  active_task: T012
+  active_task: T014
   blockers: []
-  last_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
+  last_commit: bc98122597ad2856e6478f6bc1d943c6c942e865
 review_cycles: []
 tasks:
 - commits: []
@@ -86,24 +86,28 @@ tasks:
   id: T011
   started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
   status: DONE
-- commits: []
-  completed_at: null
-  evidence: null
+- commits:
+  - bc98122597ad2856e6478f6bc1d943c6c942e865
+  completed_at: '2026-07-06'
+  evidence: 'TEST_REPORT:248 passed in 45.01s; CODE_DIFF:5 files across 1 commit(s):
+    specs/004-review-gates-cli/status.yaml, src/specops/cli.py, src/specops/review.py,
+    tests/integration/test_review_cli.py, tests/unit/test_review.py'
   id: T012
   started_commit: 258cdd5cfe95c92858050dbb43e6a528e66db7af
-  status: IN_PROGRESS
+  status: DONE
 - commits: []
-  completed_at: null
-  evidence: null
+  completed_at: '2026-07-06'
+  evidence: CLI_LOG:asset tests rewritten for collapsed gate step, 4 failing against
+    old template as required
   id: T013
-  started_commit: null
-  status: PENDING
+  started_commit: bc98122597ad2856e6478f6bc1d943c6c942e865
+  status: DONE
 - commits: []
   completed_at: null
   evidence: null
   id: T014
-  started_commit: null
-  status: PENDING
+  started_commit: bc98122597ad2856e6478f6bc1d943c6c942e865
+  status: IN_PROGRESS
 - commits: []
   completed_at: null
   evidence: null
