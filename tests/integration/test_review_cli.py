@@ -114,3 +114,32 @@ class TestReviewReadOnly:
         result = _run_review(fake_speckit_repo)
         assert result.returncode == 1
         assert ledger.read_bytes() == before
+
+
+# ---------------------------------------------------------------------------
+# CI gate invariants (US3): any phase, non-interactive
+# ---------------------------------------------------------------------------
+
+
+class TestReviewCiGate:
+    def test_runs_in_any_ledger_phase(self, fake_speckit_repo: Path) -> None:
+        """No REVIEW-phase precondition: gates evaluate normally in TASKS."""
+        _all_pass_setup(fake_speckit_repo, phase="TASKS")
+        result = _run_review(fake_speckit_repo)
+        assert result.returncode == 0
+        assert "[gate] working-tree" in result.stdout
+
+    def test_non_interactive_with_closed_stdin(self, fake_speckit_repo: Path) -> None:
+        """Closed stdin (CI): completes without prompting on pass and on failure."""
+        _all_pass_setup(fake_speckit_repo)
+        ok = subprocess.run(
+            ["specops", "review"], cwd=fake_speckit_repo,
+            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
+        )
+        assert ok.returncode == 0
+        (fake_speckit_repo / "stray.txt").write_text("x\n")
+        fail = subprocess.run(
+            ["specops", "review"], cwd=fake_speckit_repo,
+            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
+        )
+        assert fail.returncode == 1
