@@ -75,6 +75,16 @@ def test_name_only_diff_empty_range(tmp_git_repo: Path) -> None:
     assert gitops.name_only_diff(repo, sha) == []
 
 
+def test_commit_exists_true_for_head(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    assert gitops.commit_exists(repo, gitops.head_sha(repo))
+
+
+def test_commit_exists_false_for_unknown_sha(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    assert not gitops.commit_exists(repo, "deadbeef" * 5)
+
+
 def test_dirty_files_clean_tree_returns_empty(tmp_git_repo: Path) -> None:
     repo = gitops.find_repo(tmp_git_repo)
     assert gitops.dirty_files(repo) == []

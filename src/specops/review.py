@@ -1,14 +1,18 @@
 """specops review: deterministic review gates, cheapest-first (004, FR-001..FR-009).
 
 Gate order is fixed: reconcile → lint → test → working-tree. The first FAIL
-stops the run. Evaluation is read-only — no ledger or repository file is
-ever written (FR-007).
+stops the run. Evaluation is read-only — the command never writes to the
+ledger or any repository file (FR-007). Working-tree cleanliness is
+snapshotted at invocation time, so artifacts created by the client's own
+lint/test commands cannot fail the run that created them.
 """
 from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import git
 
 from specops import config, gitops, status
 from specops import reconcile as reconcile_mod
@@ -61,18 +65,25 @@ def _tail(output: str, limit: int = TAIL_LINES) -> list[str]:
 
 
 def _reconcile_gate(root: Path) -> GateResult:
-    """Violations FAIL the gate; warnings are echoed and pass (clarification)."""
+    """Violations FAIL the gate; warnings are always echoed (clarification)."""
     warnings, violations = reconcile_mod.run(root)
     if violations:
-        return GateResult("reconcile", "FAIL", violations)
+        return GateResult("reconcile", "FAIL", [*warnings, *violations])
     return GateResult("reconcile", "PASS", warnings)
 
 
-def _command_gate(name: str, command: str) -> GateResult:
-    """Run a client lint/test command; empty command → SKIPPED (research R1/R2)."""
+def _command_gate(name: str, command: str, root: Path) -> GateResult:
+    """Run a client lint/test command from the repo root (research R1/R2).
+
+    Empty command → SKIPPED. Output is decoded with errors="replace" so
+    non-UTF-8 bytes degrade to replacement characters instead of a crash.
+    """
     if not command:
         return GateResult(name, "SKIPPED", [f"{name}_command empty"])
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    result = subprocess.run(
+        command, shell=True, capture_output=True, text=True,
+        errors="replace", cwd=str(root),
+    )
     if result.returncode == 0:
         return GateResult(name, "PASS")
     combined = "\n".join(part for part in (result.stdout, result.stderr) if part)
@@ -80,12 +91,8 @@ def _command_gate(name: str, command: str) -> GateResult:
     return GateResult(name, "FAIL", detail)
 
 
-def _working_tree_gate(root: Path) -> GateResult:
-    """Clean tree with an effective diff against the ledger baseline (research R4)."""
-    repo = gitops.find_repo(root)
-    if repo is None:
-        raise SpecopsError("Not a Git repository.")
-    dirty = gitops.dirty_files(repo)
+def _working_tree_gate(root: Path, repo: git.Repo, dirty: list[str]) -> GateResult:
+    """Tree clean at invocation, with an effective diff against the baseline (R4)."""
     if dirty:
         return GateResult("working-tree", "FAIL", ["uncommitted changes:", *dirty])
     baseline = status.read_baseline(root)
@@ -94,33 +101,50 @@ def _working_tree_gate(root: Path) -> GateResult:
             "working-tree", "FAIL",
             ["ledger has no baseline commit; cannot determine the effective diff"],
         )
+    if not gitops.commit_exists(repo, baseline):
+        return GateResult(
+            "working-tree", "FAIL",
+            [
+                f"ledger baseline commit '{baseline[:7]}' cannot be resolved in "
+                "this clone (shallow clone or rewritten history); fetch full "
+                "history or re-create the ledger baseline",
+            ],
+        )
     changed = gitops.name_only_diff(repo, baseline, "HEAD")
     if not changed:
         return GateResult(
             "working-tree", "FAIL", ["no effective diff — nothing to review"]
         )
-    return GateResult(
-        "working-tree", "PASS", [f"{len(changed)} file(s) changed since baseline"]
-    )
+    header = f"{len(changed)} file(s) changed since baseline {baseline[:7]}:"
+    return GateResult("working-tree", "PASS", [header, *changed])
 
 
 def run_gates(root: Path) -> str:
     """Evaluate all gates cheapest-first with early stop.
 
-    Returns the rendered report on success; raises SpecopsError carrying the
-    report (including the failing gate's evidence) on the first FAIL.
+    *root* is the repository root (the CLI resolves it from the invocation
+    directory). Returns the rendered report on success; raises SpecopsError
+    carrying the report (including the failing gate's evidence) on the
+    first FAIL.
     """
     cfg = config.load(root)
+    repo = gitops.find_repo(root)
+    if repo is None:
+        raise SpecopsError("Not a Git repository.")
+    # Snapshot before lint/test so artifacts those commands create cannot
+    # dirty the tree they are gating (working-tree gate evaluates this list).
+    dirty_at_start = gitops.dirty_files(repo)
+
     report = GateReport()
     for name in GATE_ORDER:
         if name == "reconcile":
             result = _reconcile_gate(root)
         elif name == "lint":
-            result = _command_gate("lint", str(cfg.get("lint_command") or ""))
+            result = _command_gate("lint", str(cfg.get("lint_command") or ""), root)
         elif name == "test":
-            result = _command_gate("test", str(cfg.get("test_command") or ""))
+            result = _command_gate("test", str(cfg.get("test_command") or ""), root)
         else:
-            result = _working_tree_gate(root)
+            result = _working_tree_gate(root, repo, dirty_at_start)
         report.results.append(result)
         if result.status == "FAIL":
             raise SpecopsError(report.render())

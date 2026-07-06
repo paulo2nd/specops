@@ -217,6 +217,85 @@ def test_missing_baseline_fails_working_tree(fake_speckit_repo: Path) -> None:
     assert "baseline" in msg
 
 
+def test_unresolvable_baseline_reported_as_such(fake_speckit_repo: Path) -> None:
+    """A baseline missing from the clone is not misdiagnosed as an empty diff."""
+    root = fake_speckit_repo
+    _write_config(root)
+    _write_ledger(root, baseline="deadbeef" * 5, branch=_branch(root))
+    _commit_all(root)
+    with pytest.raises(SpecopsError) as exc:
+        review.run_gates(root)
+    msg = str(exc.value)
+    assert "cannot be resolved" in msg
+    assert "no effective diff" not in msg
+
+
+def test_pass_report_lists_changed_files_and_baseline(fake_speckit_repo: Path) -> None:
+    """The surgical-review agent reads its scope from the gate output (finding 1)."""
+    _all_pass_setup(fake_speckit_repo)
+    out = review.run_gates(fake_speckit_repo)
+    assert "changed since baseline" in out
+    assert "specops.json" in out          # a real changed file is listed
+    assert "specs/001-demo/status.yaml" in out
+
+
+def test_artifacts_created_by_test_command_do_not_fail_working_tree(
+    fake_speckit_repo: Path,
+) -> None:
+    """Dirty state is snapshotted at invocation, before lint/test run (finding 2)."""
+    cmd = f'"{sys.executable}" -c "open(\'artifact.tmp\', \'w\').write(\'x\')"'
+    _all_pass_setup(fake_speckit_repo, test=cmd)
+    out = review.run_gates(fake_speckit_repo)
+    assert "[gate] working-tree" in out
+    assert "artifact.tmp" not in out
+
+
+def test_command_gate_runs_from_repo_root(
+    fake_speckit_repo: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """lint/test execute with cwd=root even when the process cwd is elsewhere."""
+    probe = (
+        f'"{sys.executable}" -c '
+        '"import os, sys; sys.exit(0 if os.path.exists(\'specops.json\') else 7)"'
+    )
+    _all_pass_setup(fake_speckit_repo, test=probe)
+    monkeypatch.chdir(tmp_path)
+    out = review.run_gates(fake_speckit_repo)
+    assert "[gate] test" in out
+
+
+def test_non_utf8_command_output_degrades_cleanly(fake_speckit_repo: Path) -> None:
+    """Invalid bytes in lint/test output become a FAIL report, not a crash."""
+    cmd = (
+        f'"{sys.executable}" -c '
+        '"import sys; sys.stdout.buffer.write(b\'bad \\xff\\xfe bytes\\n\'); sys.exit(1)"'
+    )
+    _all_pass_setup(fake_speckit_repo, test=cmd)
+    with pytest.raises(SpecopsError) as exc:
+        review.run_gates(fake_speckit_repo)
+    msg = str(exc.value)
+    assert "exit code: 1" in msg
+    assert "bad" in msg
+
+
+def test_reconcile_fail_still_echoes_warnings(fake_speckit_repo: Path) -> None:
+    """Warnings are not dropped when violations exist (finding 7)."""
+    root = fake_speckit_repo
+    baseline = _head(root)
+    _write_config(root)
+    _write_ledger(root, baseline, branch="branch-that-does-not-match", tasks=[{
+        "id": "T001", "status": "DONE", "started_commit": None,
+        "commits": ["deadbeef" * 5], "evidence": "TEST_REPORT:x",
+        "completed_at": None,
+    }])
+    _commit_all(root)
+    with pytest.raises(SpecopsError) as exc:
+        review.run_gates(root)
+    msg = str(exc.value)
+    assert "not in branch history" in msg
+    assert "Warning:" in msg
+
+
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------

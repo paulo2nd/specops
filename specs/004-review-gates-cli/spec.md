@@ -141,8 +141,15 @@ gates normally and never prompts.
   treated as a gate failure (the gate cannot attest quality), reported with
   the underlying reason.
 - Not inside a Git repository → error before any gate runs.
-- Ledger `baseline` commit missing from local history → surfaced by the
-  reconcile gate (existing reconcile semantics).
+- Ledger `baseline` commit unresolvable in the clone (shallow CI clone,
+  rewritten history) → reconcile warns (existing semantics) and the
+  working-tree gate fails with an explicit "baseline cannot be resolved"
+  message — never misreported as an empty diff.
+- Artifacts created by the client's own lint/test commands (caches, coverage
+  files) → do not fail the working-tree gate: cleanliness is snapshotted at
+  invocation time, before those commands run.
+- Command invoked from a subdirectory of the repository → paths resolve from
+  the repository root; behavior identical to running at the root.
 - Both lint and test would fail → only the lint failure is reported
   (cheapest-first early stop is intentional).
 - Very long lint/test output → only the last 50 lines are echoed in the

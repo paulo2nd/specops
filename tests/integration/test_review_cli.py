@@ -129,6 +129,17 @@ class TestReviewCiGate:
         assert result.returncode == 0
         assert "[gate] working-tree" in result.stdout
 
+    def test_runs_from_subdirectory(self, fake_speckit_repo: Path) -> None:
+        """Contract: usable from any directory inside the repository."""
+        _all_pass_setup(fake_speckit_repo)
+        subdir = fake_speckit_repo / "specs" / "001-demo"
+        result = subprocess.run(
+            ["specops", "review"],
+            cwd=subdir, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        )
+        assert result.returncode == 0
+        assert "[gate] working-tree" in result.stdout
+
     def test_non_interactive_with_closed_stdin(self, fake_speckit_repo: Path) -> None:
         """Closed stdin (CI): completes without prompting on pass and on failure."""
         _all_pass_setup(fake_speckit_repo)

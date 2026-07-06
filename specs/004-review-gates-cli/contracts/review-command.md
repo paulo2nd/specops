@@ -21,7 +21,7 @@ Evaluate gates in fixed order with early stop:
 | 1 | `reconcile` | `reconcile.run(root)` returns no violations (warnings echoed, non-fatal) | violation lines |
 | 2 | `lint` | `lint_command` exits 0; SKIPPED when empty | command, exit code, last 50 output lines (+ truncation note) |
 | 3 | `test` | `test_command` exits 0; SKIPPED when empty | command, exit code, last 50 output lines (+ truncation note) |
-| 4 | `working-tree` | porcelain status empty AND `name_only_diff(baseline, HEAD)` non-empty | dirty-file list, or "no effective diff — nothing to review", or "ledger has no baseline" |
+| 4 | `working-tree` | porcelain status empty **at invocation time** (snapshotted before lint/test so their artifacts cannot fail the run) AND baseline resolvable in this clone AND `name_only_diff(baseline, HEAD)` non-empty | dirty-file list, or "ledger has no baseline", or "baseline commit cannot be resolved in this clone", or "no effective diff — nothing to review" |
 
 ## Exit codes & streams
 
@@ -52,6 +52,18 @@ required integration assertion.
   exit code: 1
   [output: 412 lines, showing last 50]
   <last 50 lines of combined stdout+stderr>
+```
+
+On a full pass, the working-tree gate lists the effective diff — this is the
+scope the reviewing agent reads in the surgical step (it is never told to run
+git commands itself):
+
+```
+[gate] working-tree .... PASS
+  3 file(s) changed since baseline a1b2c3d:
+  src/app/main.py
+  src/app/util.py
+  tests/test_main.py
 ```
 
 Line prefix `[gate] <name>` and the status tokens `PASS`/`FAIL`/`SKIPPED`

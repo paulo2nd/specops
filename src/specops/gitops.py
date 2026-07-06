@@ -55,6 +55,15 @@ def is_ancestor(repo: git.Repo, sha: str) -> bool:
         return False
 
 
+def commit_exists(repo: git.Repo, sha: str) -> bool:
+    """Return True when *sha* resolves to a commit in this clone."""
+    try:
+        repo.commit(sha)
+        return True
+    except (GitCommandError, git.BadName, ValueError):
+        return False
+
+
 def dirty_files(repo: git.Repo) -> list[str]:
     """Return `git status --porcelain` lines; empty list means a clean tree."""
     out = repo.git.status("--porcelain")

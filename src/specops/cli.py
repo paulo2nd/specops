@@ -130,9 +130,11 @@ def consistency() -> None:
 @_handle_errors
 def review() -> None:
     """Run the deterministic review gates (reconcile → lint → test → working tree)."""
-    root = Path(".")
-    _require_git(root)
+    cwd = Path(".")
+    _require_git(cwd)
     from specops import review as review_mod
+    # Contract: usable from any directory inside the repo — resolve the root.
+    root = Path(gitops.find_repo(cwd).working_tree_dir)
     typer.echo(review_mod.run_gates(root))
 
 

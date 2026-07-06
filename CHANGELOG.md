@@ -15,10 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `specops review` — read-only CLI gate running the deterministic review gates
   cheapest-first with early stop: reconcile → lint → test → working
-  tree/effective diff. Reports per-gate PASS/FAIL/SKIPPED; first failure exits 1
-  with evidence on stderr (last 50 lines of a failing lint/test output); ledger
-  parse errors keep exit 2. Never mutates the ledger, needs no specific phase,
-  never prompts — usable directly as a CI step or a Speckit-workflow shell gate.
+  tree/effective diff. Reports per-gate PASS/FAIL/SKIPPED; a full pass lists
+  the effective-diff files (the reviewing agent's surgical scope); first
+  failure exits 1 with evidence on stderr (last 50 lines of a failing
+  lint/test output); ledger parse errors keep exit 2. Runs from any directory
+  inside the repo, snapshots working-tree cleanliness at invocation (tool
+  artifacts created by lint/test cannot fail the run), distinguishes an
+  unresolvable baseline (shallow clone) from an empty diff, and tolerates
+  non-UTF-8 command output. Never mutates the ledger, needs no specific
+  phase, never prompts — usable directly as a CI step or a Speckit-workflow
+  shell gate.
 - `gitops.dirty_files` and `status.read_baseline` helpers backing the new gates.
 
 - Stage-wide directive wiring: `specops init` now injects directive blocks into

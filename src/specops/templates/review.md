@@ -15,7 +15,7 @@ Run `specops review`.
 
 ### Step 3 — Surgical Diff Review
 
-Read only the files that changed (from the effective diff).
+Read only the files listed by the working-tree gate in the `specops review` output — that list is the effective diff against the ledger baseline. Do not review anything outside it.
 
 Review against:
 - The spec Success Criteria and acceptance conditions.
