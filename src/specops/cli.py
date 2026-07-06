@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import importlib.metadata
+import git
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -68,7 +69,7 @@ def _handle_errors(fn: _F) -> _F:
     return wrapper  # type: ignore[return-value]
 
 
-def _require_git(root: Path = Path(".")):
+def _require_git(root: Path = Path(".")) -> git.Repo:
     """Fail with exit 1 within <1 s when not inside a Git repo (FR-002, SC-008).
 
     Returns the resolved Repo so callers that need it don't re-derive it.
