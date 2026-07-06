@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-06
+
 ### Added
 
 - `specops review` — read-only CLI gate running the deterministic review gates
@@ -26,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   phase, never prompts — usable directly as a CI step or a Speckit-workflow
   shell gate.
 - `gitops.dirty_files` and `status.read_baseline` helpers backing the new gates.
+- Release automation: a GitHub release publishes to PyPI via
+  `.github/workflows/release.yml` (PyPI Trusted Publishing, no stored tokens).
 
 - Stage-wide directive wiring: `specops init` now injects directive blocks into
   the **specify** and **tasks** prompts (in addition to plan and implement). The
@@ -76,5 +80,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/paulo2nd/specops/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/paulo2nd/specops/releases/tag/v0.1.0

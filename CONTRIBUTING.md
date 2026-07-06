@@ -33,9 +33,11 @@ Two principles matter most for contributors:
 - **Speckit extension, never replacement.** SpecOps only adds an additive,
   marker-delimited layer on top of Speckit. Never fork or overwrite Speckit's
   files; injection must be idempotent and reversible to a byte-identical state.
-- **Repo-as-state.** All feature state lives in `status.yaml` and is written
-  only through `specops` commands — never hand-edit the ledger or `tasks.md`
-  checkboxes.
+- **Repo-as-state.** In client repositories, all feature state lives in
+  `status.yaml` and is written only through `specops` commands. Note that
+  SpecOps is **not** self-applied in this repository (constitution v1.3.0):
+  development here uses plain Speckit artifacts, and specops behavior is
+  validated through the test-suite fixtures only.
 
 ## Language policy
 
@@ -51,3 +53,16 @@ may be authored in any language.
 3. Update `CHANGELOG.md` under `## [Unreleased]`.
 4. Ensure all three quality gates pass locally.
 5. Describe the change and its rationale in the PR body.
+
+## Releasing (maintainers)
+
+Version bumps ship inside the release PR:
+
+1. In the PR: bump `version` in `pyproject.toml` and convert the
+   `## [Unreleased]` section of `CHANGELOG.md` into `## [X.Y.Z] - date`
+   (updating the compare links at the bottom).
+2. Merge the PR into `main`.
+3. Create a GitHub release with tag `vX.Y.Z` (notes from the changelog).
+4. Publishing to PyPI is automatic: `.github/workflows/release.yml` builds
+   the sdist/wheel and uploads via PyPI Trusted Publishing when the release
+   is published — no token or manual `twine` step.
