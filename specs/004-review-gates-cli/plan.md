@@ -82,8 +82,11 @@ tests/unit/test_review.py                (create)  — gate ordering, early stop
 tests/integration/test_review_cli.py     (create)  — exit codes / streams through the Typer runner, ledger immutability, template content after init
 tests/integration/test_review_asset.py   (modify)  — assert the collapsed gate step in the installed prompt
 README.md                                (modify)  — document `specops review` + CI/workflow shell-step example
-specops.json                             (create)  — dogfooding config at repo root (test/lint commands for `complete-task --auto` and `specops review` on this repo)
 ```
+
+> Note: SpecOps is intentionally NOT self-applied in this repository (no
+> `specops.json`, no ledger, no injected blocks) while the tool is still
+> being defined — development state is tracked by plain Speckit artifacts.
 
 **Structure Decision**: Single-package layout preserved. Gate logic lives in a
 new dedicated business module `src/specops/review.py` (mirrors

@@ -34,10 +34,10 @@ dependencies, no scaffolding required (plan.md Technical Context).
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T001 [P] [SC-001] Unit tests for `gitops.dirty_files(repo)` (clean tree → empty list; modified/untracked files → porcelain lines) in tests/unit/test_gitops.py — write first, confirm they fail
-- [ ] T002 [P] [SC-001] Unit tests for the public read-only baseline accessor (ledger with baseline → value; ledger without baseline → None/empty; no mutation of status.yaml) in tests/unit/test_status.py — write first, confirm they fail
-- [ ] T003 [SC-001] Implement `dirty_files(repo) -> list[str]` wrapping `repo.git.status("--porcelain")` in src/specops/gitops.py (research R3); T001 passes
-- [ ] T004 [SC-001] Implement the public read-only baseline accessor in src/specops/status.py (no new mutation paths, reuses `_get_feature_dir`/`_load_ledger`); T002 passes
+- [x] T001 [P] [SC-001] Unit tests for `gitops.dirty_files(repo)` (clean tree → empty list; modified/untracked files → porcelain lines) in tests/unit/test_gitops.py — write first, confirm they fail
+- [x] T002 [P] [SC-001] Unit tests for the public read-only baseline accessor (ledger with baseline → value; ledger without baseline → None/empty; no mutation of status.yaml) in tests/unit/test_status.py — write first, confirm they fail
+- [x] T003 [SC-001] Implement `dirty_files(repo) -> list[str]` wrapping `repo.git.status("--porcelain")` in src/specops/gitops.py (research R3); T001 passes
+- [x] T004 [SC-001] Implement the public read-only baseline accessor in src/specops/status.py (no new mutation paths, reuses `_get_feature_dir`/`_load_ledger`); T002 passes
 
 **Checkpoint**: Foundation ready — user story implementation can now begin
 
@@ -53,17 +53,17 @@ dependencies, no scaffolding required (plan.md Technical Context).
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T005 [P] [US1] [SC-001,SC-003] Unit tests in tests/unit/test_review.py: fixed gate order; early stop (no later gate evaluated after a FAIL); SKIPPED for empty lint/test commands; last-50-lines truncation with total-size note; reconcile warnings echoed on PASS; report rendering (`[gate] <name> ... STATUS` lines); missing-baseline failure — write first, confirm they fail
-- [ ] T006 [P] [US1] [SC-001,SC-004,SC-006] Integration tests in tests/integration/test_review_cli.py via the Typer runner: all-pass → report on stdout exit 0; gate failure → evidence on stderr exit 1; corrupt status.yaml → exit 2; missing specops.json → ConfigError exit 1 with init guidance; status.yaml byte-identical before/after every outcome (FR-007) — write first, confirm they fail
+- [x] T005 [P] [US1] [SC-001,SC-003] Unit tests in tests/unit/test_review.py: fixed gate order; early stop (no later gate evaluated after a FAIL); SKIPPED for empty lint/test commands; last-50-lines truncation with total-size note; reconcile warnings echoed on PASS; report rendering (`[gate] <name> ... STATUS` lines); missing-baseline failure — write first, confirm they fail
+- [x] T006 [P] [US1] [SC-001,SC-004,SC-006] Integration tests in tests/integration/test_review_cli.py via the Typer runner: all-pass → report on stdout exit 0; gate failure → evidence on stderr exit 1; corrupt status.yaml → exit 2; missing specops.json → ConfigError exit 1 with init guidance; status.yaml byte-identical before/after every outcome (FR-007) — write first, confirm they fail
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] [SC-001] Create src/specops/review.py with `GateResult`/`GateReport` and the report renderer per data-model.md and contracts/review-command.md (no Typer imports, 002 errors contract)
-- [ ] T008 [US1] [SC-001] Implement the reconcile gate in src/specops/review.py: call `reconcile.run(root)` in-process; violations → FAIL with violation lines; warnings echoed in detail and gate PASSes (research R6)
-- [ ] T009 [US1] [SC-001] Implement the lint and test gates in src/specops/review.py: `subprocess.run(cmd, shell=True, capture_output=True, text=True)`, no timeout; non-zero → FAIL with command, exit code, last 50 lines of combined stdout+stderr plus truncation note; empty command → SKIPPED (research R1/R2)
-- [ ] T010 [US1] [SC-001] Implement the working-tree gate in src/specops/review.py: `gitops.dirty_files` non-empty → FAIL with file list; `gitops.name_only_diff(baseline, HEAD)` empty → FAIL "no effective diff — nothing to review"; missing/empty ledger baseline → FAIL with explanatory message (research R4)
-- [ ] T011 [US1] [SC-001,SC-003] Implement `run_gates(root) -> str` orchestration in src/specops/review.py: fixed order, early stop, rendered report returned on success, `SpecopsError` carrying report + evidence raised on failure (research R5); T005 passes
-- [ ] T012 [US1] [SC-004] Register the `review` command in src/specops/cli.py through the existing `_handle_errors` decorator (single exit-code mapper); T006 passes
+- [x] T007 [US1] [SC-001] Create src/specops/review.py with `GateResult`/`GateReport` and the report renderer per data-model.md and contracts/review-command.md (no Typer imports, 002 errors contract)
+- [x] T008 [US1] [SC-001] Implement the reconcile gate in src/specops/review.py: call `reconcile.run(root)` in-process; violations → FAIL with violation lines; warnings echoed in detail and gate PASSes (research R6)
+- [x] T009 [US1] [SC-001] Implement the lint and test gates in src/specops/review.py: `subprocess.run(cmd, shell=True, capture_output=True, text=True)`, no timeout; non-zero → FAIL with command, exit code, last 50 lines of combined stdout+stderr plus truncation note; empty command → SKIPPED (research R1/R2)
+- [x] T010 [US1] [SC-001] Implement the working-tree gate in src/specops/review.py: `gitops.dirty_files` non-empty → FAIL with file list; `gitops.name_only_diff(baseline, HEAD)` empty → FAIL "no effective diff — nothing to review"; missing/empty ledger baseline → FAIL with explanatory message (research R4)
+- [x] T011 [US1] [SC-001,SC-003] Implement `run_gates(root) -> str` orchestration in src/specops/review.py: fixed order, early stop, rendered report returned on success, `SpecopsError` carrying report + evidence raised on failure (research R5); T005 passes
+- [x] T012 [US1] [SC-004] Register the `review` command in src/specops/cli.py through the existing `_handle_errors` decorator (single exit-code mapper); T006 passes
 
 **Checkpoint**: User Story 1 fully functional — validate with quickstart.md Scenarios 1–5
 
@@ -77,11 +77,11 @@ dependencies, no scaffolding required (plan.md Technical Context).
 
 ### Tests for User Story 2 (mandatory per Constitution task gate) ⚠️
 
-- [ ] T013 [P] [US2] [SC-005] Update tests/integration/test_review_asset.py: installed prompt contains the collapsed gate step (run `specops review`; non-zero exit → REJECTED, report output, stop, read no code) and no longer instructs `specops reconcile`, lint/test commands, or `git status` individually; remaining sections renumbered and intact — write first, confirm it fails
+- [x] T013 [P] [US2] [SC-005] Update tests/integration/test_review_asset.py: installed prompt contains the collapsed gate step (run `specops review`; non-zero exit → REJECTED, report output, stop, read no code) and no longer instructs `specops reconcile`, lint/test commands, or `git status` individually; remaining sections renumbered and intact — write first, confirm it fails
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] [SC-002,SC-003,SC-005] Collapse Steps 2–4 of src/specops/templates/review.md into the single "Step 2 — Deterministic Gates" per contracts/review-template.md, renumbering the surgical-review and revision-report steps; verdict transition and Active Learning unchanged; T013 passes
+- [x] T014 [US2] [SC-002,SC-003,SC-005] Collapse Steps 2–4 of src/specops/templates/review.md into the single "Step 2 — Deterministic Gates" per contracts/review-template.md, renumbering the surgical-review and revision-report steps; verdict transition and Active Learning unchanged; T013 passes
 
 **Checkpoint**: User Stories 1 AND 2 both work independently
 
@@ -95,11 +95,11 @@ dependencies, no scaffolding required (plan.md Technical Context).
 
 ### Tests for User Story 3 (mandatory per Constitution task gate) ⚠️
 
-- [ ] T015 [P] [US3] [SC-004] Integration tests in tests/integration/test_review_cli.py: gates evaluate normally when ledger phase is not REVIEW (no phase precondition); run with closed stdin completes without prompting — write first, confirm they fail (or pass trivially against T011/T012, then lock the invariant)
+- [x] T015 [P] [US3] [SC-004] Integration tests in tests/integration/test_review_cli.py: gates evaluate normally when ledger phase is not REVIEW (no phase precondition); run with closed stdin completes without prompting — write first, confirm they fail (or pass trivially against T011/T012, then lock the invariant)
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] [SC-004] Document `specops review` in README.md: command reference entry plus a CI usage example and a Speckit-workflow `shell`-step example (user-owned YAML calling `specops review`)
+- [x] T016 [US3] [SC-004] Document `specops review` in README.md: command reference entry plus a CI usage example and a Speckit-workflow `shell`-step example (user-owned YAML calling `specops review`)
 
 **Checkpoint**: All user stories independently functional
 
@@ -109,9 +109,9 @@ dependencies, no scaffolding required (plan.md Technical Context).
 
 **Purpose**: Release hygiene and full-regression proof
 
-- [ ] T017 [P] [SC-006] Add the feature entry to CHANGELOG.md (new `specops review` command, template collapse, no breaking changes)
-- [ ] T018 [P] [SC-004] Mirror the README.md `specops review` documentation in README.pt-br.md
-- [ ] T019 [SC-006] Run the full regression suite (`pytest -q`) and walk quickstart.md Scenarios 1–7; confirm all pre-existing messages/exit codes/streams untouched outside the review flow
+- [x] T017 [P] [SC-006] Add the feature entry to CHANGELOG.md (new `specops review` command, template collapse, no breaking changes)
+- [x] T018 [P] [SC-004] Mirror the README.md `specops review` documentation in README.pt-br.md
+- [x] T019 [SC-006] Run the full regression suite (`pytest -q`) and walk quickstart.md Scenarios 1–7; confirm all pre-existing messages/exit codes/streams untouched outside the review flow
 
 ---
 

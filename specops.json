@@ -1,5 +1,0 @@
-{
-  "test_command": "pytest -q",
-  "lint_command": "ruff check .",
-  "skills_dir": ".specify/skills"
-}
