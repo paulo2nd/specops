@@ -77,3 +77,7 @@ class TestReviewAsset:
     def test_review_keeps_active_learning(self, installed_review: str) -> None:
         """Active Learning section is unchanged."""
         assert "Active Learning" in installed_review
+
+    def test_review_surfaces_skipped_gates_in_report(self, installed_review: str) -> None:
+        """SKIPPED gates must be recorded in the revision report, not silently approved."""
+        assert "Skipped gate:" in installed_review

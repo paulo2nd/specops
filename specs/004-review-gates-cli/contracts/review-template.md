@@ -24,7 +24,9 @@ The collapsed step MUST instruct the agent to:
 1. Run `specops review`.
 2. On non-zero exit: report the command's output, set the decision to
    **REJECTED**, and stop — read no code.
-3. On exit 0: proceed to the surgical diff review.
+3. On exit 0: proceed to the surgical diff review, carrying any `SKIPPED`
+   gates forward to the revision report (`Skipped gate: <name> (<reason>)`)
+   so a gate that never ran is visible in the verdict.
 
 It MUST NOT instruct the agent to run `specops reconcile`, the lint/test
 commands, or `git status` individually — those belong to the CLI now.

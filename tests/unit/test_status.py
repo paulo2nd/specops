@@ -555,6 +555,28 @@ def test_complete_task_auto_success(tmp_path: Path) -> None:
 # read_baseline (004: read-only accessor for the review working-tree gate)
 # ---------------------------------------------------------------------------
 
+def test_complete_task_auto_runs_test_command_from_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--auto executes test_command with cwd=root (shared shell runner)."""
+    import json as _json
+    import sys as _sys
+    root, feature_dir = _setup_in_progress(tmp_path)
+    probe = (
+        f'"{_sys.executable}" -c '
+        '"import os, sys; sys.exit(0 if os.path.exists(\'specops.json\') else 7)"'
+    )
+    (root / "specops.json").write_text(_json.dumps({"test_command": probe}))
+    (root / "work.txt").write_text("change")
+    subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "work"], cwd=root, check=True, capture_output=True
+    )
+    monkeypatch.chdir(tmp_path.parent)  # process cwd elsewhere on purpose
+    msg = s.cmd_complete_task(root, "T001", auto=True, evidence=None)
+    assert "T001" in msg
+
+
 def test_read_baseline_returns_ledger_value(tmp_path: Path) -> None:
     _make_ledger(tmp_path)
     with patch.object(s, "_get_feature_dir", return_value=tmp_path):

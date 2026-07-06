@@ -11,7 +11,7 @@ Check `skills_dir` (from `specops.json`). If the directory contains skill files,
 Run `specops review`.
 
 - Exit code ≠ 0 → **REJECTED**. Report the command's output. Stop here. Do not read any code.
-- Exit code 0 → all gates passed (reconcile, lint, test, working tree). Continue.
+- Exit code 0 → all gates passed (reconcile, lint, test, working tree). If the report shows any gate as `SKIPPED`, remember it for the revision report (Step 4). Continue.
 
 ### Step 3 — Surgical Diff Review
 
@@ -36,7 +36,9 @@ Example:
 src/specops/status.py:42 - L2 violated: two tasks IN_PROGRESS simultaneously; enforce single-active-task guard
 ```
 
-If no non-conformities: write `revision-X.md` with a single line `APPROVED`.
+If the gate report showed any `SKIPPED` gate, record each one in `revision-X.md` on its own line — `Skipped gate: <name> (<reason>)` — so a gate that never ran is visible in the verdict, not silently approved.
+
+If no non-conformities: write `revision-X.md` with a single line `APPROVED` (followed by any `Skipped gate:` lines).
 
 Set the review decision:
 - At least one non-conformity → **REJECTED**

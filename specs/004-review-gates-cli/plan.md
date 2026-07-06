@@ -74,6 +74,7 @@ specs/004-review-gates-cli/
 
 ```text
 src/specops/review.py                    (create)  — gate pipeline: run_gates(root) → GateReport; raises SpecopsError on failure
+src/specops/shell.py                     (create)  — shared runner for client-configured commands (review gates and complete-task --auto)
 src/specops/cli.py                       (modify)  — register `specops review` command through the existing _handle_errors mapper
 src/specops/gitops.py                    (modify)  — add dirty_files(repo) helper (git status --porcelain)
 src/specops/status.py                    (modify)  — expose a public read-only ledger accessor for the baseline (no mutation paths added)

@@ -8,13 +8,12 @@ lint/test commands cannot fail the run that created them.
 """
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import git
 
-from specops import config, gitops, status
+from specops import config, gitops, shell, status
 from specops import reconcile as reconcile_mod
 from specops.errors import SpecopsError
 
@@ -80,10 +79,7 @@ def _command_gate(name: str, command: str, root: Path) -> GateResult:
     """
     if not command:
         return GateResult(name, "SKIPPED", [f"{name}_command empty"])
-    result = subprocess.run(
-        command, shell=True, capture_output=True, text=True,
-        errors="replace", cwd=str(root),
-    )
+    result = shell.run_client_command(command, root)
     if result.returncode == 0:
         return GateResult(name, "PASS")
     combined = "\n".join(part for part in (result.stdout, result.stderr) if part)
@@ -91,11 +87,10 @@ def _command_gate(name: str, command: str, root: Path) -> GateResult:
     return GateResult(name, "FAIL", detail)
 
 
-def _working_tree_gate(root: Path, repo: git.Repo, dirty: list[str]) -> GateResult:
+def _working_tree_gate(repo: git.Repo, dirty: list[str], baseline: str) -> GateResult:
     """Tree clean at invocation, with an effective diff against the baseline (R4)."""
     if dirty:
         return GateResult("working-tree", "FAIL", ["uncommitted changes:", *dirty])
-    baseline = status.read_baseline(root)
     if not baseline:
         return GateResult(
             "working-tree", "FAIL",
@@ -131,9 +126,11 @@ def run_gates(root: Path) -> str:
     repo = gitops.find_repo(root)
     if repo is None:
         raise SpecopsError("Not a Git repository.")
-    # Snapshot before lint/test so artifacts those commands create cannot
-    # dirty the tree they are gating (working-tree gate evaluates this list).
+    # Snapshot before any gate runs: the working-tree gate evaluates the
+    # tree as it was at invocation (artifacts created by lint/test cannot
+    # dirty it), and the baseline is read from the ledger exactly once.
     dirty_at_start = gitops.dirty_files(repo)
+    baseline_at_start = status.read_baseline(root)
 
     report = GateReport()
     for name in GATE_ORDER:
@@ -144,7 +141,7 @@ def run_gates(root: Path) -> str:
         elif name == "test":
             result = _command_gate("test", str(cfg.get("test_command") or ""), root)
         else:
-            result = _working_tree_gate(root, repo, dirty_at_start)
+            result = _working_tree_gate(repo, dirty_at_start, baseline_at_start)
         report.results.append(result)
         if result.status == "FAIL":
             raise SpecopsError(report.render())

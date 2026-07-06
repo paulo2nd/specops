@@ -112,7 +112,7 @@ def test_reconcile_violation_stops_before_lint(
     def _forbidden(*args, **kwargs):
         raise AssertionError("lint/test must not run after a reconcile FAIL")
 
-    monkeypatch.setattr(review.subprocess, "run", _forbidden)
+    monkeypatch.setattr(review.shell, "run_client_command", _forbidden)
     with pytest.raises(SpecopsError) as exc:
         review.run_gates(root)
     msg = str(exc.value)
@@ -154,14 +154,14 @@ def test_failing_lint_stops_before_test(
 ) -> None:
     fail_cmd = f'"{sys.executable}" -c "import sys; sys.exit(2)"'
     _all_pass_setup(fake_speckit_repo, lint=fail_cmd, test="echo test")
-    real_run = review.subprocess.run
+    real_run = review.shell.run_client_command
     calls: list[str] = []
 
-    def _spy(cmd, **kwargs):
+    def _spy(cmd, cwd):
         calls.append(cmd)
-        return real_run(cmd, **kwargs)
+        return real_run(cmd, cwd)
 
-    monkeypatch.setattr(review.subprocess, "run", _spy)
+    monkeypatch.setattr(review.shell, "run_client_command", _spy)
     with pytest.raises(SpecopsError) as exc:
         review.run_gates(fake_speckit_repo)
     msg = str(exc.value)
