@@ -9,7 +9,7 @@ description: "Task list template for feature implementation"
 
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Per the Constitution (Development Workflow & Quality Gates, task gate), every task MUST be closed with passing automated tests and recorded evidence - include test tasks for each story.
+**Tests**: The examples below include test tasks. Per the Constitution (Development Workflow & Quality Gates, task gate), every task MUST be closed with passing automated tests - include test tasks for each story.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 

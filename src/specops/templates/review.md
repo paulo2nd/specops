@@ -6,35 +6,23 @@ Token-optimized review command for SpecOps. Follow the steps below in strict ord
 
 Check `skills_dir` (from `specops.json`). If the directory contains skill files, load them before proceeding. If it is empty or missing, continue — skills are optional.
 
-### Step 2 — Reconcile Gate
+### Step 2 — Deterministic Gates
 
-Run `specops reconcile`.
+Run `specops review`.
 
-- Exit code ≠ 0 → **REJECTED**. Report the reconcile output. Stop here. Do not read any code.
+- Exit code ≠ 0 → **REJECTED**. Report the command's output. Stop here. Do not read any code.
+- Exit code 0 → all gates passed (reconcile, lint, test, working tree). If the report shows any gate as `SKIPPED`, remember it for the revision report (Step 4). Continue.
 
-### Step 3 — Lint and Test Pre-filter
+### Step 3 — Surgical Diff Review
 
-Run `lint_command` and `test_command` (from `specops.json`).
-
-- Either command fails → **REJECTED**. Report which command failed and its exit code. Stop here.
-
-### Step 4 — Working Tree Check
-
-Run `git status --porcelain`.
-
-- Output is non-empty (uncommitted changes) → **REJECTED** dirty working tree. List the files. Stop here. Do not read any code.
-- No effective diff against baseline → **REJECTED** no effective diff. Stop here.
-
-### Step 5 — Surgical Diff Review
-
-Read only the files that changed (from the effective diff).
+Read only the files listed by the working-tree gate in the `specops review` output — that list is the effective diff against the ledger baseline. Do not review anything outside it.
 
 Review against:
 - The spec Success Criteria and acceptance conditions.
 - The plan's declared architecture and path declarations.
 - The Constitution's Core Principles (correctness, not style).
 
-### Step 6 — Write Revision Report
+### Step 4 — Write Revision Report
 
 Create `revisions/revision-X.md` where X = (max existing revision number + 1).
 
@@ -48,7 +36,9 @@ Example:
 src/specops/status.py:42 - L2 violated: two tasks IN_PROGRESS simultaneously; enforce single-active-task guard
 ```
 
-If no non-conformities: write `revision-X.md` with a single line `APPROVED`.
+If the gate report showed any `SKIPPED` gate, record each one in `revision-X.md` on its own line — `Skipped gate: <name> (<reason>)` — so a gate that never ran is visible in the verdict, not silently approved.
+
+If no non-conformities: write `revision-X.md` with a single line `APPROVED` (followed by any `Skipped gate:` lines).
 
 Set the review decision:
 - At least one non-conformity → **REJECTED**

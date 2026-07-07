@@ -1,6 +1,24 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.2.1 → 1.3.0
+Rationale (1.3.0, 2026-07-06): Development practice reversal decided by the
+maintainer after the 004-review-gates-cli implementation had to remove
+self-applied artifacts (commit ca2244b): SpecOps is NO LONGER self-applied
+(dogfooded) inside this repository while the tool is being defined. The
+Development Workflow & Quality Gates section is rewritten — no specops.json,
+ledger, injected directives, or installed review command in this repo;
+development state is tracked by plain Speckit artifacts, and specops gate
+behavior is validated exclusively through the automated test-suite fixtures.
+The plan/review gates no longer require running `specops consistency` /
+`specops reconcile` against this repository. Product principles I–VI are
+untouched (the injected directives remain product assets for client repos).
+MINOR bump per this file's own policy: no principle removed or redefined;
+materially rewritten guidance in a non-principle section. Templates updated:
+.specify/templates/tasks-template.md (task gate note no longer mentions
+ledger-recorded evidence).
+
+Previous report (1.2.1):
 Version change: 1.2.0 → 1.2.1
 Rationale (1.2.1, 2026-07-05): Factual correction — the PyPI distribution name
 `specops-cli` was already taken by an unrelated project, so the package is
@@ -236,17 +254,25 @@ if the underlying commands are mechanically composable.
 
 ## Development Workflow & Quality Gates
 
-Development of SpecOps itself follows the same methodology it packages
-(dogfooding), under the Speckit lifecycle:
+SpecOps is developed under the plain Speckit lifecycle. The tool MUST NOT be
+self-applied inside this repository while it is being defined: no
+`specops.json` at the repository root, no `status.yaml` ledger under
+`specs/*`, no `specops init` against this repository's own Speckit assets,
+and no installed `/specops-review` command. Development state is tracked by
+Speckit artifacts (`tasks.md` checkboxes). The stage directives under
+`src/specops/templates/directives/` are product assets for client
+repositories and MUST NOT be executed against this repository.
 
-1. **Plan gate**: `specops consistency` MUST pass before a plan is accepted
-   (once available; until then, plans are checked manually against
-   Principle IV's Empirical Verification directive).
-2. **Task gate**: every task is closed only with passing automated tests and
-   evidence recorded in the ledger — no strict TDD required, but no task is
-   `DONE` without tests.
-3. **Review gate**: `specops reconcile` MUST pass before review begins;
-   review follows the token-optimized order of Principle IV.
+1. **Plan gate**: plans are checked manually against Principle IV's
+   Empirical Verification directive — declared paths verified against the
+   worktree, and every spec success criterion coverable by the planned work.
+2. **Task gate**: every task is closed only with passing automated tests —
+   no strict TDD required, but no task is complete without tests.
+3. **Review gate**: reviews run lint and the full test suite before any code
+   is read, following the token-optimized order of Principle IV. SpecOps'
+   own gate behavior (reconcile, consistency, review) is validated
+   exclusively through the automated test-suite fixtures under `tests/`,
+   never by running `specops` commands against this repository.
 4. **Human gates**: Stop-and-Ask conditions interrupt any phase at any time.
 
 Every `plan.md` MUST include a Constitution Check section evaluating the
@@ -270,4 +296,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.2.1 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-05
+**Version**: 1.3.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-06

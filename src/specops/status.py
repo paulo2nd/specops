@@ -4,12 +4,11 @@ from __future__ import annotations
 import datetime
 import os
 import re
-import subprocess
 from pathlib import Path
 
 import yaml
 
-from specops import config, gitops, speckit
+from specops import config, gitops, shell, speckit
 from specops.errors import LedgerParseError, SpecopsError
 
 # ---------------------------------------------------------------------------
@@ -130,6 +129,13 @@ def _validate_evidence(evidence: str) -> bool:
         if not summary or summary[0] == " ":
             return False
     return True
+
+
+def read_baseline(root: Path) -> str:
+    """Return the ledger's baseline commit hash, or '' when absent. Read-only."""
+    feature_dir = _get_feature_dir(root)
+    data = _load_ledger(feature_dir)
+    return str(data.get("baseline") or "")
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +272,7 @@ def cmd_complete_task(
         if not test_cmd:
             raise SpecopsError("test_command not set in specops.json; cannot use --auto.")
 
-        result = subprocess.run(test_cmd, shell=True, capture_output=True, text=True)
+        result = shell.run_client_command(test_cmd, root)
         if result.returncode != 0:
             raise SpecopsError(
                 f"test_command failed (exit {result.returncode}). "

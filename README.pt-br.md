@@ -157,6 +157,40 @@ qualquer divergência.
 specops reconcile || exit 1   # preflight antes da revisão
 ```
 
+### `specops review`
+
+Gate somente leitura. Executa os gates determinísticos de revisão do-mais-barato-
+primeiro com parada antecipada: **reconcile → lint → test → working
+tree/diff efetivo**. O primeiro gate que falha interrompe a execução e imprime
+sua evidência no stderr (saída 1); passando tudo, imprime um relatório por gate
+no stdout (saída 0) que lista os arquivos do diff efetivo — exatamente o escopo
+que o agente de revisão lê em seguida. Erros de parse do ledger mantêm a saída 2.
+Roda de qualquer diretório dentro do repo, nunca escreve no ledger nem em
+qualquer arquivo do repositório, não exige fase específica e nunca pergunta
+nada — seguro como step de CI.
+
+```bash
+specops review                # local: valida os gates da mudança atual
+```
+
+Como gate de CI:
+
+```yaml
+# .github/workflows/ci.yml (step)
+- run: pip install speckit-specops
+- run: specops review
+```
+
+Como gate automatizado dentro de um workflow do Speckit (substitui um gate
+humano de approve/reject; o YAML é seu, sem acoplamento ao SpecOps):
+
+```yaml
+- id: review
+  type: shell
+  run: specops review
+  on_fail: abort
+```
+
 ### `specops consistency`
 
 Gate somente leitura. Verifica que todo `SC-\d+` na spec tem ≥ 1 tarefa com uma
@@ -173,7 +207,7 @@ Imprime a versão e sai. Funciona em qualquer lugar.
 | Chave | Propósito | Padrão |
 |---|---|---|
 | `test_command` | Comando rodado por `complete-task --auto` | `pytest` |
-| `lint_command` | Comando referenciado pelo prompt de revisão | `""` |
+| `lint_command` | Gate de lint executado por `specops review` (vazio = pulado) | `""` |
 | `skills_dir` | Diretório de onde o prompt de revisão carrega skills | `.specify/skills` |
 
 Chaves desconhecidas são preservadas na reinicialização.
@@ -185,12 +219,11 @@ Instalado por `specops init` (o nome segue o separador do layout, ex.:
 empacotado que conduz o agente de revisão do-mais-barato-primeiro:
 
 1. Carrega skills de `skills_dir`.
-2. `specops reconcile` — aborta imediatamente em caso de falha.
-3. `lint_command` + `test_command` — rejeita em caso de falha.
-4. `git status --porcelain` — rejeita qualquer arquivo fora do plano sem ler
-   código.
-5. Revisão cirúrgica do diff apenas dos arquivos no escopo.
-6. Escreve `revisions/revision-X.md` e registra o resultado `APPROVED`/`REJECTED`.
+2. `specops review` — a CLI executa todos os gates determinísticos (reconcile,
+   lint, test, working tree); qualquer saída diferente de zero é um REJECTED
+   imediato sem ler uma única linha de código.
+3. Revisão cirúrgica do diff apenas dos arquivos no escopo.
+4. Escreve `revisions/revision-X.md` e registra o resultado `APPROVED`/`REJECTED`.
 
 ## Política de idioma
 

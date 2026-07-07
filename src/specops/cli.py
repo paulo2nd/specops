@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+import git
 import typer
 
 from specops import gitops
@@ -68,11 +69,16 @@ def _handle_errors(fn: _F) -> _F:
     return wrapper  # type: ignore[return-value]
 
 
-def _require_git(root: Path = Path(".")) -> None:
-    """Fail with exit 1 within <1 s when not inside a Git repo (FR-002, SC-008)."""
-    if not gitops.is_git_repo(root):
+def _require_git(root: Path = Path(".")) -> git.Repo:
+    """Fail with exit 1 within <1 s when not inside a Git repo (FR-002, SC-008).
+
+    Returns the resolved Repo so callers that need it don't re-derive it.
+    """
+    repo = gitops.find_repo(root)
+    if repo is None:
         typer.echo("Not a Git repository. Run 'git init' or 'specops init' first.", err=True)
         raise typer.Exit(1)
+    return repo
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +130,20 @@ def consistency() -> None:
             typer.echo(v, err=True)
         raise typer.Exit(1)
     typer.echo("consistency: ok")
+
+
+@app.command("review")
+@_handle_errors
+def review() -> None:
+    """Run the deterministic review gates (reconcile → lint → test → working tree)."""
+    repo = _require_git(Path("."))
+    from specops import review as review_mod
+    # Contract: usable from any directory inside the repo — resolve the root.
+    if repo.working_tree_dir is None:  # bare repository — no tree to review
+        typer.echo("Not a work tree (bare repository).", err=True)
+        raise typer.Exit(1)
+    root = Path(repo.working_tree_dir)
+    typer.echo(review_mod.run_gates(root))
 
 
 # ---------------------------------------------------------------------------

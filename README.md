@@ -149,6 +149,39 @@ every `DONE` task has commits and evidence. Exit 1 on any divergence.
 specops reconcile || exit 1   # preflight before review
 ```
 
+### `specops review`
+
+Read-only gate. Runs the deterministic review gates cheapest-first with early
+stop: **reconcile → lint → test → working tree/effective diff**. The first
+failing gate stops the run and prints its evidence to stderr (exit 1); a full
+pass prints a per-gate report to stdout (exit 0) that lists the effective-diff
+files — the exact scope the review agent then reads. Ledger parse errors keep
+exit 2. Runs from any directory inside the repo, never writes to the ledger or
+any repository file, needs no specific ledger phase, and never prompts — safe
+as a CI step.
+
+```bash
+specops review                # local: gate-check the current change
+```
+
+As a CI gate:
+
+```yaml
+# .github/workflows/ci.yml (step)
+- run: pip install speckit-specops
+- run: specops review
+```
+
+As an automated gate inside a Speckit workflow (replaces a human
+approve/reject gate; the YAML is yours, no SpecOps coupling):
+
+```yaml
+- id: review
+  type: shell
+  run: specops review
+  on_fail: abort
+```
+
 ### `specops consistency`
 
 Read-only gate. Verifies every `SC-\d+` in the spec has ≥ 1 task with a matching
@@ -164,7 +197,7 @@ Prints the version and exits. Works anywhere.
 | Key | Purpose | Default |
 |---|---|---|
 | `test_command` | Command run by `complete-task --auto` | `pytest` |
-| `lint_command` | Command referenced by the review prompt | `""` |
+| `lint_command` | Lint gate run by `specops review` (empty = skipped) | `""` |
 | `skills_dir` | Directory the review prompt loads skills from | `.specify/skills` |
 
 Unknown keys are preserved on re-init.
@@ -176,11 +209,11 @@ Installed by `specops init` (the name follows the layout's separator, e.g.
 drives the review agent cheapest-rejection-first:
 
 1. Load skills from `skills_dir`.
-2. `specops reconcile` — abort immediately on failure.
-3. `lint_command` + `test_command` — reject on failure.
-4. `git status --porcelain` — reject any out-of-plan file without reading code.
-5. Surgical diff review of in-scope files only.
-6. Write `revisions/revision-X.md` and record the `APPROVED`/`REJECTED` outcome.
+2. `specops review` — the CLI runs all deterministic gates (reconcile,
+   lint, test, working tree); any non-zero exit is an immediate REJECTED
+   without reading a single line of code.
+3. Surgical diff review of in-scope files only.
+4. Write `revisions/revision-X.md` and record the `APPROVED`/`REJECTED` outcome.
 
 ## Language policy
 
