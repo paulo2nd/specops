@@ -139,6 +139,9 @@ def review() -> None:
     repo = _require_git(Path("."))
     from specops import review as review_mod
     # Contract: usable from any directory inside the repo — resolve the root.
+    if repo.working_tree_dir is None:  # bare repository — no tree to review
+        typer.echo("Not a work tree (bare repository).", err=True)
+        raise typer.Exit(1)
     root = Path(repo.working_tree_dir)
     typer.echo(review_mod.run_gates(root))
 
