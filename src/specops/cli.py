@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import functools
 import importlib.metadata
-import git
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+import git
 import typer
 
 from specops import gitops
