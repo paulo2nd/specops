@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-14
+
+### Fixed
+
+- Windows: `specops --help` and phase-transition messages no longer crash with
+  `UnicodeEncodeError` when stdout/stderr default to cp1252. The CLI now forces
+  UTF-8 output at startup so non-ASCII glyphs (e.g. `→`) render everywhere,
+  including redirected output. Surfaced by the conda-forge Windows build.
+- `specops --version` reported `0.0.0.dev0` for installed builds: the version
+  lookup queried the wrong distribution name (`specops-cli` instead of
+  `speckit-specops`). It now reports the correct installed version.
+
 ## [0.2.0] - 2026-07-06
 
 ### Added
