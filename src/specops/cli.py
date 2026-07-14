@@ -1,8 +1,10 @@
 """SpecOps CLI entrypoint (Typer). All output is in English (FR-014)."""
 from __future__ import annotations
 
+import contextlib
 import functools
 import importlib.metadata
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -14,10 +16,25 @@ from specops import gitops
 from specops.errors import SpecopsError
 
 
+def _force_utf8_output() -> None:
+    """Force UTF-8 on stdout/stderr so non-ASCII output (e.g. the '→' in help
+    and phase-transition messages) does not crash on Windows consoles that
+    default to cp1252. Runs at import time, before any output is written."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        with contextlib.suppress(ValueError, OSError):
+            reconfigure(encoding="utf-8")
+
+
+_force_utf8_output()
+
+
 def _version_callback(value: bool) -> None:
     if value:
         try:
-            version = importlib.metadata.version("specops-cli")
+            version = importlib.metadata.version("speckit-specops")
         except importlib.metadata.PackageNotFoundError:
             version = "0.0.0.dev0"
         typer.echo(f"specops {version}")
