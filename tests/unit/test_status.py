@@ -205,6 +205,26 @@ def test_corrective_round_increments_review_cycle(tmp_path: Path) -> None:
     assert data["review_cycles"][1]["round"] == 2
 
 
+def test_corrective_round_reuses_placeholder_when_review_resumes(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "REVIEW")
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    data["review_cycles"] = [
+        {"round": 1, "started_at": "2026-07-05", "completed_at": None, "result": None}
+    ]
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+
+    s.cmd_transition_phase(root, "IMPLEMENT", result="REJECTED")
+    s.cmd_transition_phase(root, "REVIEW", result=None)
+
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    assert len(data["review_cycles"]) == 2
+    assert data["review_cycles"][0]["result"] == "REJECTED"
+    assert data["review_cycles"][1]["round"] == 2
+    assert data["review_cycles"][1]["started_at"] is not None
+    assert data["review_cycles"][1]["completed_at"] is None
+    assert data["review_cycles"][1]["result"] is None
+
+
 # ---------------------------------------------------------------------------
 # Task transitions
 # ---------------------------------------------------------------------------

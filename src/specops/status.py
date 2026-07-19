@@ -437,16 +437,27 @@ def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
             f"Invalid transition: {current} → {target}. Expected next phase: {next_phase}."
         )
 
-    # Entering REVIEW: open a review cycle
+    # Entering REVIEW: start the corrective placeholder, or open a new cycle.
+    # REVIEW -> IMPLEMENT(REJECTED) creates the next-round placeholder so the
+    # corrective work has a stable round to reference. Re-entering REVIEW must
+    # activate that placeholder instead of appending a second open round.
     if target == "REVIEW":
         cycles = data.setdefault("review_cycles", [])
-        round_num = len(cycles) + 1
-        cycles.append({
-            "round": round_num,
-            "started_at": _today(),
-            "completed_at": None,
-            "result": None,
-        })
+        pending = cycles[-1] if cycles else None
+        if (
+            pending
+            and pending.get("result") is None
+            and pending.get("started_at") is None
+        ):
+            pending["started_at"] = _today()
+        else:
+            round_num = len(cycles) + 1
+            cycles.append({
+                "round": round_num,
+                "started_at": _today(),
+                "completed_at": None,
+                "result": None,
+            })
 
     # Closing REVIEW via corrective REVIEW→IMPLEMENT(REJECTED)
     if current == "REVIEW" and target == "IMPLEMENT" and normalized_result == "REJECTED":

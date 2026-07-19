@@ -8,10 +8,10 @@
 Leia em: [English](README.md) | **Português (BR)**
 
 **O SpecOps transforma o fluxo spec-driven do
-[GitHub Speckit](https://github.com/vgrecov/speckit) em um processo imposto e
+[GitHub Spec Kit](https://github.com/github/spec-kit) em um processo imposto e
 auditável.** Ele adiciona uma metodologia de *desenvolvimento atômico* guiada
 por agentes sobre qualquer repositório Speckit — um ledger físico de estado,
-evidências coletadas por máquina e revisão otimizada em tokens — **sem
+evidências tipadas com coleta por máquina e revisão otimizada em tokens — **sem
 substituir nem forkar um único arquivo do Speckit.**
 
 > O Speckit dá aos seus agentes ótimos artefatos (spec → plan → tasks →
@@ -27,9 +27,9 @@ recorrentes. O SpecOps trata cada um:
 
 | Problema | Sem SpecOps | Com SpecOps |
 |---|---|---|
-| **Agentes alucinam progresso** | "Pronto ✅" sem prova | Cada tarefa é fechada com evidência coletada por máquina (saída de teste, hashes de commit, diffs) registrada no ledger |
+| **Agentes alucinam progresso** | "Pronto ✅" sem prova | Cada tarefa fecha com evidência tipada; `--auto` anexa saída de teste, hashes de commit e diffs na fronteira de commit |
 | **O estado vive no chat** | Perdido ao resetar o contexto; não auditável | O estado é um ledger físico `status.yaml`, verificável pelo Git e seguro para recuperação |
-| **Revisões são lentas e caras** | O agente lê o repo inteiro | `/specops-review` rejeita do mais barato primeiro (reconcile → lint/test → arquivos fora do plano) antes de ler qualquer código |
+| **Revisões são lentas e caras** | O agente lê o repo inteiro | `/specops-review` rejeita do mais barato primeiro (reconcile → lint/test → working tree/diff efetivo) antes de ler qualquer código |
 
 ## O que ele adiciona ao Speckit
 
@@ -44,13 +44,14 @@ recorrentes. O SpecOps trata cada um:
   ledger seja criado e as fases avancem automaticamente — o humano nunca faz a
   escrituração manual.
 - **✂️ Revisão cirúrgica otimizada em tokens.** O comando `/specops-review`
-  instalado revisa apenas os arquivos no escopo e para na primeira rejeição
+  instalado revisa apenas os arquivos do diff efetivo e para na primeira rejeição
   barata.
 - **📐 Verificação empírica e gates.** `specops consistency` e
   `specops reconcile` são gates por código de saída que você pode plugar no CI
   ou em prompts de agente.
 - **➕ Aditivo e reversível.** Tudo é entregue por blocos delimitados por
-  marcadores. Desinstalar restaura os seus arquivos do Speckit byte a byte.
+  marcadores. Remover esses blocos restaura os arquivos afetados do Speckit
+  byte a byte.
 
 ## Instalação
 
@@ -149,9 +150,10 @@ Entrar em `DONE` exige que o último ciclo de revisão seja `APPROVED`.
 
 ### `specops reconcile`
 
-Gate somente leitura. Verifica que todo hash de commit do ledger é alcançável a
-partir de `HEAD` e que toda tarefa `DONE` tem commits e evidências. Sai com 1 em
-qualquer divergência.
+Gate somente leitura. Verifica que todo commit registrado no ledger é alcançável
+a partir de `HEAD` e que toda tarefa `DONE` tem evidência. Tarefas intermediárias
+podem intencionalmente não ter commit quando a granularidade é por user story.
+Sai com 1 em qualquer divergência.
 
 ```bash
 specops reconcile || exit 1   # preflight antes da revisão
@@ -222,7 +224,7 @@ empacotado que conduz o agente de revisão do-mais-barato-primeiro:
 2. `specops review` — a CLI executa todos os gates determinísticos (reconcile,
    lint, test, working tree); qualquer saída diferente de zero é um REJECTED
    imediato sem ler uma única linha de código.
-3. Revisão cirúrgica do diff apenas dos arquivos no escopo.
+3. Revisão cirúrgica apenas dos arquivos do diff efetivo.
 4. Escreve `revisions/revision-X.md` e registra o resultado `APPROVED`/`REJECTED`.
 
 ## Política de idioma
