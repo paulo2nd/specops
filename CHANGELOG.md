@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrective reviews now resume the placeholder cycle created after a rejection
+  instead of appending an extra open cycle and skipping the intended round.
+- English and Portuguese documentation now match the effective-diff review
+  scope, per-user-story commit semantics, and manual marker-block removal.
+- The project link now points to the canonical GitHub Spec Kit repository.
+
 ## [0.2.1] - 2026-07-14
 
 ### Fixed

@@ -7,10 +7,11 @@
 
 Read this in: **English** | [Português (BR)](README.pt-br.md)
 
-**SpecOps turns [GitHub Speckit](https://github.com/vgrecov/speckit)'s
+**SpecOps turns [GitHub Spec Kit](https://github.com/github/spec-kit)'s
 spec-driven workflow into an enforced, auditable process.** It layers an
 agent-guided *atomic development* methodology on top of any Speckit repository —
-a physical state ledger, machine-collected evidence, and token-optimized review —
+a physical state ledger, typed evidence with machine collection, and
+token-optimized review —
 **without replacing or forking a single Speckit file.**
 
 > Speckit gives your agents great artifacts (spec → plan → tasks → implement).
@@ -25,9 +26,9 @@ SpecOps addresses each one:
 
 | Problem | Without SpecOps | With SpecOps |
 |---|---|---|
-| **Agents hallucinate progress** | "Done ✅" with no proof | Every task is closed with machine-collected evidence (test output, commit hashes, diffs) recorded in the ledger |
+| **Agents hallucinate progress** | "Done ✅" with no proof | Every task closes with typed evidence; `--auto` attaches test output, commit hashes, and diffs at the commit boundary |
 | **State lives in the chat** | Lost on context reset; not auditable | State is a physical `status.yaml` ledger, Git-verifiable and recovery-safe |
-| **Reviews are slow and expensive** | Agent reads the whole repo | `/specops-review` rejects cheapest-first (reconcile → lint/test → out-of-plan files) before reading any code |
+| **Reviews are slow and expensive** | Agent reads the whole repo | `/specops-review` rejects cheapest-first (reconcile → lint/test → working tree/effective diff) before reading any code |
 
 ## What it adds to Speckit
 
@@ -42,12 +43,12 @@ SpecOps addresses each one:
   is created and phases advance automatically — the human never runs the
   bookkeeping by hand.
 - **✂️ Token-optimized surgical review.** The installed `/specops-review`
-  command reviews only in-scope files and stops at the first cheap rejection.
+  command reviews only effective-diff files and stops at the first cheap rejection.
 - **📐 Empirical verification & gates.** `specops consistency` and
   `specops reconcile` are exit-code gates you can drop into CI or agent prompts.
 - **➕ Additive and reversible.** Everything is delivered through
-  marker-delimited blocks. Uninstalling restores your Speckit files
-  byte-for-byte.
+  marker-delimited blocks. Removing those blocks restores the affected Speckit
+  files byte-for-byte.
 
 ## Install
 
@@ -142,8 +143,9 @@ Entering `DONE` requires the latest review cycle to be `APPROVED`.
 
 ### `specops reconcile`
 
-Read-only gate. Verifies every ledger commit hash is reachable from `HEAD` and
-every `DONE` task has commits and evidence. Exit 1 on any divergence.
+Read-only gate. Verifies every recorded ledger commit is reachable from `HEAD`
+and every `DONE` task has evidence. Intermediate tasks may intentionally have no
+commit when commit granularity is per user story. Exit 1 on any divergence.
 
 ```bash
 specops reconcile || exit 1   # preflight before review
@@ -212,7 +214,7 @@ drives the review agent cheapest-rejection-first:
 2. `specops review` — the CLI runs all deterministic gates (reconcile,
    lint, test, working tree); any non-zero exit is an immediate REJECTED
    without reading a single line of code.
-3. Surgical diff review of in-scope files only.
+3. Surgical review of effective-diff files only.
 4. Write `revisions/revision-X.md` and record the `APPROVED`/`REJECTED` outcome.
 
 ## Language policy
