@@ -270,5 +270,15 @@ def extension_install(
     typer.echo(f"extension install: {status}")
 
 
+@extension_app.command("migrate")
+@_handle_errors
+def extension_migrate() -> None:
+    """Migrate a legacy marker-injected installation to the native extension."""
+    root = Path(".")
+    from specops import migration
+    status = migration.migrate(root)
+    typer.echo(f"extension migrate: {status}")
+
+
 if __name__ == "__main__":
     app()

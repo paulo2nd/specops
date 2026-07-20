@@ -10,10 +10,15 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from specops import compat, extension
+from specops import compat, extension, initializer, migration
 from specops.cli import app
 
 runner = CliRunner()
+
+
+def _legacy_install(root: Path) -> None:
+    """Put a repo into the legacy marker-injected state."""
+    initializer.run(root, non_interactive=True)
 
 
 def _host_hashes(root: Path) -> dict[str, str]:
@@ -141,3 +146,75 @@ def test_cli_extension_install_and_status(fake_speckit_repo, compat_ok, monkeypa
     res_status = runner.invoke(app, ["extension", "status"])
     assert res_status.exit_code == 0, res_status.output
     assert "installation: native" in res_status.output
+
+
+# ===========================================================================
+# User Story 2 — legacy → native migration
+# ===========================================================================
+
+# --- T018: migration preserves config + ledgers, strips markers, goes native ---
+
+def test_migrate_legacy_to_native_preserves_config_and_ledger(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    _legacy_install(root)
+
+    cfg_path = root / "specops.json"
+    cfg = json.loads(cfg_path.read_text())
+    cfg["test_command"] = "custom-runner"
+    cfg_path.write_text(json.dumps(cfg))
+    ledger = root / "specs" / "001-demo" / "status.yaml"
+    ledger.write_text("feature: 001-demo\ncurrent_phase: PLAN\n")
+    ledger_before = ledger.read_text()
+
+    assert migration.detect_state(root) == "legacy"
+    assert migration.migrate(root) == "migrated"
+
+    for p in root.glob(".claude/skills/speckit-*/SKILL.md"):
+        assert "SPECOPS:BEGIN" not in p.read_text()
+    assert migration.detect_state(root) == "native"
+    assert (root / ".specify" / "extensions.yml").is_file()
+    assert json.loads(cfg_path.read_text())["test_command"] == "custom-runner"  # SC-003
+    assert ledger.read_text() == ledger_before  # SC-003
+    assert not (root / ".specify" / ".specops-backup").exists()  # backups discarded
+
+
+# --- T019: a fault mid-migration restores every touched host file exactly ---
+
+def test_migrate_restores_host_files_on_failure(fake_speckit_repo, compat_ok, monkeypatch):
+    root = fake_speckit_repo
+    _legacy_install(root)
+    before = {
+        str(p.relative_to(root)): p.read_bytes()
+        for p in root.glob(".claude/skills/speckit-*/SKILL.md")
+    }
+
+    def _boom(_root):
+        raise RuntimeError("injected fault after host files stripped")
+
+    monkeypatch.setattr(extension, "install", _boom)
+    with pytest.raises(RuntimeError):
+        migration.migrate(root)
+
+    after = {
+        str(p.relative_to(root)): p.read_bytes()
+        for p in root.glob(".claude/skills/speckit-*/SKILL.md")
+    }
+    assert after == before  # 100% of touched host files restored (SC-008)
+    assert not (root / ".specify" / ".specops-backup").exists()
+
+
+# --- T021: migrating an already-native repo is a no-op ---
+
+def test_migrate_already_native_is_noop(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    extension.install(root)
+    assert migration.migrate(root) == "already native"
+
+
+def test_cli_extension_migrate(fake_speckit_repo, compat_ok, monkeypatch):
+    root = fake_speckit_repo
+    _legacy_install(root)
+    monkeypatch.chdir(root)
+    res = runner.invoke(app, ["extension", "migrate"])
+    assert res.exit_code == 0, res.output
+    assert "extension migrate: migrated" in res.output

@@ -172,13 +172,10 @@ def register_commands(root: Path) -> list[dict]:
 # Install orchestration (T016)
 # ---------------------------------------------------------------------------
 
-def install(root: Path) -> str:
-    """Register SpecOps natively. Fail-closed pre-checks run BEFORE any write, so
-    a rejected install leaves the repository unchanged (FR-001, FR-013, FR-016).
-
-    Returns "created", "updated", or "unchanged" (semantic idempotency, FR-005).
-    """
-    # 1. Pre-checks — nothing is written until all pass.
+def preflight(root: Path) -> list[dict]:
+    """Fail-closed pre-checks shared by install and migrate. Raises
+    :class:`ExtensionError` (leaving the repo unchanged) and returns the resolved
+    review-command targets on success (FR-013, FR-016)."""
     if gitops.find_repo(root) is None:
         raise ExtensionError("Not a Git repository. Run 'git init' or 'specops init' first.")
     if not speckit.has_speckit(root):
@@ -194,6 +191,17 @@ def install(root: Path) -> str:
         raise ExtensionError(f"No compatible integration: {exc}") from None
     if not targets:
         raise ExtensionError("No installed integration to register with.")
+    return targets
+
+
+def install(root: Path) -> str:
+    """Register SpecOps natively. Fail-closed pre-checks run BEFORE any write, so
+    a rejected install leaves the repository unchanged (FR-001, FR-013, FR-016).
+
+    Returns "created", "updated", or "unchanged" (semantic idempotency, FR-005).
+    """
+    # 1. Pre-checks — nothing is written until all pass.
+    targets = preflight(root)
 
     # 2. Compute desired state and compare for idempotency.
     existing = read_manifest(root)

@@ -94,16 +94,16 @@ host files exactly.
 
 ### Tests for User Story 2 (write first, ensure they FAIL) ⚠️
 
-- [ ] T018 [P] [US2] Integration test in `tests/integration/test_extension_lifecycle.py`: legacy→native migration removes all `SPECOPS:BEGIN` markers, registers native, and leaves `specops.json` + every feature ledger unchanged [SC-003]
-- [ ] T019 [P] [US2] Integration test in `tests/integration/test_extension_lifecycle.py`: a fault injected after the first host file is stripped restores **all** touched host files to exact pre-migration bytes and exits 1 [SC-008]
-- [ ] T020 [P] [US2] Unit test in `tests/unit/test_migration.py`: backup set create/restore round-trips bytes (sha256), and marker strip preserves all content outside markers [SC-003,SC-008]
-- [ ] T021 [P] [US2] Integration test in `tests/integration/test_extension_lifecycle.py`: migrating an already-native repo is a no-op reporting `already native`, exit 0 [SC-002]
+- [x] T018 [P] [US2] Integration test in `tests/integration/test_extension_lifecycle.py`: legacy→native migration removes all `SPECOPS:BEGIN` markers, registers native, and leaves `specops.json` + every feature ledger unchanged [SC-003]
+- [x] T019 [P] [US2] Integration test in `tests/integration/test_extension_lifecycle.py`: a fault injected after the first host file is stripped restores **all** touched host files to exact pre-migration bytes and exits 1 [SC-008]
+- [x] T020 [P] [US2] Unit test in `tests/unit/test_migration.py`: backup set create/restore round-trips bytes (sha256), and marker strip preserves all content outside markers [SC-003,SC-008]
+- [x] T021 [P] [US2] Integration test in `tests/integration/test_extension_lifecycle.py`: migrating an already-native repo is a no-op reporting `already native`, exit 0 [SC-002]
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Implement the migration backup set in `src/specops/migration.py`: back up each host file about to be edited under `.specify/.specops-backup/<run_id>/`, and `restore_all()` to exact bytes on failure/abort, discarding backups on success [SC-008]
-- [ ] T023 [US2] Implement `migrate(root)` orchestration in `src/specops/migration.py`: same fail-closed pre-checks as install, then ordered interruption-safe flow — backup → strip markers via `initializer.remove_block` → `extension.install`; on any error `restore_all()` and exit 1; preserve `specops.json` + ledgers [SC-003,SC-008]
-- [ ] T024 [US2] Wire `specops extension migrate` in `src/specops/cli.py` to `migration.migrate` [SC-003]
+- [x] T022 [US2] Implement the migration backup set in `src/specops/migration.py`: back up each host file about to be edited under `.specify/.specops-backup/<run_id>/`, and `restore_all()` to exact bytes on failure/abort, discarding backups on success [SC-008]
+- [x] T023 [US2] Implement `migrate(root)` orchestration in `src/specops/migration.py`: same fail-closed pre-checks as install, then ordered interruption-safe flow — backup → strip markers via `initializer.remove_block` → `extension.install`; on any error `restore_all()` and exit 1; preserve `specops.json` + ledgers [SC-003,SC-008]
+- [x] T024 [US2] Wire `specops extension migrate` in `src/specops/cli.py` to `migration.migrate` [SC-003]
 
 **Checkpoint**: US1 + US2 both work independently.
 
