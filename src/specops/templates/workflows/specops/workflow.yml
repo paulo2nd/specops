@@ -129,4 +129,4 @@ steps:
   # --- Completion: workflow-owned final transition (idempotent-tolerant) ------
   - id: done
     type: shell
-    run: "specops status transition-phase DONE -r APPROVED"
+    run: "specops status transition-phase DONE -r APPROVED --if-needed"

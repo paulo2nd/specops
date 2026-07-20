@@ -185,6 +185,29 @@ def test_phase_specify_to_plan(tmp_path: Path) -> None:
     assert "SPECIFY" in msg and "PLAN" in msg
 
 
+# --- T014: idempotent-tolerant transitions (--if-needed, analyze C1) ---
+
+def test_transition_if_needed_same_phase_is_noop(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "PLAN")
+    before = (feature_dir / "status.yaml").read_text()
+    msg = s.cmd_transition_phase(root, "PLAN", result=None, if_needed=True)
+    assert "no-op" in msg
+    # Ledger unchanged (no revision bump, no rewrite of content).
+    assert (feature_dir / "status.yaml").read_text() == before
+
+
+def test_transition_if_needed_still_advances_when_behind(tmp_path: Path) -> None:
+    root, _ = _setup_feature(tmp_path, "SPECIFY")
+    msg = s.cmd_transition_phase(root, "PLAN", result=None, if_needed=True)
+    assert "PLAN" in msg and "no-op" not in msg
+
+
+def test_transition_same_phase_without_if_needed_still_errors(tmp_path: Path) -> None:
+    root, _ = _setup_feature(tmp_path, "PLAN")
+    with pytest.raises(SpecopsError, match="Invalid transition"):
+        s.cmd_transition_phase(root, "PLAN", result=None)
+
+
 def test_phase_skip_raises(tmp_path: Path) -> None:
     root, _ = _setup_feature(tmp_path, "SPECIFY")
     with pytest.raises(SpecopsError, match="Invalid transition"):

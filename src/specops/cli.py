@@ -269,12 +269,16 @@ def status_transition_phase(
     result: str = typer.Option(
         None, "-r", "--result", help="Transition result (APPROVED|REJECTED)."
     ),
+    if_needed: bool = typer.Option(
+        False, "--if-needed",
+        help="No-op-and-continue if the ledger is already in the target phase (Feature 007).",
+    ),
 ) -> None:
     """Advance the feature phase state machine."""
     root = Path(".")
     _require_git(root)
     from specops import status
-    typer.echo(status.cmd_transition_phase(root, phase, result=result))
+    typer.echo(status.cmd_transition_phase(root, phase, result=result, if_needed=if_needed))
 
 
 # ---------------------------------------------------------------------------
