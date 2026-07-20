@@ -62,6 +62,43 @@ def _all_pass_setup(root: Path, phase: str = "IMPLEMENT") -> Path:
 # ---------------------------------------------------------------------------
 
 
+class TestReviewJsonOutcome:
+    """Feature 007 (T008): `review --json` emits the stable outcome contract. [SC-006]"""
+
+    def _run_json(self, root: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["specops", "review", "--json"],
+            cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        )
+
+    def test_pass_emits_verdict_approved(self, fake_speckit_repo: Path) -> None:
+        _all_pass_setup(fake_speckit_repo)
+        r = self._run_json(fake_speckit_repo)
+        assert r.returncode == 0
+        obj = json.loads(r.stdout)
+        assert obj["class"] == "pass"
+        assert obj["outcome"] == "ok"
+        assert obj["verdict"] == "APPROVED"
+        assert any(g["name"] == "reconcile" for g in obj["gates"])
+
+    def test_gate_failure_emits_verdict_rejected_exit_one(self, fake_speckit_repo: Path) -> None:
+        _all_pass_setup(fake_speckit_repo)
+        (fake_speckit_repo / "stray.txt").write_text("x\n")
+        r = self._run_json(fake_speckit_repo)
+        assert r.returncode == 1
+        obj = json.loads(r.stdout)
+        assert obj["class"] == "gate-rejection"
+        assert obj["verdict"] == "REJECTED"
+
+    def test_corrupt_ledger_emits_infra_error_exit_two(self, fake_speckit_repo: Path) -> None:
+        ledger = _all_pass_setup(fake_speckit_repo)
+        ledger.write_text("{{{ not yaml :::")
+        r = self._run_json(fake_speckit_repo)
+        assert r.returncode == 2
+        obj = json.loads(r.stdout)
+        assert obj["class"] == "infra-error"
+
+
 class TestReviewExitCodes:
     def test_all_pass_exit_zero_report_on_stdout(self, fake_speckit_repo: Path) -> None:
         _all_pass_setup(fake_speckit_repo)

@@ -46,8 +46,8 @@ Single project: `src/specops/`, `tests/unit/`, `tests/integration/` (existing la
 - [x] T004 Add the additive `workflow` block `{skipped_steps[]}` to the ledger via `ensure_workflow_block` + `migrate_to_current` back-fill (no `run_id`; reconciliation uses Feature 006 identity) in `src/specops/ledger.py` [SC-004][SC-007]
 - [x] T005 Back-fill the `workflow` block on the write path (an **additive within-v2 field**, normalized in `_load_for_write`, not a schema bump — the field carries no invariants and old readers ignore it, so a version bump forcing every v2 ledger to re-migrate would be disproportionate) in `src/specops/status.py` + `src/specops/templates/status.yaml` [SC-004]
 - [x] T006 [P] Back-fill tests (v1 migration produces the block; a v2 ledger gains it on a state change without re-migrating; ensure/idempotency/shape-repair) in `tests/unit/test_ledger.py` and `tests/integration/test_ledger_migration.py` [SC-004]
-- [ ] T007 Add the shared outcome-contract primitive (exit-code constants 0/1/2 + JSON emitter matching `contracts/cli-outcome-contract.md`) in `src/specops/errors.py` (+ a small helper module/function) [SC-006]
-- [ ] T008 [P] Unit tests for the outcome-contract primitive (exit_code↔class↔outcome consistency, G1) in `tests/unit/test_outcome_contract.py` [SC-006]
+- [x] T007 Add the shared outcome-contract primitive (exit-code constants 0/1/2 + JSON emitter matching `contracts/cli-outcome-contract.md`) in `src/specops/errors.py` (+ a small helper module/function) [SC-006]
+- [x] T008 [P] Unit tests for the outcome-contract primitive (exit_code↔class↔outcome consistency, G1) in `tests/unit/test_outcome_contract.py` [SC-006]
 
 **Checkpoint**: Ledger + outcome contract ready — user stories can begin.
 

@@ -114,13 +114,12 @@ def _working_tree_gate(repo: git.Repo, dirty: list[str], baseline: str) -> GateR
     return GateResult("working-tree", "PASS", [header, *changed])
 
 
-def run_gates(root: Path) -> str:
-    """Evaluate all gates cheapest-first with early stop.
+def evaluate(root: Path) -> GateReport:
+    """Evaluate all gates cheapest-first with early stop; return the report.
 
-    *root* is the repository root (the CLI resolves it from the invocation
-    directory). Returns the rendered report on success; raises SpecopsError
-    carrying the report (including the failing gate's evidence) on the
-    first FAIL.
+    Never raises on a failing gate (unlike :func:`run_gates`) — the caller
+    inspects ``report.passed`` and the per-gate results. Used by the ``--json``
+    outcome contract (Feature 007) and by :func:`run_gates`.
     """
     cfg = config.load(root)
     repo = gitops.find_repo(root)
@@ -144,5 +143,14 @@ def run_gates(root: Path) -> str:
             result = _working_tree_gate(repo, dirty_at_start, baseline_at_start)
         report.results.append(result)
         if result.status == "FAIL":
-            raise SpecopsError(report.render())
+            break  # early stop — cheapest-first, first FAIL ends the run
+    return report
+
+
+def run_gates(root: Path) -> str:
+    """Evaluate all gates; return the rendered report on success, or raise
+    SpecopsError carrying the report (exit 1) on the first FAIL."""
+    report = evaluate(root)
+    if not report.passed:
+        raise SpecopsError(report.render())
     return report.render()

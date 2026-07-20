@@ -13,7 +13,7 @@ import git
 import typer
 
 from specops import gitops
-from specops.errors import SpecopsError
+from specops.errors import LedgerParseError, SpecopsError
 
 
 def _force_utf8_output() -> None:
@@ -141,11 +141,27 @@ def reconcile() -> None:
 
 @app.command("consistency")
 @_handle_errors
-def consistency() -> None:
+def consistency(
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
+    ),
+) -> None:
     """Validate SC-ID coverage and plan path-suffix declarations."""
     root = Path(".")
     _require_git(root)
     from specops import consistency as con_mod
+    from specops import outcome
+    if json_out:
+        try:
+            _warnings, violations = con_mod.run(root)
+        except (LedgerParseError, SpecopsError) as exc:
+            typer.echo(outcome.render("consistency", outcome.INFRA_ERROR, detail=exc.message))
+            raise typer.Exit(outcome.EXIT_ERROR) from None
+        if violations:
+            typer.echo(outcome.render("consistency", outcome.GATE_REJECTION, violations=violations))
+            raise typer.Exit(outcome.EXIT_BLOCKED)
+        typer.echo(outcome.render("consistency", outcome.PASS))
+        return
     warnings, violations = con_mod.run(root)
     for w in warnings:
         typer.echo(w)
@@ -158,15 +174,34 @@ def consistency() -> None:
 
 @app.command("review")
 @_handle_errors
-def review() -> None:
+def review(
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
+    ),
+) -> None:
     """Run the deterministic review gates (reconcile → lint → test → working tree)."""
     repo = _require_git(Path("."))
+    from specops import outcome
     from specops import review as review_mod
     # Contract: usable from any directory inside the repo — resolve the root.
     if repo.working_tree_dir is None:  # bare repository — no tree to review
         typer.echo("Not a work tree (bare repository).", err=True)
         raise typer.Exit(1)
     root = Path(repo.working_tree_dir)
+    if json_out:
+        try:
+            report = review_mod.evaluate(root)
+        except (LedgerParseError, SpecopsError) as exc:
+            typer.echo(outcome.render("review", outcome.INFRA_ERROR, detail=exc.message))
+            raise typer.Exit(outcome.EXIT_ERROR) from None
+        gates = [{"name": r.name, "status": r.status} for r in report.results]
+        if report.passed:
+            typer.echo(outcome.render("review", outcome.PASS, verdict="APPROVED", gates=gates))
+            return
+        typer.echo(
+            outcome.render("review", outcome.GATE_REJECTION, verdict="REJECTED", gates=gates)
+        )
+        raise typer.Exit(outcome.EXIT_BLOCKED)
     typer.echo(review_mod.run_gates(root))
 
 
