@@ -34,8 +34,12 @@ recorrentes. O SpecOps trata cada um:
 ## O que ele adiciona ao Speckit
 
 - **📒 Ledger físico de estado (Repo-as-State).** Um `status.yaml` estruturado
-  rastreia fase, tarefas, evidências e ciclos de revisão. Mutado apenas por
-  comandos `specops` — nunca editado à mão, nunca mantido na memória do agente.
+  e versionado rastreia fase, tarefas, evidências e ciclos de revisão. Mutado
+  apenas por comandos `specops` — nunca editado à mão, nunca mantido na memória
+  do agente. As mudanças de estado são atômicas e seguras a interrupções,
+  protegidas por concorrência otimista (um `revision` monotônico) e uma
+  verificação de identidade do workspace (feature / branch / baseline); ledgers
+  antigos migram sem perdas e com backup.
 - **🔬 Coleta automática de evidências.** `complete-task --auto` roda o seu
   comando de teste, coleta commits e diffs e os registra como evidência tipada.
   Uma tarefa não pode ficar `DONE` sem prova.
@@ -144,13 +148,34 @@ nativo).
 
 Somente leitura. Imprime o estado do ledger: feature, branch, fase, tarefa
 ativa, contagens de tarefas (pending / in progress / done / orphaned) e o
-histórico de ciclos de revisão.
+histórico de ciclos de revisão. Nunca modifica; em um ledger legado, futuro
+demais, não suportado ou malformado ainda imprime um resumo de melhor esforço
+mais um diagnóstico de uma linha.
 
 ### `specops status init-spec [<name>]`
 
 Cria `<feature_dir>/status.yaml` a partir do scaffold empacotado, sincronizando
 os IDs de tarefa do `tasks.md`. Normalmente rodado para você pela diretiva de
 tasks.
+
+### `specops status migrate`
+
+Atualiza o ledger da feature ativa para o schema atual. Idempotente
+(`already current` quando não há nada a fazer). Um ledger legado é migrado sem
+perdas — fases, tarefas, evidências e ciclos de revisão são preservados e o
+original é copiado para `.specify/.specops-backup/` antes. Um schema futuro
+demais ou não suportado é recusado, deixando o ledger intacto. As mudanças de
+estado também migram automaticamente na primeira escrita, então rodar isto é
+opcional.
+
+### `specops status rebaseline`
+
+Re-ancora o **branch** e o **baseline** registrados no ledger ao workspace
+atual — a válvula de escape explícita para quando o gate de identidade recusa
+uma mudança de estado após um rename de branch ou reescrita de histórico
+deliberados. Nunca altera a identidade da **feature** (se a feature resolvida
+deixar de coincidir, falha fechado) e é uma mudança de estado normal (avança o
+revision).
 
 ### `specops status start-task <task-id>`
 

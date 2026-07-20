@@ -128,3 +128,56 @@ def ledger_in_review(tmp_git_repo: Path) -> Path:
 def read_ledger(feature_dir: Path) -> dict:
     """Read and return the ledger YAML from feature_dir/status.yaml."""
     return yaml.safe_load((feature_dir / "status.yaml").read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# Ledger v2 (Feature 006) synthetic ledger factories
+# ---------------------------------------------------------------------------
+
+
+def make_v1_ledger(
+    feature_dir: Path,
+    *,
+    feature: str | None = None,
+    branch: str = "main",
+    baseline: str = "abc1234",
+    phase: str = "SPECIFY",
+    tasks: list | None = None,
+    review_cycles: list | None = None,
+) -> dict:
+    """Write a v1-shaped ledger (no schema_version, date-only timestamps) and return it."""
+    feature_dir.mkdir(parents=True, exist_ok=True)
+    data = {
+        "feature": feature or feature_dir.name,
+        "branch": branch,
+        "baseline": baseline,
+        "created_at": "2026-07-05",
+        "updated_at": "2026-07-05",
+        "current_phase": phase,
+        "recovery": {"active_task": None, "last_commit": None, "blockers": []},
+        "tasks": tasks or [],
+        "review_cycles": review_cycles or [],
+    }
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+    return data
+
+
+def make_v2_ledger(feature_dir: Path, *, revision: int = 1, **kwargs: object) -> dict:
+    """Write a valid v2-shaped ledger and return it."""
+    data = make_v1_ledger(feature_dir, **kwargs)  # type: ignore[arg-type]
+    ts = "2026-07-05T00:00:00+00:00"
+    data["schema_version"] = 2
+    data["revision"] = revision
+    data["workflow_lane"] = "full"
+    data["active_artifact"] = "spec.md"
+    data["created_at"] = ts
+    data["updated_at"] = ts
+    data["recovery"].update(
+        {
+            "last_consistent_revision": revision,
+            "last_consistent_at": ts,
+            "migrated_from_backup": None,
+        }
+    )
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+    return data

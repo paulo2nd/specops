@@ -1,15 +1,15 @@
 """Ledger engine: init-spec, start-task, complete-task, transition-phase (US2)."""
 from __future__ import annotations
 
-import datetime
-import os
+import copy
 import re
 from pathlib import Path
 
 import yaml
 
-from specops import config, gitops, shell, speckit
+from specops import config, gitops, ledger, shell, speckit
 from specops.errors import LedgerParseError, SpecopsError
+from specops.ledger import now_utc
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -29,10 +29,6 @@ _PART_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 
-def _today() -> str:
-    return datetime.date.today().isoformat()
-
-
 def _templates_dir() -> Path:
     return Path(__file__).parent / "templates"
 
@@ -42,31 +38,8 @@ def _ledger_path(feature_dir: Path) -> Path:
 
 
 def _load_ledger(feature_dir: Path) -> dict:
-    path = _ledger_path(feature_dir)
-    if not path.is_file():
-        raise SpecopsError(
-            f"Ledger not found: {path}. Run 'specops status init-spec' first."
-        )
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise LedgerParseError(f"Cannot parse ledger {path}: {exc}") from exc
-    if not isinstance(data, dict):
-        raise LedgerParseError(f"Ledger {path} has invalid structure.")
-    return data
-
-
-def _save_ledger(feature_dir: Path, data: dict) -> None:
-    """Write ledger atomically: write to .tmp, flush, os.replace onto status.yaml."""
-    path = _ledger_path(feature_dir)
-    tmp_path = feature_dir / (LEDGER_FILENAME + ".tmp")
-    data["updated_at"] = _today()
-    content = yaml.dump(data, default_flow_style=False, allow_unicode=True)
-    tmp_path.write_text(content, encoding="utf-8")
-    with open(tmp_path, "rb") as fh:
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(str(tmp_path), str(path))
+    """Read the ledger dict (delegates to the canonical ledger.load_raw)."""
+    return ledger.load_raw(feature_dir)
 
 
 def _sync_tasks(data: dict, tasks_text: str) -> None:
@@ -139,6 +112,70 @@ def read_baseline(root: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
+# State-change precondition gate (Ledger v2) — shared by every mutating command
+# ---------------------------------------------------------------------------
+
+
+def _identity_mismatch(diverged: str) -> SpecopsError:
+    return SpecopsError(
+        f"Workspace identity mismatch ({diverged}): the ledger's {diverged} does "
+        "not match the current workspace. State change refused. If this is a "
+        "deliberate branch rename or history rewrite, run 'specops status rebaseline'."
+    )
+
+
+def _load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str], object]:
+    """Load, classify, identity-check, and (if needed) migrate the ledger for a write.
+
+    Returns (data, base_revision, base_violations, repo). Refuses too-new/unsupported
+    schemas and any workspace-identity mismatch (fail closed) before any mutation.
+    Migratable ledgers are backed up and migrated in memory (persisted only on save).
+    ``base_violations`` are the invariant violations already present at load time —
+    pre-existing legacy defects that must not, on their own, block an unrelated
+    command (only violations a command newly introduces are blocking; see _finalize).
+    """
+    on_disk = _load_ledger(feature_dir)
+
+    cls = ledger.classify(on_disk)
+    refusal = ledger.refusal_message(cls)
+    if refusal is not None:
+        raise SpecopsError(refusal)
+
+    repo = gitops.find_repo(root)
+    if repo is None:
+        raise SpecopsError("Not a Git repository.")
+
+    diverged = ledger.validate_identity(root, repo, on_disk)
+    if diverged is not None:
+        raise _identity_mismatch(diverged)
+
+    base_revision = ledger.revision_of(on_disk)
+    data = copy.deepcopy(on_disk)
+    if cls == ledger.MIGRATABLE:
+        backup_rel = ledger.backup_ledger(root, feature_dir)
+        data = ledger.migrate_to_current(data)
+        data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
+    base_violations = ledger.validate_invariants(data)
+    return data, base_revision, base_violations, repo
+
+
+def _finalize(
+    feature_dir: Path, data: dict, base_revision: int, base_violations: list[str]
+) -> None:
+    """Commit the ledger with revision CAS, failing closed only on *new* invalid state.
+
+    Invariant violations that already existed when the ledger was loaded
+    (*base_violations* — legacy defects a v1 ledger may carry) do not block an
+    unrelated command; only violations this command newly introduced are fatal.
+    This upholds "never write new invalid state" without bricking legacy ledgers.
+    """
+    new_violations = [v for v in ledger.validate_invariants(data) if v not in base_violations]
+    if new_violations:
+        raise SpecopsError("Ledger invariant violation: " + "; ".join(new_violations))
+    ledger.save(feature_dir, data, base_revision=base_revision)
+
+
+# ---------------------------------------------------------------------------
 # Command implementations
 # ---------------------------------------------------------------------------
 
@@ -173,7 +210,8 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
         .replace("{{feature-name}}", feature_name)
         .replace("{{branch}}", branch)
         .replace("{{commit-hash}}", baseline)
-        .replace("{{YYYY-MM-DD}}", _today())
+        .replace("{{active-artifact}}", ledger.artifact_for_phase("SPECIFY"))
+        .replace("{{timestamp}}", now_utc())
     )
     data = yaml.safe_load(content)
 
@@ -181,7 +219,7 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
     if tasks_text:
         _sync_tasks(data, tasks_text)
 
-    _save_ledger(feature_dir, data)
+    ledger.write_new(feature_dir, data)
     try:
         rel = ledger_path.relative_to(root.resolve())
     except ValueError:
@@ -192,7 +230,7 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
 def cmd_start_task(root: Path, task_id: str) -> str:
     """Mark task_id IN_PROGRESS (cli-contract: start-task)."""
     feature_dir = _get_feature_dir(root)
-    data = _load_ledger(feature_dir)
+    data, base_rev, base_violations, repo = _load_for_write(root, feature_dir)
 
     tasks_text = _read_tasks_md(feature_dir)
     _sync_tasks(data, tasks_text)
@@ -209,7 +247,9 @@ def cmd_start_task(root: Path, task_id: str) -> str:
     if task["status"] == "IN_PROGRESS":
         raise SpecopsError(f"Task '{task_id}' is already IN_PROGRESS.")
 
-    # Single-active-task rule (R5/L2)
+    # Single-active-task rule (R5/L2). An in-flight task that was orphaned
+    # (removed from tasks.md) STILL blocks — its recorded work must be handled,
+    # not silently abandoned by starting another task.
     active = [t for t in tasks if t["status"] == "IN_PROGRESS"]
     if active:
         raise SpecopsError(
@@ -217,15 +257,11 @@ def cmd_start_task(root: Path, task_id: str) -> str:
             "Complete or handle it before starting another."
         )
 
-    repo = gitops.find_repo(root)
-    if repo is None:
-        raise SpecopsError("Not a Git repository.")
-
     task["status"] = "IN_PROGRESS"
     task["started_commit"] = gitops.head_sha(repo)
     data["recovery"]["active_task"] = task_id
 
-    _save_ledger(feature_dir, data)
+    _finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' started."
 
 
@@ -239,7 +275,7 @@ def cmd_complete_task(
         raise SpecopsError("Provide --auto or --evidence, not both.")
 
     feature_dir = _get_feature_dir(root)
-    data = _load_ledger(feature_dir)
+    data, base_rev, base_violations, repo = _load_for_write(root, feature_dir)
 
     tasks_text = _read_tasks_md(feature_dir)
     _sync_tasks(data, tasks_text)
@@ -255,10 +291,6 @@ def cmd_complete_task(
         raise SpecopsError(
             f"Task '{task_id}' is not IN_PROGRESS (status: {task['status']})."
         )
-
-    repo = gitops.find_repo(root)
-    if repo is None:
-        raise SpecopsError("Not a Git repository.")
 
     started = task.get("started_commit")
     if not started:
@@ -308,10 +340,10 @@ def cmd_complete_task(
 
     task["evidence"] = evidence_str
     task["status"] = "DONE"
-    task["completed_at"] = _today()
+    task["completed_at"] = now_utc()
     data["recovery"]["active_task"] = None
 
-    _save_ledger(feature_dir, data)
+    _finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' completed. Evidence: {evidence_str}"
 
 
@@ -366,6 +398,11 @@ def cmd_show(root: Path) -> str:
         ),
         f"review cycles: {len(cycles)}",
     ]
+
+    # Read-only diagnostic for abnormal schema states (FR-029a) — never mutates.
+    diagnostic = ledger.diagnostic_line(ledger.classify(data))
+    if diagnostic is not None:
+        lines.append(f"diagnostic: {diagnostic}")
     for cycle in cycles:
         round_num = cycle.get("round", "?")
         result = cycle.get("result")
@@ -402,7 +439,7 @@ def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
         normalized_result = upper
 
     feature_dir = _get_feature_dir(root)
-    data = _load_ledger(feature_dir)
+    data, base_rev, base_violations, _repo = _load_for_write(root, feature_dir)
 
     current = data.get("current_phase", "SPECIFY")
     target = phase.upper()
@@ -449,12 +486,12 @@ def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
             and pending.get("result") is None
             and pending.get("started_at") is None
         ):
-            pending["started_at"] = _today()
+            pending["started_at"] = now_utc()
         else:
             round_num = len(cycles) + 1
             cycles.append({
                 "round": round_num,
-                "started_at": _today(),
+                "started_at": now_utc(),
                 "completed_at": None,
                 "result": None,
             })
@@ -464,7 +501,7 @@ def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
         cycles = data.get("review_cycles", [])
         if cycles:
             cycles[-1]["result"] = "REJECTED"
-            cycles[-1]["completed_at"] = _today()
+            cycles[-1]["completed_at"] = now_utc()
         # Open new review cycle placeholder for next round
         next_round = len(cycles) + 1
         cycles.append({
@@ -484,7 +521,7 @@ def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
             )
         if normalized_result == "APPROVED" and cycles and cycles[-1]["result"] is None:
             cycles[-1]["result"] = "APPROVED"
-            cycles[-1]["completed_at"] = _today()
+            cycles[-1]["completed_at"] = now_utc()
 
         if not cycles:
             raise SpecopsError("Cannot enter DONE: no review cycles recorded.")
@@ -508,5 +545,85 @@ def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
             )
 
     data["current_phase"] = target
-    _save_ledger(feature_dir, data)
+    data["active_artifact"] = ledger.artifact_for_phase(target)
+    _finalize(feature_dir, data, base_rev, base_violations)
     return f"Phase transition: {current} → {target}."
+
+
+def cmd_migrate(root: Path) -> str:
+    """Explicitly migrate the active feature's ledger to the current schema.
+
+    Idempotent: 'already current' when nothing to do. Backs up the original
+    (FR-008a) before a real migration and refuses too-new/unsupported ledgers.
+    Like every write path, it fails closed on a workspace-identity mismatch
+    (consistent with state changes; use 'rebaseline' after a deliberate move).
+    """
+    feature_dir = _get_feature_dir(root)
+    on_disk = _load_ledger(feature_dir)
+
+    cls = ledger.classify(on_disk)
+    if cls == ledger.CURRENT:
+        return "already current"
+    refusal = ledger.refusal_message(cls)
+    if refusal is not None:
+        raise SpecopsError(refusal)
+
+    repo = gitops.find_repo(root)
+    if repo is None:
+        raise SpecopsError("Not a Git repository.")
+    diverged = ledger.validate_identity(root, repo, on_disk)
+    if diverged is not None:
+        raise _identity_mismatch(diverged)
+
+    base_rev = ledger.revision_of(on_disk)
+    backup_rel = ledger.backup_ledger(root, feature_dir)
+    data = ledger.migrate_to_current(copy.deepcopy(on_disk))
+    data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
+    ledger.save(feature_dir, data, base_revision=base_rev)
+    return "migrated (v1 → v2)"
+
+
+def cmd_rebaseline(root: Path) -> str:
+    """Re-anchor the ledger's branch/baseline identity to the current workspace.
+
+    The explicit, auditable escape hatch for a deliberate branch rename or
+    history rewrite (FR-019a): it re-records the current branch and a fresh
+    baseline (current HEAD) so subsequent state changes pass the identity gate.
+    It refuses to cross feature identity — if the resolved feature no longer
+    matches the ledger's `feature`, it fails closed (that is not a re-baseline).
+    """
+    feature_dir = _get_feature_dir(root)
+    # Load + migrate (if needed) but bypass ONLY the branch/baseline identity check;
+    # the feature-identity check is still enforced below.
+    on_disk = _load_ledger(feature_dir)
+    cls = ledger.classify(on_disk)
+    refusal = ledger.refusal_message(cls)
+    if refusal is not None:
+        raise SpecopsError(refusal)
+
+    repo = gitops.find_repo(root)
+    if repo is None:
+        raise SpecopsError("Not a Git repository.")
+
+    resolved = speckit.resolve_feature_dir(root)
+    if resolved is None or resolved.name != on_disk.get("feature"):
+        raise SpecopsError(
+            "Cannot rebaseline: the resolved feature does not match the ledger's "
+            "feature. Rebaseline re-anchors branch/baseline only, never the feature."
+        )
+
+    base_rev = ledger.revision_of(on_disk)
+    data = copy.deepcopy(on_disk)
+    if cls == ledger.MIGRATABLE:
+        backup_rel = ledger.backup_ledger(root, feature_dir)
+        data = ledger.migrate_to_current(data)
+        data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
+    base_violations = ledger.validate_invariants(data)
+
+    new_branch = gitops.current_branch(repo)
+    new_baseline = gitops.head_sha(repo)
+    data["branch"] = new_branch
+    data["baseline"] = new_baseline
+
+    _finalize(feature_dir, data, base_rev, base_violations)
+    return f"Rebaselined to branch '{new_branch}' at {new_baseline[:7]}."

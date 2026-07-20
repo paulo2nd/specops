@@ -1,9 +1,16 @@
-"""Integration tests for the ledger — Quickstart Scenarios B and E."""
+"""Integration tests for the ledger — Quickstart Scenarios B and E, plus
+Ledger v2 identity, concurrency, and interruption guarantees (Feature 006)."""
+import copy
 import json
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 import yaml
+
+from specops import ledger, status
+from specops.errors import StaleLedgerError
 
 
 def _commit(repo: Path, msg: str = "work") -> str:
@@ -218,3 +225,227 @@ class TestFullLifecycleSC001:
         r = _run(repo, "status", "transition-phase", "DONE", "-r", "maybe")
         assert r.returncode == 1
         assert (feature_dir / "status.yaml").read_text() == original
+
+
+# ---------------------------------------------------------------------------
+# Feature 006 — US3: workspace identity gate [SC-003]
+# ---------------------------------------------------------------------------
+
+class TestWorkspaceIdentity:
+    def _init(self, repo: Path) -> Path:
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
+        assert _run(repo, "status", "init-spec").returncode == 0
+        return feature_dir
+
+    def test_consistent_workspace_passes(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        self._init(repo)
+        assert _run(repo, "status", "transition-phase", "PLAN").returncode == 0
+
+    def test_branch_divergence_refused(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = self._init(repo)
+        before = (feature_dir / "status.yaml").read_bytes()
+        subprocess.run(["git", "checkout", "-b", "other"], cwd=repo, check=True,
+                       capture_output=True)
+        r = _run(repo, "status", "transition-phase", "PLAN")
+        assert r.returncode == 1
+        assert "branch" in r.stderr.lower()
+        assert (feature_dir / "status.yaml").read_bytes() == before
+
+    def test_baseline_divergence_refused(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = self._init(repo)
+        data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+        data["baseline"] = "deadbeef" * 5  # unreachable commit
+        (feature_dir / "status.yaml").write_text(yaml.dump(data))
+        r = _run(repo, "status", "transition-phase", "PLAN")
+        assert r.returncode == 1
+        assert "baseline" in r.stderr.lower()
+
+    def test_feature_divergence_refused(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = self._init(repo)
+        data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+        data["feature"] = "999-wrong"
+        (feature_dir / "status.yaml").write_text(yaml.dump(data))
+        r = _run(repo, "status", "transition-phase", "PLAN")
+        assert r.returncode == 1
+        assert "feature" in r.stderr.lower()
+
+
+# ---------------------------------------------------------------------------
+# Review remediation — identity escape hatch + gate consistency
+# ---------------------------------------------------------------------------
+
+class TestRebaselineAndGateConsistency:
+    def _init(self, repo: Path) -> Path:
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
+        assert _run(repo, "status", "init-spec").returncode == 0
+        return feature_dir
+
+    def test_rebaseline_unblocks_after_branch_rename(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = self._init(repo)
+        subprocess.run(["git", "branch", "-m", "renamed"], cwd=repo, check=True,
+                       capture_output=True)
+        # Identity gate refuses under the new branch name...
+        assert _run(repo, "status", "transition-phase", "PLAN").returncode == 1
+        # ...until the explicit re-baseline escape hatch re-anchors identity.
+        r = _run(repo, "status", "rebaseline")
+        assert r.returncode == 0, r.stderr
+        assert "renamed" in r.stdout
+        data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+        assert data["branch"] == "renamed"
+        # Now the state change proceeds.
+        assert _run(repo, "status", "transition-phase", "PLAN").returncode == 0
+
+    def test_rebaseline_migrates_v1_ledger(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                              capture_output=True, text=True).stdout.strip()
+        # v1 ledger on the wrong branch name → identity refuses, rebaseline fixes + migrates.
+        (feature_dir / "status.yaml").write_text(yaml.dump({
+            "feature": "001-demo", "branch": "old-name", "baseline": head,
+            "created_at": "2026-07-05", "updated_at": "2026-07-05",
+            "current_phase": "SPECIFY",
+            "recovery": {"active_task": None, "last_commit": None, "blockers": []},
+            "tasks": [], "review_cycles": [],
+        }))
+        r = _run(repo, "status", "rebaseline")
+        assert r.returncode == 0, r.stderr
+        data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+        assert data["schema_version"] == 2  # migrated as part of rebaseline
+        assert data["branch"] != "old-name"
+
+    def test_rebaseline_refuses_feature_mismatch(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = self._init(repo)
+        data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+        data["feature"] = "999-wrong"
+        (feature_dir / "status.yaml").write_text(yaml.dump(data))
+        r = _run(repo, "status", "rebaseline")
+        assert r.returncode == 1
+        assert "feature" in r.stderr.lower()
+
+    def test_migrate_refuses_on_identity_mismatch(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
+        # v1 ledger on a branch that no longer matches
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                              capture_output=True, text=True).stdout.strip()
+        (feature_dir / "status.yaml").write_text(yaml.dump({
+            "feature": "001-demo", "branch": "gone", "baseline": head,
+            "created_at": "2026-07-05", "updated_at": "2026-07-05",
+            "current_phase": "SPECIFY",
+            "recovery": {"active_task": None, "last_commit": None, "blockers": []},
+            "tasks": [], "review_cycles": [],
+        }))
+        before = (feature_dir / "status.yaml").read_bytes()
+        r = _run(repo, "status", "migrate")
+        assert r.returncode == 1  # migrate now fails closed like every write path
+        assert "branch" in r.stderr.lower()
+        assert (feature_dir / "status.yaml").read_bytes() == before
+
+    def test_legacy_invariant_violation_does_not_block_unrelated_command(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        """A pre-existing (legacy) invariant defect must not brick unrelated commands."""
+        repo = fake_speckit_repo
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                              capture_output=True, text=True).stdout.strip()
+        branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo,
+                               capture_output=True, text=True).stdout.strip()
+        # v1 ledger carrying a legacy defect: a DONE task with no evidence.
+        (feature_dir / "status.yaml").write_text(yaml.dump({
+            "feature": "001-demo", "branch": branch, "baseline": head,
+            "created_at": "2026-07-05", "updated_at": "2026-07-05",
+            "current_phase": "SPECIFY",
+            "recovery": {"active_task": None, "last_commit": None, "blockers": []},
+            "tasks": [{"id": "T001", "status": "DONE", "started_commit": "x",
+                       "commits": [], "evidence": None, "completed_at": None}],
+            "review_cycles": [],
+        }))
+        # A phase transition (which does not touch the defective task) must succeed.
+        r = _run(repo, "status", "transition-phase", "PLAN")
+        assert r.returncode == 0, r.stderr
+        assert yaml.safe_load((feature_dir / "status.yaml").read_text())["current_phase"] == "PLAN"
+
+    def test_orphaned_active_task_still_blocks_start(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 a\n- [ ] T002 b\n")
+        assert _run(repo, "status", "init-spec").returncode == 0
+        assert _run(repo, "status", "start-task", "T001").returncode == 0
+        # Remove the in-flight task from tasks.md so it becomes orphaned.
+        (feature_dir / "tasks.md").write_text("- [ ] T002 b\n")
+        r = _run(repo, "status", "start-task", "T002")
+        assert r.returncode == 1  # orphaned in-flight T001 still blocks a new start
+        assert "IN_PROGRESS" in r.stderr
+
+
+# ---------------------------------------------------------------------------
+# Feature 006 — US2: lost-update protection [SC-002]
+# ---------------------------------------------------------------------------
+
+class TestConcurrency:
+    def _init(self, repo: Path) -> Path:
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
+        assert _run(repo, "status", "init-spec").returncode == 0
+        return feature_dir
+
+    def test_stale_write_rejected_first_change_survives(self, fake_speckit_repo: Path) -> None:
+        feature_dir = self._init(fake_speckit_repo)
+        base = ledger.revision_of(ledger.load_raw(feature_dir))
+
+        first = ledger.load_raw(feature_dir)
+        first["current_phase"] = "PLAN"
+        ledger.save(feature_dir, first, base_revision=base)  # commits, revision advances
+
+        stale = copy.deepcopy(first)
+        stale["current_phase"] = "TASKS"
+        with pytest.raises(StaleLedgerError):
+            ledger.save(feature_dir, stale, base_revision=base)
+
+        survived = ledger.load_raw(feature_dir)
+        assert survived["current_phase"] == "PLAN"
+
+    def test_single_winner_among_two_writers(self, fake_speckit_repo: Path) -> None:
+        feature_dir = self._init(fake_speckit_repo)
+        base = ledger.revision_of(ledger.load_raw(feature_dir))
+        a = ledger.load_raw(feature_dir)
+        a["current_phase"] = "PLAN"
+        b = ledger.load_raw(feature_dir)
+        b["current_phase"] = "PLAN"
+        ledger.save(feature_dir, a, base_revision=base)
+        with pytest.raises(StaleLedgerError):
+            ledger.save(feature_dir, b, base_revision=base)
+
+
+# ---------------------------------------------------------------------------
+# Feature 006 — US4: interruption safety [SC-004]
+# ---------------------------------------------------------------------------
+
+class TestInterruptionSafety:
+    def test_interrupted_transition_leaves_prior_ledger(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        feature_dir = repo / "specs" / "001-demo"
+        (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
+        assert _run(repo, "status", "init-spec").returncode == 0
+        before = (feature_dir / "status.yaml").read_bytes()
+
+        with patch("os.replace", side_effect=OSError("power loss")), pytest.raises(OSError):
+            status.cmd_transition_phase(repo, "PLAN", result=None)
+
+        # Previous complete ledger still readable, interrupted change absent (SC-004)
+        after = ledger.load_raw(feature_dir)
+        assert (feature_dir / "status.yaml").read_bytes() == before
+        assert after["current_phase"] == "SPECIFY"

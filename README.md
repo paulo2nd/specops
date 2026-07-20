@@ -32,9 +32,12 @@ SpecOps addresses each one:
 
 ## What it adds to Speckit
 
-- **📒 Physical state ledger (Repo-as-State).** A structured `status.yaml`
-  tracks phase, tasks, evidence, and review cycles. Mutated only through
-  `specops` commands — never hand-edited, never held in agent memory.
+- **📒 Physical state ledger (Repo-as-State).** A versioned, structured
+  `status.yaml` tracks phase, tasks, evidence, and review cycles. Mutated only
+  through `specops` commands — never hand-edited, never held in agent memory.
+  State changes are atomic and interruption-safe, guarded by optimistic
+  concurrency (a monotonic `revision`) and a workspace-identity check
+  (feature / branch / baseline); older ledgers migrate losslessly with a backup.
 - **🔬 Automated evidence collection.** `complete-task --auto` runs your test
   command, harvests commits and diffs, and records them as typed evidence. A
   task cannot be `DONE` without proof.
@@ -135,12 +138,31 @@ schema).
 ### `specops status show`
 
 Read-only. Prints ledger state: feature, branch, phase, active task, task counts
-(pending / in progress / done / orphaned), and the review-cycle history.
+(pending / in progress / done / orphaned), and the review-cycle history. Never
+mutates; on a legacy, too-new, unsupported, or malformed ledger it still prints a
+best-effort summary plus a one-line diagnostic.
 
 ### `specops status init-spec [<name>]`
 
 Creates `<feature_dir>/status.yaml` from the packaged scaffold, syncing task IDs
 from `tasks.md`. Usually run for you by the tasks directive.
+
+### `specops status migrate`
+
+Upgrades the active feature's ledger to the current schema. Idempotent
+(`already current` when there is nothing to do). A legacy ledger is migrated
+losslessly — phases, tasks, evidence, and review cycles are preserved and the
+original is backed up under `.specify/.specops-backup/` first. A too-new or
+unsupported schema is refused, leaving the ledger untouched. State changes also
+migrate automatically on first write, so running this is optional.
+
+### `specops status rebaseline`
+
+Re-anchors the ledger's recorded **branch** and **baseline** to the current
+workspace — the explicit escape hatch for when the identity gate refuses a state
+change after a deliberate branch rename or history rewrite. It never changes the
+bound **feature** identity (if the resolved feature no longer matches, it fails
+closed), and it is a normal state change (advances the revision).
 
 ### `specops status start-task <task-id>`
 

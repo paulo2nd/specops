@@ -11,6 +11,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Ledger v2 integrity.** The per-feature `status.yaml` ledger is now versioned
+  and hardened against upgrades, interruptions, branch changes, and competing
+  sessions:
+  - An explicit `schema_version` (v1 = a ledger with no version key). Migratable
+    older ledgers are upgraded automatically on the first state change — and via
+    the new **`specops status migrate`** command — deterministically and
+    losslessly (phases, tasks, evidence, and review cycles preserved). A too-new
+    schema is refused; the original ledger is backed up under
+    `.specify/.specops-backup/` before any migration, recorded in
+    `recovery.migrated_from_backup`.
+  - **Timezone-aware timestamps** (RFC 3339 UTC) with stable serialization: a
+    no-op state change now rewrites nothing (byte-stable, no timestamp churn).
+  - **Lost-update protection.** A monotonic `revision` with optimistic
+    compare-and-swap on write: a stale write is refused (re-read and retry) and
+    concurrent writers cannot clobber one another.
+  - **Workspace-identity gate.** State changes are refused (fail closed, naming
+    the diverged dimension) when the ledger's feature, branch, or branch-point
+    baseline no longer matches the current workspace. After a deliberate branch
+    rename or history rewrite, **`specops status rebaseline`** re-anchors the
+    branch and baseline to the current workspace (never the feature identity).
+    A pre-existing (legacy) invariant defect in an older ledger is tolerated —
+    only a violation a command *newly introduces* blocks the write — so an old
+    ledger is never permanently locked out.
+  - **Interruption safety + recovery metadata.** Atomic writes leave the previous
+    valid ledger readable after any interruption; `recovery.last_consistent_*`
+    records the last committed state. New `workflow_lane` and `active_artifact`
+    metadata track the lane and current-phase artifact.
+  - Read-only commands (`status show`, `reconcile`) never mutate and stay
+    available on legacy, too-new, unsupported, or malformed ledgers, reporting a
+    best-effort diagnostic.
+
 ### Fixed
 
 - Corrective reviews now resume the placeholder cycle created after a rejection
