@@ -16,3 +16,13 @@ class LedgerParseError(SpecopsError):
     """Unexpected/parse error (corrupt ledger YAML, invalid structure). Exit code 2."""
 
     exit_code: int = 2
+
+
+class StaleLedgerError(SpecopsError):
+    """A write was attempted against a ledger revision that has since advanced.
+
+    Signals a lost-update conflict (Ledger v2, FR-013/FR-015): the caller must
+    re-read the current ledger and retry. Exit code 1 (blocking, recoverable).
+    """
+
+    exit_code: int = 1

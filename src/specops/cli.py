@@ -225,6 +225,30 @@ def status_show() -> None:
     typer.echo(status.cmd_show(root))
 
 
+@status_app.command("migrate")
+@_handle_errors
+def status_migrate() -> None:
+    """Migrate the active feature's ledger to the current schema (idempotent)."""
+    root = Path(".")
+    _require_git(root)
+    from specops import status
+    typer.echo(f"status migrate: {status.cmd_migrate(root)}")
+
+
+@status_app.command("rebaseline")
+@_handle_errors
+def status_rebaseline() -> None:
+    """Re-anchor the ledger's branch/baseline to the current workspace.
+
+    Use after a deliberate branch rename or history rewrite that the identity
+    gate refuses. Never changes the bound feature identity.
+    """
+    root = Path(".")
+    _require_git(root)
+    from specops import status
+    typer.echo(f"status rebaseline: {status.cmd_rebaseline(root)}")
+
+
 @status_app.command("transition-phase")
 @_handle_errors
 def status_transition_phase(

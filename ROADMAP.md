@@ -35,7 +35,7 @@ Roadmap status uses four values:
 | ID | Feature | Status | Depends on | Milestone |
 |---|---|---|---|---|
 | 005 | Native Spec Kit Extension | MERGED | — | Foundation |
-| 006 | Ledger v2 Integrity | PLANNED | 005 | Foundation |
+| 006 | Ledger v2 Integrity | MERGED | 005 | Foundation |
 | 007 | Native Workflow Orchestration | PLANNED | 005, 006 | Foundation |
 | 008 | Context Map Core | PLANNED | 005, 006 | Context Intelligence |
 | 009 | Context-Aware Planning and Impact | PLANNED | 008 | Context Intelligence |

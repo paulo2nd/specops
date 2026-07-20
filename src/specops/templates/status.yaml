@@ -1,8 +1,12 @@
+schema_version: 2
+revision: 1
 feature: "{{feature-name}}"
 branch: "{{branch}}"
 baseline: "{{commit-hash}}"
-created_at: "{{YYYY-MM-DD}}"
-updated_at: "{{YYYY-MM-DD}}"
+workflow_lane: "full"
+active_artifact: "{{active-artifact}}"
+created_at: "{{timestamp}}"
+updated_at: "{{timestamp}}"
 
 current_phase: "SPECIFY"
 
@@ -10,6 +14,9 @@ recovery:
   active_task: null
   last_commit: null
   blockers: []
+  last_consistent_revision: 1
+  last_consistent_at: "{{timestamp}}"
+  migrated_from_backup: null
 
 tasks: []
 

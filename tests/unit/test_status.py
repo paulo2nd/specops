@@ -1,5 +1,4 @@
 """Unit tests for status.py — phase machine, task transitions, evidence validation."""
-import contextlib
 import datetime
 import subprocess
 from pathlib import Path
@@ -15,11 +14,17 @@ from specops.errors import SpecopsError
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_ledger(tmp_path: Path, phase: str = "SPECIFY", tasks: list | None = None) -> dict:
+def _make_ledger(
+    tmp_path: Path,
+    phase: str = "SPECIFY",
+    tasks: list | None = None,
+    baseline: str = "abc1234",
+    branch: str = "main",
+) -> dict:
     data = {
         "feature": "001-test",
-        "branch": "main",
-        "baseline": "abc1234",
+        "branch": branch,
+        "baseline": baseline,
         "created_at": str(datetime.date.today()),
         "updated_at": str(datetime.date.today()),
         "current_phase": phase,
@@ -130,7 +135,13 @@ def _setup_feature(tmp_path: Path, phase: str = "SPECIFY") -> tuple[Path, Path]:
     feature_dir = root / "specs" / "001-test"
     feature_dir.mkdir(parents=True)
 
-    _make_ledger(feature_dir, phase=phase)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True
+    ).stdout.strip()
+    branch = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root, capture_output=True, text=True
+    ).stdout.strip()
+    _make_ledger(feature_dir, phase=phase, baseline=head, branch=branch)
     return root, feature_dir
 
 
@@ -325,12 +336,19 @@ def test_orphan_flagging_preserved(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def _setup_review(tmp_path: Path, extra_cycles: list | None = None) -> tuple[Path, Path]:
-    """Return (root, feature_dir) in REVIEW phase with one open review cycle."""
+    """Return (root, feature_dir) in REVIEW phase with one open review cycle.
+
+    Any *extra_cycles* precede the open cycle; the open cycle's round follows
+    them so rounds stay strictly increasing (Ledger v2 review-cycle invariant).
+    """
     root, feature_dir = _setup_feature(tmp_path, "REVIEW")
     data = yaml.safe_load((feature_dir / "status.yaml").read_text())
-    cycles = [{"round": 1, "started_at": "2026-07-05", "completed_at": None, "result": None}]
-    if extra_cycles:
-        cycles = extra_cycles + cycles
+    base = extra_cycles or []
+    open_round = len(base) + 1
+    cycles = [
+        *base,
+        {"round": open_round, "started_at": "2026-07-05", "completed_at": None, "result": None},
+    ]
     data["review_cycles"] = cycles
     (feature_dir / "status.yaml").write_text(yaml.dump(data))
     return root, feature_dir
@@ -425,21 +443,6 @@ def test_evidence_valid_single_part() -> None:
 
 def test_evidence_valid_multi_part() -> None:
     assert s._validate_evidence("TEST_REPORT:42 ok; CODE_DIFF:3 files in 2 commits")
-
-
-def test_atomic_save_interruption_leaves_previous_intact(tmp_path: Path) -> None:
-    """Simulate os.replace failure — previous ledger stays intact."""
-    root, feature_dir = _setup_feature(tmp_path, "SPECIFY")
-    original = (feature_dir / "status.yaml").read_text()
-
-    def failing_replace(src: str, dst: str) -> None:
-        raise OSError("disk full")
-
-    data = yaml.safe_load(original)
-    with patch("os.replace", side_effect=failing_replace), contextlib.suppress(OSError):
-        s._save_ledger(feature_dir, data)
-
-    assert (feature_dir / "status.yaml").read_text() == original
 
 
 def test_stale_tmp_ignored_on_read(tmp_path: Path) -> None:

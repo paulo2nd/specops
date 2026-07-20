@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from specops import gitops, speckit
+from specops import gitops, ledger, speckit
 from specops.errors import LedgerParseError, SpecopsError
 
 
@@ -41,6 +41,11 @@ def run(root: Path) -> tuple[list[str], list[str]]:
 
     warnings: list[str] = []
     violations: list[str] = []
+
+    # Read-only schema diagnostic (FR-029a) — never mutates, never blocks.
+    diagnostic = ledger.diagnostic_line(ledger.classify(data))
+    if diagnostic is not None:
+        warnings.append(f"Warning: {diagnostic}")
 
     # Branch mismatch warning (not fail)
     ledger_branch = data.get("branch", "")
