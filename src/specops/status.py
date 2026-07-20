@@ -5,6 +5,7 @@ import copy
 import re
 from pathlib import Path
 
+import git
 import yaml
 
 from specops import config, gitops, ledger, shell, speckit
@@ -124,7 +125,7 @@ def _identity_mismatch(diverged: str) -> SpecopsError:
     )
 
 
-def _load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str], object]:
+def _load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str], git.Repo]:
     """Load, classify, identity-check, and (if needed) migrate the ledger for a write.
 
     Returns (data, base_revision, base_violations, repo). Refuses too-new/unsupported
