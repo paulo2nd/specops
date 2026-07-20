@@ -1,0 +1,48 @@
+# SpecOps native extension manifest — reference skeleton.
+#
+# This file documents the shape SpecOps writes into a client repository's
+# `.specify/extensions.yml`. The `specops extension install` command builds the
+# real manifest programmatically: hook `prompt` bodies are sourced from
+# `src/specops/templates/directives/*.md`, and command registrations are derived
+# per installed integration. SpecOps only reads/writes entries whose
+# `extension: specops`; entries owned by other extensions are preserved verbatim.
+#
+# hooks:
+#   after_specify:
+#     - extension: specops
+#       enabled: true
+#       optional: true
+#       description: "SpecOps specification directives"
+#       prompt: |
+#         <contents of directives/specify.md>
+#   before_plan:
+#     - extension: specops
+#       enabled: true
+#       optional: false
+#       description: "SpecOps planning directives (consistency gate)"
+#       prompt: |
+#         <contents of directives/plan.md>
+#   after_tasks:
+#     - extension: specops
+#       enabled: true
+#       optional: false
+#       description: "SpecOps task-generation directives (ledger creation seam)"
+#       prompt: |
+#         <contents of directives/tasks.md>
+#   after_implement:
+#     - extension: specops
+#       enabled: true
+#       optional: false
+#       description: "SpecOps implementation directives (review-cycle seam)"
+#       prompt: |
+#         <contents of directives/implement.md>
+#
+# commands:
+#   - id: specops-review
+#     extension: specops
+#     integration: claude
+#     path: .claude/skills/specops-review/SKILL.md
+#
+# specops:
+#   cli_compat:
+#     min_cli_version: "0.3.0"

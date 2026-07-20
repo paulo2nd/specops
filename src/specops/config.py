@@ -13,6 +13,7 @@ _DEFAULTS: dict[str, Any] = {
     "test_command": "pytest",
     "lint_command": "",
     "skills_dir": ".specify/skills",
+    "min_cli_version": "0.3.0",
 }
 
 

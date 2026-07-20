@@ -67,6 +67,13 @@ status_app = typer.Typer(
 )
 app.add_typer(status_app, name="status")
 
+extension_app = typer.Typer(
+    name="extension",
+    help="Native Spec Kit extension lifecycle: install, status.",
+    no_args_is_help=True,
+)
+app.add_typer(extension_app, name="extension")
+
 # ---------------------------------------------------------------------------
 # Error boundary: single exit-code mapper (contracts/errors.md)
 # ---------------------------------------------------------------------------
@@ -231,6 +238,36 @@ def status_transition_phase(
     _require_git(root)
     from specops import status
     typer.echo(status.cmd_transition_phase(root, phase, result=result))
+
+
+# ---------------------------------------------------------------------------
+# extension subcommands (Feature 005 — native Spec Kit extension)
+# ---------------------------------------------------------------------------
+
+@extension_app.command("status")
+@_handle_errors
+def extension_status() -> None:
+    """Report the native-extension installation state (read-only)."""
+    root = Path(".")
+    from specops import compat, migration
+    state = migration.detect_state(root)
+    result = compat.check()
+    typer.echo(f"installation: {state}")
+    typer.echo(f"cli: {result.installed or 'absent'} (requires >= {result.required})")
+
+
+@extension_app.command("install")
+@_handle_errors
+def extension_install(
+    non_interactive: bool = typer.Option(
+        False, "--non-interactive", help="Decline all interactive prompts.",
+    ),
+) -> None:
+    """Register SpecOps natively via the host's extension mechanism."""
+    root = Path(".")
+    from specops import extension
+    status = extension.install(root)
+    typer.echo(f"extension install: {status}")
 
 
 if __name__ == "__main__":

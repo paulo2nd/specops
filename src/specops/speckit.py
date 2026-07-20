@@ -274,3 +274,64 @@ def derive_review_path(plan_path: Path, root: Path, sep: str) -> Path:
     rel = plan_path.relative_to(root)
     new_rel = Path(str(rel).replace(f"speckit{sep}plan", f"specops{sep}review"))
     return root / new_rel
+
+
+# ---------------------------------------------------------------------------
+# Native extension surfaces (Feature 005)
+# ---------------------------------------------------------------------------
+
+def extensions_yml_path(root: Path) -> Path:
+    """Return the path to the repository's native extension manifest.
+
+    The file is SpecOps-authored and host-read; it may not exist yet.
+    """
+    return root / ".specify" / "extensions.yml"
+
+
+def review_command_targets(root: Path) -> list[dict]:
+    """
+    Resolve the ``/specops-review`` command install path for every integration.
+
+    Reuses :func:`resolve_prompt_targets` (which iterates
+    ``installed_integrations`` and fails closed) and
+    :func:`derive_review_path`. Returns a list of dicts:
+
+      ``{"integration": str, "separator": str, "review_path": Path}``
+
+    Raises :class:`ManifestResolutionError` (fail-closed) when integrations or
+    their manifests cannot be resolved.
+    """
+    targets = resolve_prompt_targets(root)
+    results: list[dict] = []
+    for target in targets:
+        sep = target["separator"]
+        review_path = derive_review_path(target["plan_path"], root, sep)
+        results.append(
+            {
+                "integration": target["integration"],
+                "separator": sep,
+                "review_path": review_path,
+            }
+        )
+    return results
+
+
+def host_prompt_paths(root: Path) -> list[Path]:
+    """Return the resolved host prompt files across all installed integrations.
+
+    Used by state detection to scan for legacy SpecOps marker blocks. Includes
+    the mandatory plan/implement prompts plus optional specify/tasks prompts
+    when present. Returns an empty list when integrations cannot be resolved
+    (detection then reports no legacy signal rather than raising).
+    """
+    try:
+        targets = resolve_prompt_targets(root)
+    except ManifestResolutionError:
+        return []
+    paths: list[Path] = []
+    for target in targets:
+        for key in ("plan_path", "implement_path", "specify_path", "tasks_path"):
+            p = target.get(key)
+            if p is not None:
+                paths.append(p)
+    return paths

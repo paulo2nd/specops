@@ -1,6 +1,27 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.3.0 → 1.4.0
+Rationale (1.4.0, 2026-07-19): Amended during /speckit-specify → plan of
+specs/005-native-speckit-extension (Native Spec Kit Extension). Feature 005
+introduces Spec Kit's native extension mechanism (a SpecOps-owned
+.specify/extensions.yml hook manifest + native command registration) as the
+PRIMARY integration path, delivering the Principle IV directives with zero
+modification of integration-owned files. Principle I's "Integration happens
+exclusively by detection and injection … through marker-delimited blocks"
+sentence and Principle IV's opening/closing sentences are broadened to name the
+native mechanism as primary and marker-delimited injection as the retained
+legacy path. Directive CONTENT is unchanged — only the delivery vehicle — so
+the injected templates under src/specops/templates/directives/ need no content
+change (delivery-mechanism only). The five Principle IV directive bullets are
+untouched. Also normalized the review-command spelling to /specops-review (the
+integration-separator form). MINOR bump: no principle removed or redefined; the
+additive/never-destructive intent is strengthened, and materially expanded
+guidance was added to a non-removed principle. Templates requiring updates:
+none (plan/spec/tasks templates are generic and remain compatible; directive
+content unchanged).
+
+Previous report (1.3.0):
 Version change: 1.2.1 → 1.3.0
 Rationale (1.3.0, 2026-07-06): Development practice reversal decided by the
 maintainer after the 004-review-gates-cli implementation had to remove
@@ -125,17 +146,23 @@ exists to protect that mission.
 Every SpecOps capability MUST be delivered as an additive layer over the
 Speckit lifecycle (specify → plan → tasks → implement → review). SpecOps
 MUST NOT fork, replace, or destructively modify Speckit's files, commands,
-or workflow. Integration happens exclusively by detection and injection:
-`specops init` runs after Speckit's own initialization, validates that a Git
-repository exists (offering to initialize one when absent), detects the
-client's Speckit folder, generates `specops.json`, installs the
-`/specops.review` agent command and the `status.yaml` ledger scaffold, and
-adjusts Speckit's existing agent prompts exclusively through marker-delimited
-SpecOps directive blocks that are updated in place on re-runs — never
-duplicated, never touching content outside the markers. It MUST leave the
-environment fully prepared in a single run. A feature that requires the
-client to abandon or patch Speckit itself beyond marked blocks is out of
-scope by definition.
+or workflow. Integration happens exclusively by detection and registration
+through Spec Kit's own extension surfaces — never by forking or destructively
+editing Speckit's files. In a single run, SpecOps: runs after Speckit's own
+initialization, validates that a Git repository exists (offering to initialize
+one when absent), detects the client's Speckit folder, generates
+`specops.json`, and registers the `/specops-review` command, its lifecycle
+directives, and the `status.yaml` ledger scaffold. The primary delivery path
+is Spec Kit's native extension mechanism — a SpecOps-owned
+`.specify/extensions.yml` hook manifest plus native command registration —
+which modifies no integration-owned file. Marker-delimited directive-block
+injection into Speckit's existing agent prompts is retained as a supported
+legacy path; when used, blocks are additive, updated in place on re-runs,
+never duplicated, and never touch content outside the markers. Both paths MUST
+leave the environment fully prepared in a single run. A feature that requires
+the client to abandon or patch Speckit itself — beyond SpecOps-owned
+registration surfaces and retained marker blocks — is out of scope by
+definition.
 
 **Rationale**: the product's entire value proposition is extending Speckit;
 anything that competes with it destroys that proposition.
@@ -173,9 +200,12 @@ evidence claimed by an agent is neither.
 ### IV. Surgical Agent Behavior via Injected Prompts
 
 The behavioral advantages SpecOps brings to Speckit MUST be imposed on
-agents through the prompts it installs and the marker-delimited directive
-blocks it injects into Speckit's existing prompts (starting with
-`/specops.review`), not left to convention. The injected directives are:
+agents through the commands and lifecycle directives SpecOps registers via
+Spec Kit's native extension mechanism — or, on the retained legacy path, the
+marker-delimited directive blocks it injects into Speckit's existing prompts —
+starting with `/specops-review`, not left to convention. The directives are
+delivered as native lifecycle-hook prompt bodies (or legacy marker blocks),
+sourced identically from the SpecOps templates. The directives are:
 
 - **Operational Silence (§6)**: during `/speckit.implement`, agents act 100%
   silently in chat; on task transition they print exclusively
@@ -207,7 +237,8 @@ blocks it injects into Speckit's existing prompts (starting with
   the underlying Speckit prompt still works standalone.
 
 Any change to these directives MUST be made in the SpecOps templates so all
-client repositories receive it on the next `specops init`.
+client repositories receive it on the next `specops extension install` /
+`update` (or `specops init` on the legacy path).
 
 **Rationale**: templates are the delivery vehicle of the methodology; if a
 directive lives only in documentation, Speckit users never receive it.
@@ -296,4 +327,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.3.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-06
+**Version**: 1.4.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-19
