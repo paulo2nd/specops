@@ -67,6 +67,13 @@ status_app = typer.Typer(
 )
 app.add_typer(status_app, name="status")
 
+extension_app = typer.Typer(
+    name="extension",
+    help="Native Spec Kit extension lifecycle: install, status.",
+    no_args_is_help=True,
+)
+app.add_typer(extension_app, name="extension")
+
 # ---------------------------------------------------------------------------
 # Error boundary: single exit-code mapper (contracts/errors.md)
 # ---------------------------------------------------------------------------
@@ -231,6 +238,86 @@ def status_transition_phase(
     _require_git(root)
     from specops import status
     typer.echo(status.cmd_transition_phase(root, phase, result=result))
+
+
+# ---------------------------------------------------------------------------
+# extension subcommands (Feature 005 — native Spec Kit extension)
+# ---------------------------------------------------------------------------
+
+@extension_app.command("status")
+@_handle_errors
+def extension_status() -> None:
+    """Report the native-extension installation state (read-only)."""
+    root = Path(".")
+    from specops import compat, migration
+    state = migration.detect_state(root)
+    result = compat.check()
+    typer.echo(f"installation: {state}")
+    typer.echo(f"cli: {result.installed or 'absent'} (requires >= {result.required})")
+
+
+@extension_app.command("install")
+@_handle_errors
+def extension_install() -> None:
+    """Register SpecOps natively via the host's extension mechanism.
+
+    Non-interactive by design: it never prompts and fails closed (leaving the
+    repository unchanged) when preconditions are not met.
+    """
+    root = Path(".")
+    from specops import extension
+    status = extension.install(root)
+    typer.echo(f"extension install: {status}")
+
+
+@extension_app.command("migrate")
+@_handle_errors
+def extension_migrate() -> None:
+    """Migrate a legacy marker-injected installation to the native extension."""
+    root = Path(".")
+    from specops import migration
+    status = migration.migrate(root)
+    typer.echo(f"extension migrate: {status}")
+
+
+@extension_app.command("update")
+@_handle_errors
+def extension_update() -> None:
+    """Refresh the registered hooks/command to the current templates."""
+    root = Path(".")
+    from specops import extension
+    typer.echo(f"extension update: {extension.update(root)}")
+
+
+@extension_app.command("disable")
+@_handle_errors
+def extension_disable() -> None:
+    """Unregister hooks/command from the host while retaining config and ledgers."""
+    root = Path(".")
+    from specops import extension
+    typer.echo(f"extension disable: {extension.disable(root)}")
+
+
+@extension_app.command("enable")
+@_handle_errors
+def extension_enable() -> None:
+    """Re-register from retained configuration."""
+    root = Path(".")
+    from specops import extension
+    typer.echo(f"extension enable: {extension.enable(root)}")
+
+
+@extension_app.command("remove")
+@_handle_errors
+def extension_remove(
+    purge: bool = typer.Option(
+        False, "--purge", help="Also delete SpecOps configuration and feature ledgers.",
+    ),
+) -> None:
+    """Remove the native installation (retains config/ledgers unless --purge)."""
+    root = Path(".")
+    from specops import extension
+    typer.echo(f"extension remove: {extension.remove(root, purge=purge)}")
 
 
 if __name__ == "__main__":

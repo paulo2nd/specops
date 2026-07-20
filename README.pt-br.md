@@ -111,6 +111,35 @@ remoção). `--non-interactive` recusa todos os prompts (seguro para CI).
 > arquivos de prompt e remover os blocos injetados. Basta rodar `specops init`
 > de novo para reinjetar.
 
+### `specops extension install | update | disable | enable | remove [--purge] | migrate | status`
+
+Registra o SpecOps através do **mecanismo nativo de extensão** do Spec Kit — um
+manifest de hooks `.specify/extensions.yml` de propriedade do SpecOps mais o
+registro de comando por integração — em vez de injetar blocos de marcadores em
+arquivos de prompt de propriedade do host. O CLI Python permanece o motor
+determinístico; os hooks o invocam.
+
+- `install` — registra os hooks de ciclo de vida + o comando `/specops-review`
+  em cada integração instalada. **Não** modifica nenhum arquivo do host, é
+  idempotente, funciona offline e falha de forma fechada (deixando o repo
+  inalterado) quando o CLI está ausente/incompatível ou o diretório não é um
+  repositório Spec Kit.
+- `update` — reaplica os templates de diretiva atuais (idempotente).
+- `disable` / `enable` — cancela o registro na superfície do host (preservando
+  configuração e ledgers) / registra novamente a partir da configuração retida.
+- `remove [--purge]` — cancela o registro sem modificar nenhum arquivo do host;
+  `--purge` também apaga o `specops.json` e os ledgers de feature.
+- `migrate` — converte uma instalação legada por injeção de marcadores para a
+  nativa, removendo os blocos de marcadores do SpecOps (com um backup automático
+  pré-edição que restaura em caso de falha) e preservando a configuração e todos
+  os ledgers de feature.
+- `status` — somente leitura; reporta o estado detectado
+  (`absent | native | legacy | native+legacy`) e a compatibilidade do CLI.
+
+O caminho legado `specops init` acima permanece totalmente suportado. Requer o
+CLI `specops` `>= 0.3.0` (a primeira versão que entende o schema do manifest
+nativo).
+
 ### `specops status show`
 
 Somente leitura. Imprime o estado do ledger: feature, branch, fase, tarefa

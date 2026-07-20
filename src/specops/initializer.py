@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from specops import config, gitops, speckit
+from specops.errors import SpecopsError
 
 # ---------------------------------------------------------------------------
 # Marker grammar (R3, contracts/directive-blocks.md)
@@ -17,8 +18,9 @@ _END_RE = re.compile(r"<!-- SPECOPS:END (\S+) -->")
 SEPARATOR = "\n"  # one blank line before each block at EOF
 
 
-class InjectionError(Exception):
-    """Raised on corrupted markers; no file is written."""
+class InjectionError(SpecopsError):
+    """Raised on corrupted markers; no file is written. A SpecopsError so the
+    CLI error boundary reports it cleanly (exit 1) rather than as a traceback."""
 
 
 def _scan_markers(text: str) -> list[tuple[str, int, int]]:

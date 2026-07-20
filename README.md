@@ -106,6 +106,32 @@ removal). `--non-interactive` declines all prompts (CI-safe).
 > **Speckit upgrade note**: a Speckit upgrade may rewrite prompt files and
 > remove the injected blocks. Just re-run `specops init` to re-inject.
 
+### `specops extension install | update | disable | enable | remove [--purge] | migrate | status`
+
+Registers SpecOps through Spec Kit's **native extension mechanism** — a
+SpecOps-owned `.specify/extensions.yml` hook manifest plus per-integration
+command registration — instead of injecting marker blocks into host-owned prompt
+files. The Python CLI stays the deterministic engine; the hooks call it.
+
+- `install` — register the lifecycle hooks + `/specops-review` command across
+  every installed integration. Touches **zero** host-owned files, is idempotent,
+  works offline, and fails closed (leaving the repo unchanged) when the CLI is
+  missing/incompatible or the directory is not a Spec Kit repository.
+- `update` — re-apply the current directive templates (idempotent).
+- `disable` / `enable` — unregister from the host surface (retaining
+  configuration and ledgers) / re-register from the retained configuration.
+- `remove [--purge]` — unregister, leaving no host-owned file modified;
+  `--purge` also deletes `specops.json` and feature ledgers.
+- `migrate` — convert a legacy marker-injected installation to native, stripping
+  the SpecOps marker blocks (with an automatic pre-edit backup that restores on
+  failure) while preserving configuration and every feature ledger.
+- `status` — read-only; reports the detected state
+  (`absent | native | legacy | native+legacy`) and CLI compatibility.
+
+The legacy `specops init` path above remains fully supported. Requires the
+`specops` CLI `>= 0.3.0` (the first release that understands the native manifest
+schema).
+
 ### `specops status show`
 
 Read-only. Prints ledger state: feature, branch, phase, active task, task counts

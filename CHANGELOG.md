@@ -19,6 +19,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scope, per-user-story commit semantics, and manual marker-block removal.
 - The project link now points to the canonical GitHub Spec Kit repository.
 
+## [0.3.0] - 2026-07-19
+
+### Added
+
+- **Native Spec Kit extension** (`specops extension …`). SpecOps can now register
+  through Spec Kit's own extension mechanism — a SpecOps-owned
+  `.specify/extensions.yml` hook manifest plus per-integration command
+  registration — instead of injecting marker blocks into host-owned prompt files:
+  - `install` registers the lifecycle hooks + `/specops-review` command across
+    every installed integration, touching **zero** host-owned files. Idempotent
+    (semantic equivalence), offline-capable, and fail-closed when the CLI is
+    missing/incompatible or the directory is not a Spec Kit repository.
+  - `migrate` converts a legacy marker-injected installation to native, stripping
+    the SpecOps marker blocks with an automatic pre-edit backup that restores all
+    touched host files to exact bytes on failure, and preserving `specops.json`
+    and every feature ledger.
+  - `disable` / `enable` unregister from / re-register to the host surface while
+    retaining configuration and ledgers; `remove [--purge]` removes the
+    installation (leaving no host-owned file modified) and, with `--purge`, also
+    deletes configuration and ledgers; `update` re-applies the current templates;
+    `status` reports the detected state (`absent | native | legacy |
+    native+legacy`) and CLI compatibility.
+- `specops.json` gains `min_cli_version` (default `0.3.0`) recording the CLI
+  floor the native extension requires.
+
+### Changed
+
+- Constitution amended to v1.4.0: Principles I and IV now name the native
+  extension mechanism as the primary integration path, with marker-delimited
+  injection retained as the supported legacy path.
+
+### Notes
+
+- The legacy `specops init` marker-injection path remains fully supported and
+  unchanged. Migration is opt-in via `specops extension migrate`.
+- Requires the `specops` CLI `>= 0.3.0`.
+
 ## [0.2.1] - 2026-07-14
 
 ### Fixed
