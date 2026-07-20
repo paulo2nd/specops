@@ -137,13 +137,13 @@ host-owned file modified, and purge additionally deletes config + ledgers.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T032 [P] Parametrized interruption-safety tests in `tests/integration/test_extension_lifecycle.py`: interrupt install/migrate/remove at each write boundary; a re-run reaches a consistent state with no manual repair and no partially-registered manifest [SC-007]
-- [ ] T033 [P] Document the native install + legacy migration in `README.md` (English) [SC-001,SC-003,SC-004]
-- [ ] T034 [P] Mirror the native install + migration docs in `README.pt-br.md` (behaviorally equivalent to English per Global DoD) [SC-001,SC-003,SC-004]
-- [ ] T035 [P] Add a `CHANGELOG.md` entry recording user-visible behavior and the legacy→native migration requirement [SC-003]
+- [x] T032 [P] Parametrized interruption-safety tests in `tests/integration/test_extension_lifecycle.py`: interrupt install/migrate/remove at each write boundary; a re-run reaches a consistent state with no manual repair and no partially-registered manifest [SC-007]
+- [x] T033 [P] Document the native install + legacy migration in `README.md` (English) [SC-001,SC-003,SC-004]
+- [x] T034 [P] Mirror the native install + migration docs in `README.pt-br.md` (behaviorally equivalent to English per Global DoD) [SC-001,SC-003,SC-004]
+- [x] T035 [P] Add a `CHANGELOG.md` entry recording user-visible behavior and the legacy→native migration requirement [SC-003]
 - [x] T036 Constitution amendment applied (v1.4.0, 2026-07-19): Principle I & IV broadened to name the native extension mechanism as the primary delivery path and marker injection as the retained legacy path (clears analyze finding C1) [SC-001]
-- [ ] T037 Run the `quickstart.md` scenarios end-to-end against fixtures and confirm ruff + mypy + full pytest pass at repository thresholds [SC-001,SC-002,SC-003,SC-004,SC-005,SC-006,SC-007,SC-008,SC-009]
-- [ ] T038 [P] Regression: assert the legacy `specops init` marker-injection path (FR-015) still installs directive blocks + the review command with no behavior change, in `tests/integration/test_init.py` [SC-009]
+- [x] T037 Run the `quickstart.md` scenarios end-to-end against fixtures and confirm ruff + mypy + full pytest pass at repository thresholds [SC-001,SC-002,SC-003,SC-004,SC-005,SC-006,SC-007,SC-008,SC-009]
+- [x] T038 [P] Regression: assert the legacy `specops init` marker-injection path (FR-015) still installs directive blocks + the review command with no behavior change, in `tests/integration/test_init.py` [SC-009]
 
 ---
 

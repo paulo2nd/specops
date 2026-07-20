@@ -296,3 +296,92 @@ def test_cli_extension_lifecycle_commands(fake_speckit_repo, compat_ok, monkeypa
     res = runner.invoke(app, ["extension", "remove", "--purge"])
     assert res.exit_code == 0, res.output
     assert "purged" in res.output
+
+
+# ===========================================================================
+# Polish — interruption safety (T032, SC-007)
+# ===========================================================================
+
+def _specops_hook_count(root: Path) -> int:
+    data = _manifest(root)
+    return sum(
+        1
+        for entries in data["hooks"].values()
+        for e in entries
+        if e["extension"] == "specops"
+    ) + sum(1 for c in data.get("commands", []) if c["extension"] == "specops")
+
+
+def test_interrupted_install_completes_on_rerun(fake_speckit_repo, compat_ok, monkeypatch):
+    root = fake_speckit_repo
+    real = extension._atomic_write
+    calls = {"n": 0}
+
+    def flaky(path, text):
+        if calls["n"] == 0:
+            calls["n"] += 1
+            raise RuntimeError("interrupted before manifest write")
+        return real(path, text)
+
+    monkeypatch.setattr(extension, "_atomic_write", flaky)
+    with pytest.raises(RuntimeError):
+        extension.install(root)
+    assert not (root / ".specify" / "extensions.yml").exists()  # no partial manifest
+
+    # re-run reaches a consistent native state, no duplicate entries
+    assert extension.install(root) == "created"
+    data = _manifest(root)
+    for entries in data["hooks"].values():
+        assert len([e for e in entries if e["extension"] == "specops"]) == 1
+    assert migration.detect_state(root) == "native"
+
+
+def test_interrupted_migrate_completes_on_rerun(fake_speckit_repo, compat_ok, monkeypatch):
+    root = fake_speckit_repo
+    _legacy_install(root)
+    real = extension.install
+    state = {"fail": True}
+
+    def flaky(r):
+        if state["fail"]:
+            state["fail"] = False
+            raise RuntimeError("interrupted during native register")
+        return real(r)
+
+    monkeypatch.setattr(extension, "install", flaky)
+    with pytest.raises(RuntimeError):
+        migration.migrate(root)
+    # failure restored the markers
+    assert any(
+        "SPECOPS:BEGIN" in p.read_text()
+        for p in root.glob(".claude/skills/speckit-*/SKILL.md")
+    )
+    # re-run completes cleanly
+    assert migration.migrate(root) == "migrated"
+    assert migration.detect_state(root) == "native"
+    assert not (root / ".specify" / ".specops-backup").exists()
+
+
+def test_interrupted_remove_completes_on_rerun(fake_speckit_repo, compat_ok, monkeypatch):
+    root = fake_speckit_repo
+    extension.install(root)
+    orig = extension._prune_specops
+    calls = {"n": 0}
+
+    def flaky(manifest):
+        if calls["n"] == 0:
+            calls["n"] += 1
+            raise RuntimeError("interrupted before manifest prune")
+        return orig(manifest)
+
+    monkeypatch.setattr(extension, "_prune_specops", flaky)
+    with pytest.raises(RuntimeError):
+        extension.remove(root)
+    # command file already gone; manifest still present
+    assert not (root / ".claude" / "skills" / "specops-review" / "SKILL.md").exists()
+    assert (root / ".specify" / "extensions.yml").exists()
+
+    # re-run reaches a consistent absent state
+    assert extension.remove(root) in ("removed", "unchanged")
+    assert not (root / ".specify" / "extensions.yml").exists()
+    assert migration.detect_state(root) == "absent"

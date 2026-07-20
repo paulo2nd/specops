@@ -326,3 +326,18 @@ def test_init_partial_layout_skips_missing_stages(fake_speckit_repo: Path) -> No
     # plan/implement still injected
     assert "<!-- SPECOPS:BEGIN plan" in _skill(fake_speckit_repo, "plan").read_text()
     assert "<!-- SPECOPS:BEGIN implement" in _skill(fake_speckit_repo, "implement").read_text()
+
+
+def test_legacy_init_path_still_functions(fake_speckit_repo: Path) -> None:
+    """FR-015 / SC-009: the legacy marker-injection init path remains fully
+    functional after the native extension (Feature 005) is introduced."""
+    result = run_init(fake_speckit_repo)
+    assert result.returncode == 0, result.stderr
+    plan = fake_speckit_repo / ".claude" / "skills" / "speckit-plan" / "SKILL.md"
+    impl = fake_speckit_repo / ".claude" / "skills" / "speckit-implement" / "SKILL.md"
+    assert "SPECOPS:BEGIN plan" in plan.read_text()
+    assert "SPECOPS:BEGIN implement" in impl.read_text()
+    assert (fake_speckit_repo / "specops.json").is_file()
+    assert (fake_speckit_repo / ".claude" / "skills" / "specops-review" / "SKILL.md").is_file()
+    # the legacy path must NOT create the native manifest
+    assert not (fake_speckit_repo / ".specify" / "extensions.yml").exists()
