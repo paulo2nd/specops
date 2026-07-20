@@ -21,3 +21,6 @@ recovery:
 tasks: []
 
 review_cycles: []
+
+workflow:
+  skipped_steps: []

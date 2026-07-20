@@ -156,6 +156,7 @@ def _load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str]
         backup_rel = ledger.backup_ledger(root, feature_dir)
         data = ledger.migrate_to_current(data)
         data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
+    ledger.ensure_workflow_block(data)  # back-fill additive Feature 007 block
     base_violations = ledger.validate_invariants(data)
     return data, base_revision, base_violations, repo
 
@@ -619,6 +620,7 @@ def cmd_rebaseline(root: Path) -> str:
         backup_rel = ledger.backup_ledger(root, feature_dir)
         data = ledger.migrate_to_current(data)
         data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
+    ledger.ensure_workflow_block(data)  # back-fill additive Feature 007 block
     base_violations = ledger.validate_invariants(data)
 
     new_branch = gitops.current_branch(repo)

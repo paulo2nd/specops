@@ -120,11 +120,14 @@ no remaining `NEEDS CLARIFICATION` markers.
 ## R7 — Additive ledger `workflow` block + migration
 
 - **Decision**: Add an additive `workflow` block to the ledger: `{ skipped_steps: [{ step, decision,
-  at }] }`. Populated for new ledgers; back-filled as an empty block by a forward migration for existing
-  Feature 006 v2 ledgers, gated by the existing schema-version machinery, with a migration test per the
-  Feature 006 pattern (`test_ledger_migration.py`). Read-compatible with v2. **No `run_id`**: no spec
-  requirement mandates a Spec Kit run correlation id, and reconciliation (R3) aligns state via Feature
-  006's workspace identity + phase/artifact consistency, so a run id would be an unjustified entity.
+  at }] }`. Implemented as an **additive within-v2 field** (not a schema bump): `ledger.ensure_workflow_block`
+  normalizes it on the write path (`status._load_for_write`) and `migrate_to_current` emits it, so a
+  Feature 006 v2 ledger lacking it gains it on the next state change without re-migrating. Read-compatible
+  with v2; back-fill covered by unit + integration tests. A schema bump to 3 was **rejected**: the field
+  carries no invariants and old readers ignore it, and the shared v2 test fixtures + many `schema==2`
+  assertions show a bump would force every existing ledger to re-migrate for zero semantic gain. **No
+  `run_id`**: no spec requirement mandates a Spec Kit run correlation id, and reconciliation (R3) aligns
+  state via Feature 006's workspace identity + phase/artifact consistency, so a run id would be unjustified.
 - **Rationale**: FR-006 requires the run/skip decision to live in the ledger; Feature 006 already
   introduced `workflow_lane`/`active_artifact` in this same area, so this is a small, consistent
   additive extension — not the finding-schema redesign forbidden by FR-027.

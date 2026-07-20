@@ -58,8 +58,11 @@ Added to `status.yaml` alongside the existing `workflow_lane`, `active_artifact`
 
 Rules:
 - New ledgers initialize `workflow` populated (empty `skipped_steps`).
-- Migration back-fills an empty `workflow` block on Feature 006 v2 ledgers (deterministic, lossless),
-  gated by the existing schema-version machinery; a forward-migration test covers it (per 006).
+- The block is an **additive within-v2 field** (not a schema bump): `ensure_workflow_block` normalizes
+  it on the write path, so a Feature 006 v2 ledger lacking it gains it on the next state change without
+  re-migrating; `migrate_to_current` also emits it for v1→v2 migrations. Back-fill is covered by tests.
+  A version bump was rejected — the field carries no invariants and old readers ignore it, so forcing
+  every existing v2 ledger to re-migrate would be disproportionate.
 - Timestamps are timezone-aware and stably serialized (inherited from Feature 006 — FR-009 there).
 - This is an **additive** extension, not the corrective-handoff finding schema forbidden by FR-027.
 

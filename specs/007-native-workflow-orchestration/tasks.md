@@ -43,9 +43,9 @@ Single project: `src/specops/`, `tests/unit/`, `tests/integration/` (existing la
 
 **⚠️ CRITICAL**: No user-story work begins until this phase is complete.
 
-- [ ] T004 Add the additive `workflow` block `{skipped_steps[]}` to the ledger (defaults, normalization, invariants; no `run_id` — reconciliation uses Feature 006 identity) in `src/specops/ledger.py` [SC-004][SC-007]
-- [ ] T005 Add a forward migration back-filling an empty `workflow` block on Feature 006 v2 ledgers (deterministic, lossless), gated by the schema-version machinery, in `src/specops/migration.py` [SC-004]
-- [ ] T006 [P] Migration + schema tests (lossless back-fill, v2 read-compat) in `tests/unit/test_migration.py` and `tests/integration/test_ledger_migration.py` [SC-004]
+- [x] T004 Add the additive `workflow` block `{skipped_steps[]}` to the ledger via `ensure_workflow_block` + `migrate_to_current` back-fill (no `run_id`; reconciliation uses Feature 006 identity) in `src/specops/ledger.py` [SC-004][SC-007]
+- [x] T005 Back-fill the `workflow` block on the write path (an **additive within-v2 field**, normalized in `_load_for_write`, not a schema bump — the field carries no invariants and old readers ignore it, so a version bump forcing every v2 ledger to re-migrate would be disproportionate) in `src/specops/status.py` + `src/specops/templates/status.yaml` [SC-004]
+- [x] T006 [P] Back-fill tests (v1 migration produces the block; a v2 ledger gains it on a state change without re-migrating; ensure/idempotency/shape-repair) in `tests/unit/test_ledger.py` and `tests/integration/test_ledger_migration.py` [SC-004]
 - [ ] T007 Add the shared outcome-contract primitive (exit-code constants 0/1/2 + JSON emitter matching `contracts/cli-outcome-contract.md`) in `src/specops/errors.py` (+ a small helper module/function) [SC-006]
 - [ ] T008 [P] Unit tests for the outcome-contract primitive (exit_code↔class↔outcome consistency, G1) in `tests/unit/test_outcome_contract.py` [SC-006]
 
