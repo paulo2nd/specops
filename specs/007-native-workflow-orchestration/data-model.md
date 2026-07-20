@@ -49,11 +49,15 @@ Added to `status.yaml` alongside the existing `workflow_lane`, `active_artifact`
 
 | Field | Type | Notes |
 |---|---|---|
-| `workflow.run_id` | string | Correlates the Spec Kit workflow run to this ledger (FR-016). |
 | `workflow.skipped_steps[]` | list | `{ step: "clarify\|checklist\|analyze", decision: "run\|skip", at: <tz-aware ts> }` (FR-006). |
 
+> **No `run_id`**: reconciliation aligns the ledger with the effective repo/workflow state using
+> Feature 006's workspace identity (feature/branch/baseline) and phase/artifact consistency — it does
+> not need a Spec Kit run correlation id, and no spec requirement mandates one. Dropped to avoid an
+> unjustified entity.
+
 Rules:
-- New ledgers initialize `workflow` populated (empty `skipped_steps`, `run_id` set at first step).
+- New ledgers initialize `workflow` populated (empty `skipped_steps`).
 - Migration back-fills an empty `workflow` block on Feature 006 v2 ledgers (deterministic, lossless),
   gated by the existing schema-version machinery; a forward-migration test covers it (per 006).
 - Timestamps are timezone-aware and stably serialized (inherited from Feature 006 — FR-009 there).

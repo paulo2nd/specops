@@ -37,7 +37,7 @@ Ship a **SpecOps-owned `specops` workflow definition** that composes Spec Kit's 
 | **I. Speckit Extension, Never Replacement** (NON-NEGOTIABLE) | **PASS.** The `specops` workflow is additive and SpecOps-owned; `extension install` writes only its own registry entry and never touches the bundled `speckit` workflow (FR-001a). Removal prunes only SpecOps-owned entries, mirroring the existing command-prune logic in `extension.py`. |
 | **II. Physical State Ledger (Repo-as-State)** | **PASS.** Every phase/task/review-cycle transition is a `specops status …` CLI step; the workflow engine never writes the ledger (FR-008/009). The additive `workflow` block is manipulated exclusively by CLI. `reconcile` remains the git-verifiable gate (extended, not weakened). |
 | **III. Automated Evidence Collection** | **PASS.** Unchanged: the loop reuses `specops status complete-task --auto` and the existing review-cycle/evidence representation (FR-017/027). No evidence-format change (deferred to Feature 012). |
-| **IV. Surgical Agent Behavior via Injected Prompts** | **PASS.** The workflow definition is a *new* delivery surface that composes the same SpecOps gates the directives already enforce; the injected directives remain intact and are delivered by the same `extension install`. The workflow references the CLI gates rather than duplicating directive logic. |
+| **IV. Surgical Agent Behavior via Injected Prompts** | **PASS (coordination settled — analyze C1).** The injected lifecycle-hook directives remain the **sole owner** of forward-seam ledger creation and phase transitions; they fire on the same lifecycle commands the workflow runs. The `specops` workflow does **not** duplicate them — it owns only the corrective REVIEW→IMPLEMENT round and additive `skipped_steps` records, and every workflow-issued `specops status` call is idempotent-tolerant, so no double transition can occur. The injected directives are delivered unchanged by the same `extension install`. |
 | **V. Domain Agnosticism** | **PASS.** Workflow steps and the outcome contract are stack-neutral; all client behavior stays in `specops.json` (`test_command`, `lint_command`). |
 | **VI. Exit Codes as Gates** | **PASS (strengthened).** The outcome contract formalizes the existing `errors.py` codes (0 ok / 1 blocking-gate-or-rejection / 2 infra-or-data error) and adds machine-readable `--json`, so native gate/`do-while`/`if` steps compose the SpecOps gates deterministically. |
 
@@ -77,8 +77,8 @@ src/specops/
 ├── review.py                             (modify)  # add machine-readable verdict output (--json path)
 ├── reconcile.py                          (modify)  # add workflow/ledger-state reconciliation dimension + JSON
 ├── cli.py                                (modify)  # --json options; wire outcome-contract exit codes
-├── ledger.py                             (modify)  # additive `workflow` block {run_id, skipped_steps}
-├── status.py                             (modify)  # CLI seam to record run_id + optional-step skip decisions
+├── ledger.py                             (modify)  # additive `workflow` block {skipped_steps}
+├── status.py                             (modify)  # CLI seam: record optional-step skips; idempotent-tolerant transitions (C1)
 └── migration.py                          (modify)  # forward-migrate: back-fill empty `workflow` block
 
 tests/

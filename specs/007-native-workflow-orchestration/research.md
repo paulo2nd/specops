@@ -98,26 +98,37 @@ no remaining `NEEDS CLARIFICATION` markers.
 ## R6 — Step wiring and state ownership
 
 - **Decision**: Lifecycle steps are Spec Kit `command` steps invoking the integration's registered
-  command (`speckit.specify`, `speckit.plan`, …); every deterministic SpecOps action
-  (`status init-spec`/`transition-phase`/`complete-task`, `reconcile`, `review`) is a `shell` step
-  invoking the `specops` CLI. All ledger mutation happens through those CLI steps (FR-008/009); Spec
-  Kit's workflow state stays navigational only (FR-009).
-- **Rationale**: FR-002/008 — compose native steps, keep transitions in SpecOps.
-- **Verified**: the bundled `speckit` workflow already uses `command` steps for lifecycle commands and
-  `gate` steps for review; SpecOps CLI subcommands (`reconcile`, `review`, `consistency`, `status …`)
-  all exist and are gate-composable.
+  command (`speckit.specify`, `speckit.plan`, …); SpecOps gates (`reconcile`, `review`) are `shell`
+  steps invoking the `specops` CLI. **Ownership of phase transitions is settled to avoid double-drive**
+  (analyze finding C1): the injected Constitution Principle IV lifecycle-hook directives
+  (`directives/tasks.md`, `directives/implement.md`) — which fire on the same lifecycle commands and
+  already `init-spec` the ledger and `transition-phase PLAN/TASKS/IMPLEMENT/REVIEW` — remain the **sole
+  owner** of forward-seam ledger creation and transitions. The `specops` workflow does **not** re-issue
+  those; it owns only (a) the corrective `REVIEW→IMPLEMENT -r REJECTED` round (no directive performs it)
+  and (b) additive, non-transition records (`workflow.skipped_steps`). Every workflow-issued
+  `specops status` call is **idempotent-tolerant** (no-op-and-continue if already in the target state).
+  Spec Kit's workflow state stays navigational only (FR-009); all ledger mutation is still via the
+  SpecOps CLI, never the engine (FR-008).
+- **Rationale**: The directives (Principle IV) are the established phase-wiring mechanism; duplicating
+  them in the workflow would cause "invalid transition" conflicts. Composing around them keeps the
+  workflow's job to orchestration + gates + reconciliation and honors Principle IV unchanged.
+- **Verified**: `directives/tasks.md` issues `status init-spec` + `transition-phase PLAN/TASKS`;
+  `directives/implement.md` issues `transition-phase IMPLEMENT` then `REVIEW` and is already
+  idempotent-tolerant ("if already in IMPLEMENT, continue"). SpecOps CLI subcommands (`reconcile`,
+  `review`, `consistency`, `status …`) all exist and are gate-composable.
 
 ## R7 — Additive ledger `workflow` block + migration
 
-- **Decision**: Add an additive `workflow` block to the ledger: `{ run_id, skipped_steps: [{ step,
-  decision, at }] }`. Populated for new ledgers; back-filled as an empty block by a forward migration
-  for existing Feature 006 v2 ledgers, gated by the existing schema-version machinery, with a migration
-  test per the Feature 006 pattern (`test_ledger_migration.py`). Read-compatible with v2.
-- **Rationale**: FR-006 (skip recording must live in the ledger) and FR-016 (run correlation for
-  reconciliation) need durable state; Feature 006 already introduced `workflow_lane`/`active_artifact`
-  in this same area, so this is a small, consistent additive extension — not the finding-schema
-  redesign forbidden by FR-027.
-- **Alternatives**: Store skip/run state only in Spec Kit workflow state — rejected: FR-006 mandates the
+- **Decision**: Add an additive `workflow` block to the ledger: `{ skipped_steps: [{ step, decision,
+  at }] }`. Populated for new ledgers; back-filled as an empty block by a forward migration for existing
+  Feature 006 v2 ledgers, gated by the existing schema-version machinery, with a migration test per the
+  Feature 006 pattern (`test_ledger_migration.py`). Read-compatible with v2. **No `run_id`**: no spec
+  requirement mandates a Spec Kit run correlation id, and reconciliation (R3) aligns state via Feature
+  006's workspace identity + phase/artifact consistency, so a run id would be an unjustified entity.
+- **Rationale**: FR-006 requires the run/skip decision to live in the ledger; Feature 006 already
+  introduced `workflow_lane`/`active_artifact` in this same area, so this is a small, consistent
+  additive extension — not the finding-schema redesign forbidden by FR-027.
+- **Alternatives**: Store the skip state only in Spec Kit workflow state — rejected: FR-006 mandates the
   ledger, and the ledger must stay authoritative (FR-009).
 - **Verified**: `ledger.py` already normalizes `workflow_lane` and `active_artifact`; migration
   back-fill fits the existing `migration.py` forward-migration flow.
