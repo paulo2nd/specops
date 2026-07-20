@@ -29,6 +29,32 @@ def _setup(tmp_path: Path) -> tuple[Path, Path]:
     return root, feature_dir
 
 
+class TestConsistencyJsonOutcome:
+    """Feature 007 US4 (T029): `consistency --json` outcome classes. [SC-006]"""
+
+    def _run_json(self, repo: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["specops", "consistency", "--json"], cwd=repo, capture_output=True, text=True
+        )
+
+    def test_json_pass(self, tmp_path: Path) -> None:
+        root, fd = _setup(tmp_path)
+        (fd / "spec.md").write_text("## Success Criteria\n- **SC-001**: passes\n")
+        (fd / "tasks.md").write_text("- [ ] T001 [SC-001] task\n")
+        r = self._run_json(root)
+        assert r.returncode == 0
+        assert json.loads(r.stdout)["class"] == "pass"
+
+    def test_json_gate_rejection_on_uncovered_sc(self, tmp_path: Path) -> None:
+        root, fd = _setup(tmp_path)
+        (fd / "spec.md").write_text("## Success Criteria\n- **SC-001**: uncovered\n")
+        (fd / "tasks.md").write_text("- [ ] T001 task with no SC tag\n")
+        r = self._run_json(root)
+        assert r.returncode == 1
+        obj = json.loads(r.stdout)
+        assert obj["class"] == "gate-rejection"
+
+
 class TestScenarioD:
     def test_compliant_pair_passes(self, tmp_path: Path) -> None:
         """D-1: all SCs covered → exit 0."""

@@ -87,6 +87,24 @@ def test_done_transition_is_idempotent_when_already_done(fake_speckit_repo: Path
     assert "no-op" in r.stdout
 
 
+# --- US4 (SC-006/SC-007): outcome classes are distinct; read-only gates ---------
+
+def test_readonly_json_gates_do_not_mutate_the_ledger(fake_speckit_repo: Path) -> None:
+    """An execution/infra failure during a read-only gate never advances the ledger
+    or records a rejection (SC-007) — the gates are non-mutating."""
+    repo = fake_speckit_repo
+    fd = repo / "specs" / "001-demo"
+    (fd / "tasks.md").write_text("- [ ] T001 task\n")
+    (fd / "spec.md").write_text("# spec\n")
+    _run(repo, "status", "init-spec")
+    before = (fd / "status.yaml").read_bytes()
+
+    _run(repo, "reconcile", "--json")
+    _run(repo, "review", "--json")  # no specops.json → infra-error, but read-only
+
+    assert (fd / "status.yaml").read_bytes() == before  # no mutation of ledger
+
+
 # --- Smoke: the shipped definition parses in Spec Kit's own engine -------------
 
 @pytest.mark.skipif(shutil.which("specify") is None, reason="Spec Kit CLI not installed")

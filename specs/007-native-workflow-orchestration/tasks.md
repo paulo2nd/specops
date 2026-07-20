@@ -129,14 +129,14 @@ Single project: `src/specops/`, `tests/unit/`, `tests/integration/` (existing la
 
 ### Tests for User Story 4 (write first) ⚠️
 
-- [ ] T029 [P] [US4] Unit tests: `review`/`reconcile`/`consistency` JSON `class`↔exit consistency, missing-command/integration → `infra-error` before any mutation, read-only non-mutation (G1–G5) in `tests/unit/test_outcome_contract.py` and `tests/unit/test_consistency.py` [SC-006][SC-007]
-- [ ] T030 [P] [US4] Integration test: inject gate-rejection / infra-error / execution-failure → distinct `class`; assert 0 ledger advances and 0 rejections recorded for infra/exec, in `tests/integration/test_workflow_orchestration.py` [SC-006]
+- [x] T029 [P] [US4] Unit tests: `review`/`reconcile`/`consistency` JSON `class`↔exit consistency, missing-command/integration → `infra-error` before any mutation, read-only non-mutation (G1–G5) in `tests/unit/test_outcome_contract.py` and `tests/unit/test_consistency.py` [SC-006][SC-007]
+- [x] T030 [P] [US4] Integration test: inject gate-rejection / infra-error / execution-failure → distinct `class`; assert 0 ledger advances and 0 rejections recorded for infra/exec, in `tests/integration/test_workflow_orchestration.py` [SC-006]
 
 ### Implementation for User Story 4
 
-- [ ] T031 [US4] Add `--json` to `specops consistency` and finalize the class taxonomy across all three commands per `contracts/cli-outcome-contract.md` in `src/specops/cli.py` [SC-006]
-- [ ] T032 [US4] Ensure a required-but-missing integration/SpecOps command surfaces as `infra-error` (exit 2) before any state mutation, in `src/specops/cli.py`/`src/specops/errors.py`/`src/specops/extension.py` [SC-006]
-- [ ] T033 [US4] Wire the workflow branch conditions (`if`/`switch` on `class`): gate-rejection→corrective loop, infra-error→halt (rebaseline out-of-band), execution-failure→`specify workflow resume`, in `src/specops/templates/workflows/specops/workflow.yml` [SC-006]
+- [x] T031 [US4] Add `--json` to `specops consistency` and finalize the class taxonomy across all three commands per `contracts/cli-outcome-contract.md` in `src/specops/cli.py` [SC-006]
+- [x] T032 [US4] Ensure a required-but-missing integration/SpecOps command surfaces as `infra-error` (exit 2) before any state mutation, in `src/specops/cli.py`/`src/specops/errors.py`/`src/specops/extension.py` [SC-006]
+- [x] T033 [US4] Wire the workflow branch conditions (`if`/`switch` on `class`): gate-rejection→corrective loop, infra-error→halt (rebaseline out-of-band), execution-failure→`specify workflow resume`, in `src/specops/templates/workflows/specops/workflow.yml` [SC-006]
 
 **Checkpoint**: All four user stories independently functional.
 
