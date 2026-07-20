@@ -57,6 +57,61 @@ def test_install_registers_and_leaves_host_untouched(fake_speckit_repo, compat_o
     assert _host_hashes(root) == before
 
 
+# --- Feature 007 (T010): additive `specops` workflow registration ---
+
+def _registry(root: Path) -> dict:
+    return json.loads((root / ".specify" / "workflows" / "workflow-registry.json").read_text())
+
+
+def test_install_registers_specops_workflow_additively(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    # A pre-existing bundled `speckit` workflow + a foreign entry must survive.
+    wf_dir = root / ".specify" / "workflows"
+    wf_dir.mkdir(parents=True, exist_ok=True)
+    (wf_dir / "workflow-registry.json").write_text(
+        json.dumps({"schema_version": "1.0", "workflows": {
+            "speckit": {"name": "Full SDD Cycle", "source": "bundled"},
+            "vendor-x": {"name": "Vendor", "source": "vendor"},
+        }})
+    )
+
+    assert extension.install(root) == "created"
+
+    # SpecOps workflow file + registry key installed.
+    assert (wf_dir / "specops" / "workflow.yml").is_file()
+    reg = _registry(root)
+    assert reg["workflows"]["specops"]["source"] == "specops"
+    # Foreign + bundled entries preserved verbatim.
+    assert reg["workflows"]["speckit"] == {"name": "Full SDD Cycle", "source": "bundled"}
+    assert reg["workflows"]["vendor-x"] == {"name": "Vendor", "source": "vendor"}
+
+
+def test_remove_prunes_only_specops_workflow(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    wf_dir = root / ".specify" / "workflows"
+    wf_dir.mkdir(parents=True, exist_ok=True)
+    (wf_dir / "workflow-registry.json").write_text(
+        json.dumps({"schema_version": "1.0", "workflows": {
+            "speckit": {"name": "Full SDD Cycle", "source": "bundled"},
+        }})
+    )
+    extension.install(root)
+    assert (wf_dir / "specops" / "workflow.yml").is_file()
+
+    extension.remove(root)
+
+    assert not (wf_dir / "specops" / "workflow.yml").exists()
+    reg = _registry(root)
+    assert "specops" not in reg["workflows"]
+    assert reg["workflows"]["speckit"] == {"name": "Full SDD Cycle", "source": "bundled"}
+
+
+def test_workflow_registration_is_idempotent(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    assert extension.install(root) == "created"
+    assert extension.install(root) == "unchanged"
+
+
 # --- T011: idempotent, semantic no-op on re-run ---
 
 def test_install_is_idempotent(fake_speckit_repo, compat_ok):

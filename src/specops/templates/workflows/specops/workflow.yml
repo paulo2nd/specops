@@ -1,0 +1,132 @@
+schema_version: "1.0"
+workflow:
+  id: "specops"
+  name: "SpecOps Augmented Lifecycle"
+  version: "1.0.0"
+  author: "SpecOps"
+  description: >
+    Runs the full Spec Kit lifecycle with SpecOps deterministic gates and a human
+    planning-readiness gate. Composes Spec Kit native steps only — SpecOps adds no
+    engine, resume, gate, or loop (Feature 007). Forward-seam ledger transitions are
+    owned by the injected SpecOps directives that fire on the lifecycle commands; this
+    definition adds the readiness gate, optional-step skip gates, the deterministic
+    review, and the final DONE transition.
+
+requires:
+  speckit_version: ">=0.8.5"
+  integrations:
+    any:
+      - "claude"
+      - "copilot"
+      - "gemini"
+      - "opencode"
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Describe what you want to build"
+  integration:
+    type: string
+    default: "auto"
+    prompt: "Integration to use ('auto' uses the project's initialized integration)"
+
+steps:
+  # --- Specify ---------------------------------------------------------------
+  - id: specify
+    command: speckit.specify
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # --- Optional: Clarify (human-decided skip; decision recorded in the ledger) -
+  - id: clarify-gate
+    type: gate
+    message: "Run /speckit.clarify for this feature? Choose 'run' or 'skip'."
+    options: [run, skip]
+  - id: clarify-record
+    type: shell
+    run: "specops status record-step clarify --decision {{ steps.clarify-gate.output.choice }}"
+  - id: clarify
+    type: if
+    condition: "{{ steps.clarify-gate.output.choice == 'run' }}"
+    then:
+      - id: clarify-run
+        command: speckit.clarify
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "{{ inputs.spec }}"
+
+  # --- Optional: Checklist ---------------------------------------------------
+  - id: checklist-gate
+    type: gate
+    message: "Run /speckit.checklist for this feature? Choose 'run' or 'skip'."
+    options: [run, skip]
+  - id: checklist-record
+    type: shell
+    run: "specops status record-step checklist --decision {{ steps.checklist-gate.output.choice }}"
+  - id: checklist
+    type: if
+    condition: "{{ steps.checklist-gate.output.choice == 'run' }}"
+    then:
+      - id: checklist-run
+        command: speckit.checklist
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "{{ inputs.spec }}"
+
+  # --- Plan ------------------------------------------------------------------
+  - id: plan
+    command: speckit.plan
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # --- Human planning-readiness gate (FR-004): no tasks until approved --------
+  - id: readiness-gate
+    type: gate
+    message: "Approve spec.md and plan.md before generating tasks?"
+    options: [approve, reject]
+    on_reject: abort
+
+  # --- Tasks -----------------------------------------------------------------
+  - id: tasks
+    command: speckit.tasks
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # --- Optional: Analyze -----------------------------------------------------
+  - id: analyze-gate
+    type: gate
+    message: "Run /speckit.analyze for this feature? Choose 'run' or 'skip'."
+    options: [run, skip]
+  - id: analyze-record
+    type: shell
+    run: "specops status record-step analyze --decision {{ steps.analyze-gate.output.choice }}"
+  - id: analyze
+    type: if
+    condition: "{{ steps.analyze-gate.output.choice == 'run' }}"
+    then:
+      - id: analyze-run
+        command: speckit.analyze
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "{{ inputs.spec }}"
+
+  # --- Implement -------------------------------------------------------------
+  - id: implement
+    command: speckit.implement
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # --- Deterministic review gate (happy path; corrective loop added in US3) ---
+  - id: review
+    type: shell
+    run: "specops review"
+
+  # --- Completion: workflow-owned final transition (idempotent-tolerant) ------
+  - id: done
+    type: shell
+    run: "specops status transition-phase DONE -r APPROVED"

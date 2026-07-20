@@ -31,9 +31,9 @@ Single project: `src/specops/`, `tests/unit/`, `tests/integration/` (existing la
 
 **Purpose**: Scaffolding and test infrastructure for driving Spec Kit workflows.
 
-- [ ] T001 Create the workflow asset package dir `src/specops/templates/workflows/specops/` with a placeholder `workflow.yml` (header + empty `steps`) committed as a SpecOps-owned asset [SC-001][SC-002]
+- [x] T001 Create the workflow asset package dir `src/specops/templates/workflows/specops/` with a placeholder `workflow.yml` (header + empty `steps`) committed as a SpecOps-owned asset [SC-001][SC-002]
 - [ ] T002 [P] Add a pytest harness in `tests/conftest.py` that loads Spec Kit's `specify_cli.workflows` engine, runs `validate_workflow`, and drives a definition against a temp client-repo fixture [SC-001]
-- [ ] T003 [P] Add a Spec Kit-initialized sample client-repo fixture (with `specops.json`, an integration, a bundled `speckit` workflow) under `tests/integration/` for orchestration tests [SC-001]
+- [x] T003 [P] Add a Spec Kit-initialized sample client-repo fixture (with `specops.json`, an integration, a bundled `speckit` workflow) under `tests/integration/` for orchestration tests [SC-001]
 
 ---
 
@@ -61,17 +61,17 @@ Single project: `src/specops/`, `tests/unit/`, `tests/integration/` (existing la
 
 ### Tests for User Story 1 (write first; must fail before implementation) ⚠️
 
-- [ ] T009 [P] [US1] Unit test: validate the shipped `workflow.yml` against Spec Kit `validate_workflow`, assert native-only step types, the readiness-gate position between plan and tasks, and the absence of any `fan-out` step (C1–C4, FR-026) in `tests/unit/test_workflow_definition.py` [SC-002][SC-003]
-- [ ] T010 [P] [US1] Integration test: `install`→`list` shows `specops`, foreign/bundled registry entries and `.specify/workflows/speckit/*` preserved byte-for-byte; `remove` prunes only `specops` (E1–E4) in `tests/integration/test_extension_lifecycle.py` [SC-001]
+- [x] T009 [P] [US1] Unit test: validate the shipped `workflow.yml` against Spec Kit `validate_workflow`, assert native-only step types, the readiness-gate position between plan and tasks, and the absence of any `fan-out` step (C1–C4, FR-026) in `tests/unit/test_workflow_definition.py` [SC-002][SC-003]
+- [x] T010 [P] [US1] Integration test: `install`→`list` shows `specops`, foreign/bundled registry entries and `.specify/workflows/speckit/*` preserved byte-for-byte; `remove` prunes only `specops` (E1–E4) in `tests/integration/test_extension_lifecycle.py` [SC-001]
 - [ ] T011 [P] [US1] Integration test: happy-path run halts at readiness gate (no tasks until approved); phases advance exactly once with the injected Principle IV directives installed (no double transition — analyze C1); ledger mutated only via SpecOps CLI (no engine writes); skip choice recorded; run performs no network access (offline, FR-007), in `tests/integration/test_workflow_orchestration.py` [SC-001][SC-003][SC-007]
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Author the happy-path `specops` workflow (specify → clarify/checklist skip-gates → plan → human readiness `gate` → tasks → analyze skip-gate → implement → `specops review` → done). Do **not** add forward-seam `transition-phase`/`init-spec` steps — those are owned by the injected Principle IV directives that fire on the lifecycle commands (analyze C1). In `src/specops/templates/workflows/specops/workflow.yml` [SC-001][SC-003]
-- [ ] T013 [US1] Add a `specops status` seam to record an optional-step run/skip decision into ledger `workflow.skipped_steps` in `src/specops/status.py` and wire it in `src/specops/cli.py` [SC-001]
+- [x] T012 [US1] Author the happy-path `specops` workflow (specify → clarify/checklist skip-gates → plan → human readiness `gate` → tasks → analyze skip-gate → implement → `specops review` → done). Do **not** add forward-seam `transition-phase`/`init-spec` steps — those are owned by the injected Principle IV directives that fire on the lifecycle commands (analyze C1). In `src/specops/templates/workflows/specops/workflow.yml` [SC-001][SC-003]
+- [x] T013 [US1] Add a `specops status` seam to record an optional-step run/skip decision into ledger `workflow.skipped_steps` in `src/specops/status.py` and wire it in `src/specops/cli.py` [SC-001]
 - [ ] T014 [US1] Make the workflow-owned `specops status` calls (corrective round, final DONE, skip records) idempotent-tolerant — no-op-and-continue when the ledger is already in the target state — so they never double-issue a Principle IV directive transition (analyze C1), in `src/specops/status.py` and `src/specops/cli.py` [SC-007]
-- [ ] T015 [US1] Register the `specops` workflow additively in `src/specops/extension.py install` (write `.specify/workflows/specops/workflow.yml` + the `specops` key in `workflow-registry.json`; fail-closed preflight; idempotent `created/updated/unchanged`) [SC-001]
-- [ ] T016 [US1] Prune the `specops` workflow file + registry key on extension `disable`/`remove` (mirror `_prune_specops`, preserve foreign entries) in `src/specops/extension.py` [SC-001]
+- [x] T015 [US1] Register the `specops` workflow additively in `src/specops/extension.py install` (write `.specify/workflows/specops/workflow.yml` + the `specops` key in `workflow-registry.json`; fail-closed preflight; idempotent `created/updated/unchanged`) [SC-001]
+- [x] T016 [US1] Prune the `specops` workflow file + registry key on extension `disable`/`remove` (mirror `_prune_specops`, preserve foreign entries) in `src/specops/extension.py` [SC-001]
 
 **Checkpoint**: US1 fully functional and independently testable — MVP.
 

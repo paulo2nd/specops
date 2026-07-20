@@ -249,6 +249,19 @@ def status_rebaseline() -> None:
     typer.echo(f"status rebaseline: {status.cmd_rebaseline(root)}")
 
 
+@status_app.command("record-step")
+@_handle_errors
+def status_record_step(
+    step: str = typer.Argument(..., help="Optional step: clarify | checklist | analyze."),
+    decision: str = typer.Option(..., "--decision", help="Decision: run | skip."),
+) -> None:
+    """Record a human run/skip decision for an optional lifecycle step (Feature 007)."""
+    root = Path(".")
+    _require_git(root)
+    from specops import status
+    typer.echo(status.cmd_record_step(root, step, decision=decision))
+
+
 @status_app.command("transition-phase")
 @_handle_errors
 def status_transition_phase(

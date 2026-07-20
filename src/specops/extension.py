@@ -8,6 +8,8 @@ call it.
 """
 from __future__ import annotations
 
+import datetime
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -19,6 +21,16 @@ from specops import compat, config, gitops, initializer, speckit
 from specops.errors import SpecopsError
 
 OWNER = "specops"
+
+# The SpecOps-owned workflow (Feature 007) — additively registered alongside the
+# bundled `speckit` workflow, which is never modified (Constitution Principle I).
+WORKFLOW_ID = "specops"
+_WORKFLOW_ENTRY = {
+    "name": "SpecOps Augmented Lifecycle",
+    "version": "1.0.0",
+    "description": "SpecOps augmented Spec Kit lifecycle with deterministic gates.",
+    "source": OWNER,
+}
 
 # directive stem -> (hook_point, optional, description). Prompt provenance is the
 # directive template (research R1); the host reads these hook points.
@@ -176,6 +188,100 @@ def register_commands(root: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Workflow registration (Feature 007, FR-001a) — additive, SpecOps-owned only
+# ---------------------------------------------------------------------------
+
+def _workflows_dir(root: Path) -> Path:
+    return root / ".specify" / "workflows"
+
+
+def _workflow_registry_path(root: Path) -> Path:
+    return _workflows_dir(root) / "workflow-registry.json"
+
+
+def _workflow_file_path(root: Path) -> Path:
+    return _workflows_dir(root) / WORKFLOW_ID / "workflow.yml"
+
+
+def _workflow_template() -> str:
+    return (_templates_dir() / "workflows" / WORKFLOW_ID / "workflow.yml").read_text(
+        encoding="utf-8"
+    )
+
+
+def _read_registry(root: Path) -> dict[str, Any]:
+    """Load Spec Kit's workflow-registry.json as a dict, or {} when absent/empty."""
+    path = _workflow_registry_path(root)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ExtensionError(f"Cannot parse {path}: {exc}") from exc
+    return data if isinstance(data, dict) else {}
+
+
+def install_workflow(root: Path) -> bool:
+    """Install the SpecOps-owned `specops` workflow additively (FR-001a).
+
+    Writes `.specify/workflows/specops/workflow.yml` from the template and upserts
+    the `specops` key in Spec Kit's `workflow-registry.json`, preserving every
+    foreign entry (never touches the bundled `speckit` workflow — Principle I).
+    Idempotent: returns True only when something actually changed.
+    """
+    changed = False
+
+    content = _workflow_template()
+    wf_path = _workflow_file_path(root)
+    file_changed = (not wf_path.is_file()) or wf_path.read_text(encoding="utf-8") != content
+    if file_changed:
+        _atomic_write(wf_path, content)
+        changed = True
+
+    registry = _read_registry(root)
+    workflows = dict(registry.get("workflows") or {})
+    existing = workflows.get(WORKFLOW_ID) or {}
+    core_matches = all(existing.get(k) == v for k, v in _WORKFLOW_ENTRY.items())
+    if not core_matches or file_changed or WORKFLOW_ID not in workflows:
+        ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+        workflows[WORKFLOW_ID] = {
+            **_WORKFLOW_ENTRY,
+            "installed_at": existing.get("installed_at") or ts,
+            "updated_at": ts,
+        }
+        registry.setdefault("schema_version", "1.0")
+        registry["workflows"] = workflows
+        _atomic_write(_workflow_registry_path(root), json.dumps(registry, indent=2) + "\n")
+        changed = True
+    return changed
+
+
+def unregister_workflow(root: Path) -> bool:
+    """Remove the SpecOps `specops` workflow file + registry key, preserving every
+    foreign entry and the bundled `speckit` workflow. Returns True when changed."""
+    changed = False
+
+    wf_path = _workflow_file_path(root)
+    if wf_path.is_file():
+        wf_path.unlink()
+        changed = True
+    wf_dir = wf_path.parent
+    if wf_dir.is_dir() and not any(wf_dir.iterdir()):
+        wf_dir.rmdir()
+
+    reg_path = _workflow_registry_path(root)
+    if reg_path.is_file():
+        registry = _read_registry(root)
+        workflows = registry.get("workflows") or {}
+        if WORKFLOW_ID in workflows:
+            del workflows[WORKFLOW_ID]
+            registry["workflows"] = workflows
+            _atomic_write(reg_path, json.dumps(registry, indent=2) + "\n")
+            changed = True
+    return changed
+
+
+# ---------------------------------------------------------------------------
 # Install orchestration (T016)
 # ---------------------------------------------------------------------------
 
@@ -228,10 +334,13 @@ def install(root: Path) -> str:
     # 3. Register command files (idempotent overwrite of SpecOps-owned files).
     register_commands(root)
     config.create_or_merge(root)
+    # 4. Register the SpecOps-owned workflow additively (Feature 007, FR-001a).
+    wf_changed = install_workflow(root)
 
-    if already:
+    if already and not wf_changed:
         return "unchanged"
-    _atomic_write(manifest_path, _dump(merged))
+    if not already:
+        _atomic_write(manifest_path, _dump(merged))
     return "created" if not existing else "updated"
 
 
@@ -298,6 +407,9 @@ def unregister(root: Path) -> bool:
         elif pruned != existing:
             _atomic_write(manifest_path, _dump(pruned))
             changed = True
+
+    # Prune the SpecOps-owned workflow (Feature 007), preserving foreign entries.
+    changed = unregister_workflow(root) or changed
     return changed
 
 

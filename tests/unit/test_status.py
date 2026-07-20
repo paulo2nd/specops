@@ -145,6 +145,40 @@ def _setup_feature(tmp_path: Path, phase: str = "SPECIFY") -> tuple[Path, Path]:
     return root, feature_dir
 
 
+def test_record_step_appends_skip_decision(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "SPECIFY")
+    msg = s.cmd_record_step(root, "clarify", decision="skip")
+    assert "clarify" in msg and "skip" in msg
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    steps = data["workflow"]["skipped_steps"]
+    assert len(steps) == 1
+    assert steps[0]["step"] == "clarify"
+    assert steps[0]["decision"] == "skip"
+    assert steps[0]["at"]
+
+
+def test_record_step_replaces_prior_entry_for_same_step(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "SPECIFY")
+    s.cmd_record_step(root, "clarify", decision="skip")
+    s.cmd_record_step(root, "clarify", decision="run")
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    steps = data["workflow"]["skipped_steps"]
+    assert len(steps) == 1
+    assert steps[0]["decision"] == "run"
+
+
+def test_record_step_rejects_unknown_step(tmp_path: Path) -> None:
+    root, _ = _setup_feature(tmp_path, "SPECIFY")
+    with pytest.raises(SpecopsError, match="Unknown optional step"):
+        s.cmd_record_step(root, "implement", decision="skip")
+
+
+def test_record_step_rejects_bad_decision(tmp_path: Path) -> None:
+    root, _ = _setup_feature(tmp_path, "SPECIFY")
+    with pytest.raises(SpecopsError, match="Invalid decision"):
+        s.cmd_record_step(root, "clarify", decision="maybe")
+
+
 def test_phase_specify_to_plan(tmp_path: Path) -> None:
     root, _ = _setup_feature(tmp_path, "SPECIFY")
     msg = s.cmd_transition_phase(root, "PLAN", result=None)
