@@ -385,3 +385,66 @@ def test_interrupted_remove_completes_on_rerun(fake_speckit_repo, compat_ok, mon
     assert extension.remove(root) in ("removed", "unchanged")
     assert not (root / ".specify" / "extensions.yml").exists()
     assert migration.detect_state(root) == "absent"
+
+
+# ===========================================================================
+# Review fixes — robustness (corrupt manifest, migrate rollback, bad markers)
+# ===========================================================================
+
+# --- #1: a corrupt manifest is reported cleanly, not as a raw traceback ---
+
+def test_corrupt_manifest_reports_cleanly(fake_speckit_repo, compat_ok, monkeypatch):
+    root = fake_speckit_repo
+    (root / ".specify" / "extensions.yml").write_text("hooks: [unbalanced\n")
+
+    with pytest.raises(extension.ExtensionError):
+        extension.read_manifest(root)
+    with pytest.raises(extension.ExtensionError):
+        migration.detect_state(root)
+
+    monkeypatch.chdir(root)
+    res = runner.invoke(app, ["extension", "status"])
+    assert res.exit_code == 1  # clean error boundary, not a crash
+
+
+# --- #4: a corrupted legacy marker is a clean error and restores the host file ---
+
+def test_migrate_corrupt_marker_is_clean_error_and_restores(fake_speckit_repo, compat_ok):
+    from specops.errors import SpecopsError
+
+    root = fake_speckit_repo
+    _legacy_install(root)
+    plan = root / ".claude" / "skills" / "speckit-plan" / "SKILL.md"
+    plan.write_text(plan.read_text().replace("<!-- SPECOPS:END plan -->", ""))  # drop END
+    before = plan.read_bytes()
+
+    with pytest.raises(SpecopsError):  # InjectionError is now a SpecopsError
+        migration.migrate(root)
+    assert plan.read_bytes() == before  # backed-up bytes restored
+
+
+# --- #2: a failed migrate rolls back SpecOps-owned artifacts it created ---
+
+def test_migrate_rollback_removes_artifacts_created_during_failed_install(
+    fake_speckit_repo, compat_ok, monkeypatch
+):
+    root = fake_speckit_repo
+    _legacy_install(root)
+    (root / "specops.json").unlink()  # simulate a legacy state without config
+    assert not (root / ".specify" / "extensions.yml").exists()
+
+    def _boom(path, text):
+        raise RuntimeError("manifest write failed")
+
+    monkeypatch.setattr(extension, "_atomic_write", _boom)
+    with pytest.raises(RuntimeError):
+        migration.migrate(root)
+
+    # config created mid-install and the native manifest are both rolled back
+    assert not (root / "specops.json").exists()
+    assert not (root / ".specify" / "extensions.yml").exists()
+    # host markers restored
+    assert any(
+        "SPECOPS:BEGIN" in p.read_text()
+        for p in root.glob(".claude/skills/speckit-*/SKILL.md")
+    )

@@ -65,7 +65,11 @@ def _parse(version: str) -> tuple[int, ...]:
 
 
 def _satisfies(installed: str, minimum: str) -> bool:
-    return _parse(installed) >= _parse(minimum)
+    a, b = _parse(installed), _parse(minimum)
+    width = max(len(a), len(b))
+    a += (0,) * (width - len(a))  # pad so '0.3' == '0.3.0' (not "older")
+    b += (0,) * (width - len(b))
+    return a >= b
 
 
 def check(minimum: str = MIN_CLI_VERSION) -> CompatResult:

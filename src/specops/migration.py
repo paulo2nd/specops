@@ -10,9 +10,7 @@ import hashlib
 import shutil
 from pathlib import Path
 
-import yaml
-
-from specops import extension, initializer, speckit
+from specops import config, extension, initializer, speckit
 
 ABSENT = "absent"
 NATIVE = "native"
@@ -24,13 +22,13 @@ _BACKUP_DIRNAME = ".specops-backup"
 
 
 def _has_native(root: Path) -> bool:
-    """True when `.specify/extensions.yml` carries any SpecOps-owned entry."""
-    path = speckit.extensions_yml_path(root)
-    if not path.is_file():
-        return False
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        return False
+    """True when `.specify/extensions.yml` carries any SpecOps-owned entry.
+
+    Delegates to :func:`extension.read_manifest`, which fails closed with an
+    ExtensionError (reported cleanly) on a malformed manifest instead of raising
+    a raw yaml.YAMLError.
+    """
+    data = extension.read_manifest(root)
     for entries in (data.get("hooks") or {}).values():
         if any(e.get("extension") == extension.OWNER for e in (entries or [])):
             return True
@@ -94,11 +92,25 @@ class BackupSet:
             {"original": path, "backup": backup_path, "sha256": hashlib.sha256(data).hexdigest()}
         )
 
-    def restore_all(self) -> None:
-        """Restore every backed-up file to its exact pre-migration bytes."""
+    def restore_all(self) -> list[Path]:
+        """Restore every backed-up file to its exact pre-migration bytes.
+
+        Best-effort and non-raising: each entry is attempted independently so one
+        unwritable file cannot skip the rest, and no restore error is raised (it
+        would mask the original migration failure). Returns the list of files
+        that could not be restored. Backups are discarded only on a full restore,
+        so leftover snapshots remain available for manual recovery on partial
+        failure.
+        """
+        failed: list[Path] = []
         for entry in self.entries:
-            entry["original"].write_bytes(entry["backup"].read_bytes())
-        self.discard()
+            try:
+                entry["original"].write_bytes(entry["backup"].read_bytes())
+            except OSError:
+                failed.append(entry["original"])
+        if not failed:
+            self.discard()
+        return failed
 
     def discard(self) -> None:
         if self.location.exists():
@@ -124,20 +136,57 @@ def _strip_all_specops_blocks(path: Path) -> None:
 # Migrate orchestration (T023, FR-007/008/008a) — interruption-safe, ordered
 # ---------------------------------------------------------------------------
 
+def _rollback_native(root: Path, manifest_before: bytes | None, cfg_before: bytes | None) -> None:
+    """Undo the SpecOps-owned singleton artifacts a partial install may have
+    written, restoring them to their pre-migration state (bytes or absence).
+
+    Covers `.specify/extensions.yml` and `specops.json` — the artifacts install
+    creates. The per-integration review command files are installed at the same
+    paths the legacy install already occupies, so they are left in place (they
+    are not orphans in a legacy→native migration).
+    """
+    manifest_path = speckit.extensions_yml_path(root)
+    if manifest_before is None:
+        if manifest_path.is_file():
+            manifest_path.unlink()
+    else:
+        manifest_path.write_bytes(manifest_before)
+
+    cfg_path = config.config_path(root)
+    if cfg_before is None:
+        if cfg_path.is_file():
+            cfg_path.unlink()
+    else:
+        cfg_path.write_bytes(cfg_before)
+
+
 def migrate(root: Path) -> str:
     """Convert a legacy marker-injected installation to native.
 
     Ordered, interruption-safe flow (research R4): pre-checks → back up every
     host file about to be edited → strip SpecOps marker blocks → register native.
-    On any failure/abort, restore all backed-up host files to exact bytes and
-    re-raise (SC-008). Preserves `specops.json` and every feature ledger (FR-007).
+    On any in-process failure/abort, restore all backed-up host files to exact
+    bytes and roll back SpecOps-owned singleton artifacts, then re-raise (SC-008).
+    Preserves `specops.json` and every feature ledger (FR-007).
 
     Returns "already native" (no-op) or "migrated".
+
+    Crash-recovery limitation (deferred): the host-file strip uses
+    `initializer.remove_block`, whose write is not atomic. Automatic rollback
+    fires only on an in-process exception — a hard process kill or power loss
+    mid-strip can leave a host file truncated. The pre-edit snapshots under
+    `.specify/.specops-backup/` preserve the original bytes for manual recovery;
+    an automatic restore-on-restart is a planned follow-up.
     """
     extension.preflight(root)  # fail closed before touching any file
 
     if detect_state(root) == NATIVE:
         return "already native"
+
+    manifest_path = speckit.extensions_yml_path(root)
+    manifest_before = manifest_path.read_bytes() if manifest_path.is_file() else None
+    cfg_path = config.config_path(root)
+    cfg_before = cfg_path.read_bytes() if cfg_path.is_file() else None
 
     legacy_files = [
         p for p in speckit.host_prompt_paths(root) if _LEGACY_MARKER in _safe_read(p)
@@ -151,6 +200,7 @@ def migrate(root: Path) -> str:
         extension.install(root)
     except Exception:
         backups.restore_all()
+        _rollback_native(root, manifest_before, cfg_before)
         raise
     backups.discard()
     return "migrated"

@@ -38,3 +38,9 @@ def test_check_fails_when_missing(monkeypatch) -> None:
 def test_prerelease_suffix_is_ignored(monkeypatch) -> None:
     monkeypatch.setattr(compat, "installed_version", lambda: "0.3.0.dev1")
     assert compat.check().satisfied
+
+
+def test_two_component_version_satisfies_three_component_floor(monkeypatch) -> None:
+    # '0.3' means the same as the '0.3.0' floor — must not be rejected as older.
+    monkeypatch.setattr(compat, "installed_version", lambda: "0.3")
+    assert compat.check().satisfied

@@ -60,11 +60,18 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 def read_manifest(root: Path) -> dict[str, Any]:
-    """Load `.specify/extensions.yml` as a dict, or {} when absent/empty."""
+    """Load `.specify/extensions.yml` as a dict, or {} when absent/empty.
+
+    Raises :class:`ExtensionError` (a SpecopsError, so the CLI error boundary
+    reports it cleanly) when the manifest is present but not valid YAML.
+    """
     path = speckit.extensions_yml_path(root)
     if not path.is_file():
         return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ExtensionError(f"Cannot parse {path}: {exc}") from exc
     return data if isinstance(data, dict) else {}
 
 

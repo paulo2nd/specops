@@ -258,12 +258,12 @@ def extension_status() -> None:
 
 @extension_app.command("install")
 @_handle_errors
-def extension_install(
-    non_interactive: bool = typer.Option(
-        False, "--non-interactive", help="Decline all interactive prompts.",
-    ),
-) -> None:
-    """Register SpecOps natively via the host's extension mechanism."""
+def extension_install() -> None:
+    """Register SpecOps natively via the host's extension mechanism.
+
+    Non-interactive by design: it never prompts and fails closed (leaving the
+    repository unchanged) when preconditions are not met.
+    """
     root = Path(".")
     from specops import extension
     status = extension.install(root)

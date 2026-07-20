@@ -39,6 +39,30 @@ def test_strip_removes_specops_blocks_preserving_surrounding(tmp_path: Path) -> 
     assert "Body before." in text
 
 
+def test_restore_all_is_best_effort_and_reports_failures(tmp_path: Path) -> None:
+    root = tmp_path
+    a, b = root / "a.md", root / "b.md"
+    a.write_text("A-orig")
+    b.write_text("B-orig")
+
+    backups = migration.BackupSet(root)
+    backups.back_up(a)
+    backups.back_up(b)
+    a.write_text("A-stripped")
+    b.write_text("B-stripped")
+
+    a.chmod(0o444)  # make a's restore fail
+    try:
+        failed = backups.restore_all()
+    finally:
+        a.chmod(0o644)
+
+    assert a in failed  # reported, not raised
+    assert b.read_text() == "B-orig"  # b still restored despite a failing
+    # partial failure keeps snapshots for manual recovery
+    assert (root / ".specify" / migration._BACKUP_DIRNAME).exists()
+
+
 def test_strip_handles_multiple_blocks(tmp_path: Path) -> None:
     host = tmp_path / "multi.md"
     host.write_text("# Prompt\n")
