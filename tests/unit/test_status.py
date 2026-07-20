@@ -145,10 +145,67 @@ def _setup_feature(tmp_path: Path, phase: str = "SPECIFY") -> tuple[Path, Path]:
     return root, feature_dir
 
 
+def test_record_step_appends_skip_decision(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "SPECIFY")
+    msg = s.cmd_record_step(root, "clarify", decision="skip")
+    assert "clarify" in msg and "skip" in msg
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    steps = data["workflow"]["skipped_steps"]
+    assert len(steps) == 1
+    assert steps[0]["step"] == "clarify"
+    assert steps[0]["decision"] == "skip"
+    assert steps[0]["at"]
+
+
+def test_record_step_replaces_prior_entry_for_same_step(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "SPECIFY")
+    s.cmd_record_step(root, "clarify", decision="skip")
+    s.cmd_record_step(root, "clarify", decision="run")
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    steps = data["workflow"]["skipped_steps"]
+    assert len(steps) == 1
+    assert steps[0]["decision"] == "run"
+
+
+def test_record_step_rejects_unknown_step(tmp_path: Path) -> None:
+    root, _ = _setup_feature(tmp_path, "SPECIFY")
+    with pytest.raises(SpecopsError, match="Unknown optional step"):
+        s.cmd_record_step(root, "implement", decision="skip")
+
+
+def test_record_step_rejects_bad_decision(tmp_path: Path) -> None:
+    root, _ = _setup_feature(tmp_path, "SPECIFY")
+    with pytest.raises(SpecopsError, match="Invalid decision"):
+        s.cmd_record_step(root, "clarify", decision="maybe")
+
+
 def test_phase_specify_to_plan(tmp_path: Path) -> None:
     root, _ = _setup_feature(tmp_path, "SPECIFY")
     msg = s.cmd_transition_phase(root, "PLAN", result=None)
     assert "SPECIFY" in msg and "PLAN" in msg
+
+
+# --- T014: idempotent-tolerant transitions (--if-needed, analyze C1) ---
+
+def test_transition_if_needed_same_phase_is_noop(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "PLAN")
+    before = (feature_dir / "status.yaml").read_text()
+    msg = s.cmd_transition_phase(root, "PLAN", result=None, if_needed=True)
+    assert "no-op" in msg
+    # Ledger unchanged (no revision bump, no rewrite of content).
+    assert (feature_dir / "status.yaml").read_text() == before
+
+
+def test_transition_if_needed_still_advances_when_behind(tmp_path: Path) -> None:
+    root, _ = _setup_feature(tmp_path, "SPECIFY")
+    msg = s.cmd_transition_phase(root, "PLAN", result=None, if_needed=True)
+    assert "PLAN" in msg and "no-op" not in msg
+
+
+def test_transition_same_phase_without_if_needed_still_errors(tmp_path: Path) -> None:
+    root, _ = _setup_feature(tmp_path, "PLAN")
+    with pytest.raises(SpecopsError, match="Invalid transition"):
+        s.cmd_transition_phase(root, "PLAN", result=None)
 
 
 def test_phase_skip_raises(tmp_path: Path) -> None:

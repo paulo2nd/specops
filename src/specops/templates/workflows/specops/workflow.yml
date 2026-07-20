@@ -1,0 +1,167 @@
+schema_version: "1.0"
+workflow:
+  id: "specops"
+  name: "SpecOps Augmented Lifecycle"
+  version: "1.0.0"
+  author: "SpecOps"
+  description: >
+    Runs the full Spec Kit lifecycle with SpecOps deterministic gates and a human
+    planning-readiness gate. Composes Spec Kit native steps only — SpecOps adds no
+    engine, resume, gate, or loop (Feature 007). Forward-seam ledger transitions are
+    owned by the injected SpecOps directives that fire on the lifecycle commands; this
+    definition adds the readiness gate, optional-step skip gates, the deterministic
+    review, and the final DONE transition.
+
+requires:
+  speckit_version: ">=0.8.5"
+  integrations:
+    any:
+      - "claude"
+      - "copilot"
+      - "gemini"
+      - "opencode"
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Describe what you want to build"
+  integration:
+    type: string
+    default: "auto"
+    prompt: "Integration to use ('auto' uses the project's initialized integration)"
+
+steps:
+  # --- Specify ---------------------------------------------------------------
+  - id: specify
+    command: speckit.specify
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # --- Optional: Clarify (human-decided skip; decision recorded in the ledger) -
+  - id: clarify-gate
+    type: gate
+    message: "Run /speckit.clarify for this feature? Choose 'run' or 'skip'."
+    options: [run, skip]
+  - id: clarify-record
+    type: shell
+    run: "specops status record-step clarify --decision {{ steps.clarify-gate.output.choice }}"
+  - id: clarify
+    type: if
+    condition: "{{ steps.clarify-gate.output.choice == 'run' }}"
+    then:
+      - id: clarify-run
+        command: speckit.clarify
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "{{ inputs.spec }}"
+
+  # --- Optional: Checklist ---------------------------------------------------
+  - id: checklist-gate
+    type: gate
+    message: "Run /speckit.checklist for this feature? Choose 'run' or 'skip'."
+    options: [run, skip]
+  - id: checklist-record
+    type: shell
+    run: "specops status record-step checklist --decision {{ steps.checklist-gate.output.choice }}"
+  - id: checklist
+    type: if
+    condition: "{{ steps.checklist-gate.output.choice == 'run' }}"
+    then:
+      - id: checklist-run
+        command: speckit.checklist
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "{{ inputs.spec }}"
+
+  # --- Plan ------------------------------------------------------------------
+  - id: plan
+    command: speckit.plan
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # --- Human planning-readiness gate (FR-004): no tasks until approved --------
+  - id: readiness-gate
+    type: gate
+    message: "Approve spec.md and plan.md before generating tasks?"
+    options: [approve, reject]
+    on_reject: abort
+
+  # --- Tasks -----------------------------------------------------------------
+  - id: tasks
+    command: speckit.tasks
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # --- Optional: Analyze -----------------------------------------------------
+  - id: analyze-gate
+    type: gate
+    message: "Run /speckit.analyze for this feature? Choose 'run' or 'skip'."
+    options: [run, skip]
+  - id: analyze-record
+    type: shell
+    run: "specops status record-step analyze --decision {{ steps.analyze-gate.output.choice }}"
+  - id: analyze
+    type: if
+    condition: "{{ steps.analyze-gate.output.choice == 'run' }}"
+    then:
+      - id: analyze-run
+        command: speckit.analyze
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "{{ inputs.spec }}"
+
+  # --- Corrective loop: implement → review, repeating while REJECTED ----------
+  # Native `do-while` (FR-015): SpecOps builds no loop. The in-loop review is
+  # `--soft` (always exit 0; verdict in JSON) so a REJECTED verdict DRIVES the loop
+  # instead of aborting the run — a non-zero shell exit would fail the step and
+  # abort. `reconcile --json` is the fail-closed precondition (FR-010) of the
+  # corrective transition. On REJECTED, the workflow opens a corrective round
+  # (REVIEW→IMPLEMENT -r REJECTED — a transition no directive owns, C1/FR-017);
+  # `max_iterations` bounds the loop.
+  #
+  # NOTE (runtime verification): the loop's end-to-end behavior interacts with the
+  # injected Principle IV directive transitions and requires a live integration to
+  # validate — it is not CI-reproducible (command steps need an agent/LLM). The
+  # step structure is verified against Spec Kit's engine; the CLI primitives it
+  # composes (soft/hard review, corrective transition) are unit/integration-tested.
+  - id: corrective-loop
+    type: do-while
+    condition: "{{ steps.review-soft.output.data.verdict == 'REJECTED' }}"
+    max_iterations: 3
+    steps:
+      - id: reconcile-pre-impl
+        type: shell
+        run: "specops reconcile --json"
+      - id: implement
+        command: speckit.implement
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "{{ inputs.spec }}"
+      - id: review-soft
+        type: shell
+        run: "specops review --json --soft"
+        output_format: json
+      - id: corrective-round
+        type: if
+        condition: "{{ steps.review-soft.output.data.verdict == 'REJECTED' }}"
+        then:
+          - id: open-corrective-round
+            type: shell
+            run: "specops status transition-phase IMPLEMENT -r REJECTED --if-needed"
+
+  # --- Terminal deterministic gate (FR-019): fail closed if not APPROVED ------
+  # A hard `specops review` exits non-zero when the verdict is not APPROVED, so an
+  # exhausted-loop still-rejecting feature halts here and never reaches DONE. This
+  # is NOT a human gate (a human approve could bypass a still-failing review).
+  - id: terminal-gate
+    type: shell
+    run: "specops review"
+
+  # --- Completion: workflow-owned final transition (idempotent-tolerant) ------
+  - id: done
+    type: shell
+    run: "specops status transition-phase DONE -r APPROVED --if-needed"

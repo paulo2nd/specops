@@ -135,6 +135,27 @@ The legacy `specops init` path above remains fully supported. Requires the
 `specops` CLI `>= 0.3.0` (the first release that understands the native manifest
 schema).
 
+`install` also additively registers the **`specops` workflow** (below), leaving
+Spec Kit's bundled `speckit` workflow untouched.
+
+### The `specops` workflow
+
+`specops extension install` registers an installable, SpecOps-owned workflow that
+composes **Spec Kit's own native workflow engine** to run the augmented lifecycle
+— SpecOps builds no engine, resume, gate, or loop. Run it with:
+
+```bash
+specify workflow run specops
+```
+
+It drives specify → clarify/checklist (human skip gates, recorded in the ledger)
+→ plan → **human planning-readiness gate** (no tasks until approved) → tasks →
+analyze → a bounded **corrective `do-while` loop** (implement → review, repeating
+while the deterministic review verdict is `REJECTED`) → a **terminal review gate**
+that fails closed unless the verdict is `APPROVED`. Forward-seam phase transitions
+stay owned by the injected directives; the workflow never double-issues them, and
+a fail-closed `specops reconcile` precondition keeps the ledger authoritative.
+
 ### `specops status show`
 
 Read-only. Prints ledger state: feature, branch, phase, active task, task counts

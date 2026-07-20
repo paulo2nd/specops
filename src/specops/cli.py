@@ -13,7 +13,7 @@ import git
 import typer
 
 from specops import gitops
-from specops.errors import SpecopsError
+from specops.errors import LedgerParseError, SpecopsError
 
 
 def _force_utf8_output() -> None:
@@ -124,11 +124,40 @@ def init(
 
 @app.command("reconcile")
 @_handle_errors
-def reconcile() -> None:
-    """Validate ledger commit hashes against Git history."""
+def reconcile(
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
+    ),
+) -> None:
+    """Validate the ledger against Git history and the workspace."""
     root = Path(".")
     _require_git(root)
+    from specops import outcome
     from specops import reconcile as rec_mod
+    if json_out:
+        try:
+            feature_dir, data, repo = rec_mod.load_state(root)
+            warnings, violations = rec_mod.history_checks(root, feature_dir, data, repo)
+            dim = rec_mod.divergence_of(root, feature_dir, data, repo)
+        except (LedgerParseError, SpecopsError) as exc:
+            typer.echo(outcome.render("reconcile", outcome.INFRA_ERROR, detail=exc.message))
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
+        warns = warnings or None
+        if dim is not None:
+            # Workspace/identity/workflow-state divergence — rebaseline re-anchors it.
+            typer.echo(outcome.render(
+                "reconcile", outcome.INFRA_ERROR,
+                diverged_dimension=dim, remedy="specops status rebaseline", warnings=warns,
+            ))
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR))
+        if violations:
+            # Commit-history / evidence integrity — NOT rebaseline-fixable (no remedy).
+            typer.echo(outcome.render(
+                "reconcile", outcome.INFRA_ERROR, violations=violations, warnings=warns,
+            ))
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR))
+        typer.echo(outcome.render("reconcile", outcome.PASS, warnings=warns))
+        return
     warnings, violations = rec_mod.run(root)
     for w in warnings:
         typer.echo(w)
@@ -141,11 +170,27 @@ def reconcile() -> None:
 
 @app.command("consistency")
 @_handle_errors
-def consistency() -> None:
+def consistency(
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
+    ),
+) -> None:
     """Validate SC-ID coverage and plan path-suffix declarations."""
     root = Path(".")
     _require_git(root)
     from specops import consistency as con_mod
+    from specops import outcome
+    if json_out:
+        try:
+            _warnings, violations = con_mod.run(root)
+        except (LedgerParseError, SpecopsError) as exc:
+            typer.echo(outcome.render("consistency", outcome.INFRA_ERROR, detail=exc.message))
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
+        if violations:
+            typer.echo(outcome.render("consistency", outcome.GATE_REJECTION, violations=violations))
+            raise typer.Exit(outcome.exit_for(outcome.GATE_REJECTION))
+        typer.echo(outcome.render("consistency", outcome.PASS))
+        return
     warnings, violations = con_mod.run(root)
     for w in warnings:
         typer.echo(w)
@@ -158,15 +203,44 @@ def consistency() -> None:
 
 @app.command("review")
 @_handle_errors
-def review() -> None:
+def review(
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
+    ),
+    soft: bool = typer.Option(
+        False, "--soft",
+        help="With --json, always exit 0 (the verdict is in the JSON). Use inside a "
+             "do-while loop body so a REJECTED verdict drives the loop instead of "
+             "aborting the run (Feature 007).",
+    ),
+) -> None:
     """Run the deterministic review gates (reconcile → lint → test → working tree)."""
     repo = _require_git(Path("."))
+    from specops import outcome
     from specops import review as review_mod
     # Contract: usable from any directory inside the repo — resolve the root.
     if repo.working_tree_dir is None:  # bare repository — no tree to review
         typer.echo("Not a work tree (bare repository).", err=True)
         raise typer.Exit(1)
     root = Path(repo.working_tree_dir)
+    if json_out:
+        try:
+            report = review_mod.evaluate(root)
+        except (LedgerParseError, SpecopsError) as exc:
+            typer.echo(outcome.render("review", outcome.INFRA_ERROR, detail=exc.message))
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
+        gates = [{"name": r.name, "status": r.status} for r in report.results]
+        if report.passed:
+            typer.echo(outcome.render("review", outcome.PASS, verdict="APPROVED", gates=gates))
+            return
+        typer.echo(
+            outcome.render("review", outcome.GATE_REJECTION, verdict="REJECTED", gates=gates)
+        )
+        # --soft keeps exit 0 so a do-while body can branch on the verdict; the
+        # terminal gate (hard `specops review`) is what fails closed on REJECTED.
+        if not soft:
+            raise typer.Exit(outcome.exit_for(outcome.GATE_REJECTION))
+        return
     typer.echo(review_mod.run_gates(root))
 
 
@@ -249,6 +323,19 @@ def status_rebaseline() -> None:
     typer.echo(f"status rebaseline: {status.cmd_rebaseline(root)}")
 
 
+@status_app.command("record-step")
+@_handle_errors
+def status_record_step(
+    step: str = typer.Argument(..., help="Optional step: clarify | checklist | analyze."),
+    decision: str = typer.Option(..., "--decision", help="Decision: run | skip."),
+) -> None:
+    """Record a human run/skip decision for an optional lifecycle step (Feature 007)."""
+    root = Path(".")
+    _require_git(root)
+    from specops import status
+    typer.echo(status.cmd_record_step(root, step, decision=decision))
+
+
 @status_app.command("transition-phase")
 @_handle_errors
 def status_transition_phase(
@@ -256,12 +343,16 @@ def status_transition_phase(
     result: str = typer.Option(
         None, "-r", "--result", help="Transition result (APPROVED|REJECTED)."
     ),
+    if_needed: bool = typer.Option(
+        False, "--if-needed",
+        help="No-op-and-continue if the ledger is already in the target phase (Feature 007).",
+    ),
 ) -> None:
     """Advance the feature phase state machine."""
     root = Path(".")
     _require_git(root)
     from specops import status
-    typer.echo(status.cmd_transition_phase(root, phase, result=result))
+    typer.echo(status.cmd_transition_phase(root, phase, result=result, if_needed=if_needed))
 
 
 # ---------------------------------------------------------------------------

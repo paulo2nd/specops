@@ -156,6 +156,7 @@ def _load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str]
         backup_rel = ledger.backup_ledger(root, feature_dir)
         data = ledger.migrate_to_current(data)
         data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
+    ledger.ensure_workflow_block(data)  # back-fill additive Feature 007 block
     base_violations = ledger.validate_invariants(data)
     return data, base_revision, base_violations, repo
 
@@ -226,6 +227,35 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
     except ValueError:
         rel = ledger_path
     return f"Ledger created: {rel}"
+
+
+_OPTIONAL_STEPS = ("clarify", "checklist", "analyze")
+_STEP_DECISIONS = ("run", "skip")
+
+
+def cmd_record_step(root: Path, step: str, *, decision: str) -> str:
+    """Record a human run/skip decision for an optional lifecycle step (Feature 007, FR-006).
+
+    Appends ``{step, decision, at}`` to the ledger's additive
+    ``workflow.skipped_steps`` block. Re-recording the same step replaces its
+    prior entry so a resumed workflow never accumulates duplicates.
+    """
+    if step not in _OPTIONAL_STEPS:
+        raise SpecopsError(
+            f"Unknown optional step '{step}'. Expected one of: {', '.join(_OPTIONAL_STEPS)}."
+        )
+    if decision not in _STEP_DECISIONS:
+        raise SpecopsError(f"Invalid decision '{decision}'. Expected 'run' or 'skip'.")
+
+    feature_dir = _get_feature_dir(root)
+    data, base_rev, base_violations, _repo = _load_for_write(root, feature_dir)
+
+    steps = data["workflow"]["skipped_steps"]  # ensured present by _load_for_write
+    steps[:] = [s for s in steps if s.get("step") != step]
+    steps.append({"step": step, "decision": decision, "at": now_utc()})
+
+    _finalize(feature_dir, data, base_rev, base_violations)
+    return f"Recorded optional step '{step}': {decision}."
 
 
 def cmd_start_task(root: Path, task_id: str) -> str:
@@ -427,8 +457,17 @@ def _load_config(root: Path) -> dict:
         return {}
 
 
-def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
-    """Advance the phase state machine (cli-contract: transition-phase)."""
+def cmd_transition_phase(
+    root: Path, phase: str, *, result: str | None, if_needed: bool = False
+) -> str:
+    """Advance the phase state machine (cli-contract: transition-phase).
+
+    When *if_needed* is set (Feature 007, C1), a request to transition to the
+    phase the ledger is already in is a no-op-and-continue (exit 0, no write)
+    rather than an error. This lets a workflow step issue a transition that an
+    injected Principle IV directive may have already performed, without
+    double-issuing or failing closed.
+    """
     # R2: Validate result vocabulary BEFORE any ledger read/write
     normalized_result: str | None = None
     if result is not None:
@@ -449,6 +488,10 @@ def cmd_transition_phase(root: Path, phase: str, *, result: str | None) -> str:
         raise SpecopsError(
             f"Unknown phase '{target}'. Valid phases: {', '.join(PHASES)}."
         )
+
+    # Idempotent-tolerant: already in the target phase → no-op-and-continue.
+    if if_needed and target == current:
+        return f"Ledger already in {current}; transition to {target} is a no-op."
 
     current_idx = PHASES.index(current) if current in PHASES else -1
     target_idx = PHASES.index(target)
@@ -619,6 +662,7 @@ def cmd_rebaseline(root: Path) -> str:
         backup_rel = ledger.backup_ledger(root, feature_dir)
         data = ledger.migrate_to_current(data)
         data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
+    ledger.ensure_workflow_block(data)  # back-fill additive Feature 007 block
     base_violations = ledger.validate_invariants(data)
 
     new_branch = gitops.current_branch(repo)

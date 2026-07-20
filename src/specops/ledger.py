@@ -192,7 +192,26 @@ def migrate_to_current(data: dict) -> dict:
     rec["last_consistent_revision"] = out["revision"]
     rec["last_consistent_at"] = out["updated_at"]
     rec.setdefault("migrated_from_backup", None)
+    ensure_workflow_block(out)
     return out
+
+
+def ensure_workflow_block(data: dict) -> None:
+    """Back-fill the additive `workflow` block in place (Feature 007). Idempotent.
+
+    The block (currently ``{skipped_steps: []}``) records the human run/skip
+    decisions for optional lifecycle steps (FR-006). It is a **within-v2 additive
+    field**, not a schema bump: it carries no invariants and old readers ignore
+    it, so a ledger that predates it (a v2 ledger written by Feature 006) gains
+    the block on its next state-changing write rather than forcing every ledger
+    to re-migrate.
+    """
+    wf = data.get("workflow")
+    if not isinstance(wf, dict):
+        wf = data["workflow"] = {}
+    steps = wf.get("skipped_steps")
+    if not isinstance(steps, list):
+        wf["skipped_steps"] = []
 
 
 # ---------------------------------------------------------------------------

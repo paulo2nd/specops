@@ -133,6 +133,35 @@ def test_migrate_refuses_too_new() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Workflow block (Feature 007, FR-006) — additive within-v2 field [SC-004, SC-007]
+# ---------------------------------------------------------------------------
+
+def test_migrate_backfills_workflow_block() -> None:
+    out = ledger.migrate_to_current(_v1_dict())
+    assert out["workflow"] == {"skipped_steps": []}
+
+
+def test_ensure_workflow_block_backfills_when_absent() -> None:
+    data = {"feature": "x"}
+    ledger.ensure_workflow_block(data)
+    assert data["workflow"] == {"skipped_steps": []}
+
+
+def test_ensure_workflow_block_idempotent_and_preserves_entries() -> None:
+    entry = {"step": "clarify", "decision": "skip", "at": "2026-07-20T00:00:00+00:00"}
+    data = {"workflow": {"skipped_steps": [entry]}}
+    ledger.ensure_workflow_block(data)
+    ledger.ensure_workflow_block(data)
+    assert data["workflow"]["skipped_steps"] == [entry]
+
+
+def test_ensure_workflow_block_repairs_wrong_shape() -> None:
+    data = {"workflow": "oops"}
+    ledger.ensure_workflow_block(data)
+    assert data["workflow"] == {"skipped_steps": []}
+
+
+# ---------------------------------------------------------------------------
 # invariants (FR-025, FR-026) [SC-003]
 # ---------------------------------------------------------------------------
 

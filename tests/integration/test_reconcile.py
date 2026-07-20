@@ -19,6 +19,72 @@ def _commit(repo: Path, msg: str = "work") -> str:
     ).stdout.strip()
 
 
+class TestReconcileJsonOutcome:
+    """Feature 007 US2 (T017/T018): `reconcile --json` fail-closed precondition. [SC-004]"""
+
+    def _init(self, repo: Path) -> Path:
+        fd = repo / "specs" / "001-demo"
+        (fd / "tasks.md").write_text("- [ ] T001 task\n")
+        (fd / "spec.md").write_text("# spec\n")
+        _run(repo, "status", "init-spec")
+        return fd
+
+    def test_json_pass_when_consistent(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        self._init(repo)
+        r = _run(repo, "reconcile", "--json")
+        assert r.returncode == 0, r.stderr
+        assert json.loads(r.stdout)["class"] == "pass"
+
+    def test_json_workflow_state_divergence(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        self._init(repo)
+        # Advance to PLAN without a plan.md → the phase's active artifact is missing.
+        assert _run(repo, "status", "transition-phase", "PLAN").returncode == 0
+        r = _run(repo, "reconcile", "--json")
+        # infra-error → exit 2 (class↔exit consistent with outcome.exit_for).
+        assert r.returncode == 2
+        obj = json.loads(r.stdout)
+        assert obj["class"] == "infra-error"
+        assert obj["outcome"] == "error"
+        assert obj["diverged_dimension"] == "workflow-state"
+        assert obj["remedy"] == "specops status rebaseline"
+
+    def test_json_branch_divergence(self, fake_speckit_repo: Path) -> None:
+        repo = fake_speckit_repo
+        self._init(repo)
+        subprocess.run(["git", "checkout", "-b", "other"], cwd=repo,
+                       check=True, capture_output=True)
+        r = _run(repo, "reconcile", "--json")
+        assert r.returncode == 2
+        obj = json.loads(r.stdout)
+        assert obj["diverged_dimension"] == "branch"
+        assert obj["remedy"] == "specops status rebaseline"
+
+    def test_json_commit_history_violation_has_no_rebaseline_remedy(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        """A commit-not-in-history violation (no divergence) is infra-error but must
+        NOT suggest `rebaseline`, which cannot prune the bad commit reference."""
+        repo = fake_speckit_repo
+        fd = self._init(repo)
+        data = yaml.safe_load((fd / "status.yaml").read_text())
+        data["tasks"] = [{
+            "id": "T001", "status": "DONE", "started_commit": "aaaaaaa",
+            "commits": ["deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"],
+            "evidence": "CLI_LOG:done",
+        }]
+        (fd / "status.yaml").write_text(yaml.dump(data))
+
+        r = _run(repo, "reconcile", "--json")
+        assert r.returncode == 2
+        obj = json.loads(r.stdout)
+        assert obj["class"] == "infra-error"
+        assert "violations" in obj and obj["violations"]
+        assert "diverged_dimension" not in obj
+        assert "remedy" not in obj  # rebaseline can't fix a history violation
+
+
 class TestScenarioC:
     def test_clean_ledger_passes(self, fake_speckit_repo: Path) -> None:
         """Scenario C-1: clean ledger with valid commits → exit 0."""
