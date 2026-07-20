@@ -120,16 +120,16 @@ host-owned file modified, and purge additionally deletes config + ledgers.
 
 ### Tests for User Story 3 (write first, ensure they FAIL) ⚠️
 
-- [ ] T025 [P] [US3] Integration test in `tests/integration/test_extension_lifecycle.py`: disable unregisters hooks + command from the host surface while retaining `specops.json` and ledgers; `status` then reports native `absent` [SC-004]
-- [ ] T026 [P] [US3] Integration test in `tests/integration/test_extension_lifecycle.py`: enable re-registers identically to a fresh install (semantic equivalence) [SC-002,SC-004]
-- [ ] T027 [P] [US3] Integration test in `tests/integration/test_extension_lifecycle.py`: `remove` leaves **no** integration-managed file modified and retains feature ledgers; `remove --purge` additionally deletes `specops.json` + ledgers [SC-004]
-- [ ] T028 [P] [US3] Integration test in `tests/integration/test_extension_lifecycle.py`: `update` from a native install is idempotent (semantic no-op when templates unchanged) [SC-002]
+- [x] T025 [P] [US3] Integration test in `tests/integration/test_extension_lifecycle.py`: disable unregisters hooks + command from the host surface while retaining `specops.json` and ledgers; `status` then reports native `absent` [SC-004]
+- [x] T026 [P] [US3] Integration test in `tests/integration/test_extension_lifecycle.py`: enable re-registers identically to a fresh install (semantic equivalence) [SC-002,SC-004]
+- [x] T027 [P] [US3] Integration test in `tests/integration/test_extension_lifecycle.py`: `remove` leaves **no** integration-managed file modified and retains feature ledgers; `remove --purge` additionally deletes `specops.json` + ledgers [SC-004]
+- [x] T028 [P] [US3] Integration test in `tests/integration/test_extension_lifecycle.py`: `update` from a native install is idempotent (semantic no-op when templates unchanged) [SC-002]
 
 ### Implementation for User Story 3
 
-- [ ] T029 [US3] Implement `disable(root)` and `enable(root)` in `src/specops/extension.py`: disable removes SpecOps hook entries + command files (retain config/ledgers); enable re-registers from retained config (reuse `install` register path) [SC-004]
-- [ ] T030 [US3] Implement `remove(root, purge=False)` and `update(root)` in `src/specops/extension.py`: remove unregisters hooks + command and, when `purge`, additionally deletes `specops.json` + feature ledgers; update re-applies current templates idempotently [SC-002,SC-004]
-- [ ] T031 [US3] Wire `specops extension update|disable|enable|remove` (with `--purge`) in `src/specops/cli.py`; each returns 0 on success / `unchanged` when already in the target state [SC-002,SC-004]
+- [x] T029 [US3] Implement `disable(root)` and `enable(root)` in `src/specops/extension.py`: disable removes SpecOps hook entries + command files (retain config/ledgers); enable re-registers from retained config (reuse `install` register path) [SC-004]
+- [x] T030 [US3] Implement `remove(root, purge=False)` and `update(root)` in `src/specops/extension.py`: remove unregisters hooks + command and, when `purge`, additionally deletes `specops.json` + feature ledgers; update re-applies current templates idempotently [SC-002,SC-004]
+- [x] T031 [US3] Wire `specops extension update|disable|enable|remove` (with `--purge`) in `src/specops/cli.py`; each returns 0 on success / `unchanged` when already in the target state [SC-002,SC-004]
 
 **Checkpoint**: All three stories independently functional.
 

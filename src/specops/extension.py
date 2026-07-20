@@ -226,3 +226,111 @@ def install(root: Path) -> str:
         return "unchanged"
     _atomic_write(manifest_path, _dump(merged))
     return "created" if not existing else "updated"
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle: update / disable / enable / remove (US3)
+# ---------------------------------------------------------------------------
+
+def _registered_command_paths(root: Path) -> list[Path]:
+    manifest = read_manifest(root)
+    return [
+        root / c["path"]
+        for c in (manifest.get("commands") or [])
+        if c.get("extension") == OWNER and c.get("path")
+    ]
+
+
+def _prune_specops(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *manifest* with every SpecOps-owned entry removed,
+    preserving all foreign entries (invariant 1)."""
+    result: dict[str, Any] = dict(manifest)
+
+    hooks: dict[str, Any] = {}
+    for hook_point, entries in (result.get("hooks") or {}).items():
+        foreign = [e for e in (entries or []) if e.get("extension") != OWNER]
+        if foreign:
+            hooks[hook_point] = foreign
+    if hooks:
+        result["hooks"] = hooks
+    else:
+        result.pop("hooks", None)
+
+    foreign_cmds = [c for c in (result.get("commands") or []) if c.get("extension") != OWNER]
+    if foreign_cmds:
+        result["commands"] = foreign_cmds
+    else:
+        result.pop("commands", None)
+
+    result.pop("specops", None)
+    return result
+
+
+def unregister(root: Path) -> bool:
+    """Remove SpecOps hook entries and command files from the host's active
+    surface. Foreign manifest entries are preserved; when nothing SpecOps-owned
+    remains, the manifest file is deleted so no SpecOps-attributable file is
+    left. Returns True when something was removed (SC-004)."""
+    changed = False
+
+    for path in _registered_command_paths(root):
+        if path.is_file():
+            path.unlink()
+            changed = True
+        parent = path.parent
+        if parent.is_dir() and not any(parent.iterdir()):
+            parent.rmdir()
+
+    manifest_path = speckit.extensions_yml_path(root)
+    if manifest_path.is_file():
+        existing = read_manifest(root)
+        pruned = _prune_specops(existing)
+        if not pruned:
+            manifest_path.unlink()
+            changed = True
+        elif pruned != existing:
+            _atomic_write(manifest_path, _dump(pruned))
+            changed = True
+    return changed
+
+
+def _purge(root: Path) -> bool:
+    """Delete SpecOps configuration and every feature ledger (FR-009a)."""
+    changed = False
+    cfg = config.config_path(root)
+    if cfg.is_file():
+        cfg.unlink()
+        changed = True
+    specs = root / "specs"
+    if specs.is_dir():
+        for ledger in sorted(specs.glob("*/status.yaml")):
+            ledger.unlink()
+            changed = True
+    return changed
+
+
+def disable(root: Path) -> str:
+    """Unregister hooks + command from the host while retaining config/ledgers
+    (FR-010). Idempotent: already-disabled is a no-op."""
+    return "disabled" if unregister(root) else "unchanged"
+
+
+def enable(root: Path) -> str:
+    """Re-register from retained configuration, restoring the prior native state
+    (FR-010). Returns install's status (created/updated/unchanged)."""
+    return install(root)
+
+
+def update(root: Path) -> str:
+    """Re-apply the current templates idempotently. Returns install's status."""
+    return install(root)
+
+
+def remove(root: Path, purge: bool = False) -> str:
+    """Remove the native installation. By default retains config + ledgers
+    (FR-009); with ``purge`` also deletes them (FR-009a). Idempotent."""
+    changed = unregister(root)
+    if purge:
+        changed = _purge(root) or changed
+        return "purged" if changed else "unchanged"
+    return "removed" if changed else "unchanged"

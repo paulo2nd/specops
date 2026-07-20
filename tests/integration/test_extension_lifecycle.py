@@ -218,3 +218,81 @@ def test_cli_extension_migrate(fake_speckit_repo, compat_ok, monkeypatch):
     res = runner.invoke(app, ["extension", "migrate"])
     assert res.exit_code == 0, res.output
     assert "extension migrate: migrated" in res.output
+
+
+# ===========================================================================
+# User Story 3 — lifecycle management (update / disable / enable / remove)
+# ===========================================================================
+
+# --- T025: disable unregisters, retains config + ledgers, host untouched ---
+
+def test_disable_unregisters_but_retains_config_and_ledger(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    extension.install(root)
+    (root / "specs" / "001-demo" / "status.yaml").write_text("feature: 001-demo\n")
+    before_hosts = _host_hashes(root)
+
+    assert extension.disable(root) == "disabled"
+    assert not (root / ".specify" / "extensions.yml").exists()
+    assert not (root / ".claude" / "skills" / "specops-review").exists()
+    assert (root / "specops.json").is_file()  # config retained
+    assert (root / "specs" / "001-demo" / "status.yaml").is_file()  # ledger retained
+    assert _host_hashes(root) == before_hosts  # host untouched (SC-004)
+    assert migration.detect_state(root) == "absent"
+    assert extension.disable(root) == "unchanged"  # idempotent
+
+
+# --- T026: enable re-registers identically to a fresh install ---
+
+def test_enable_reregisters_identically(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    extension.install(root)
+    fresh = _manifest(root)
+
+    extension.disable(root)
+    extension.enable(root)
+
+    assert extension.semantically_equal(fresh, _manifest(root))  # SC-002
+    assert (root / ".claude" / "skills" / "specops-review" / "SKILL.md").is_file()
+
+
+# --- T027: remove retains ledgers; --purge deletes config + ledgers ---
+
+def test_remove_default_retains_then_purge_deletes(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    extension.install(root)
+    ledger = root / "specs" / "001-demo" / "status.yaml"
+    ledger.write_text("feature: 001-demo\n")
+    before_hosts = _host_hashes(root)
+
+    assert extension.remove(root) == "removed"
+    assert _host_hashes(root) == before_hosts  # no host file modified (SC-004)
+    assert not (root / ".specify" / "extensions.yml").exists()
+    assert (root / "specops.json").is_file()  # retained by default (FR-009)
+    assert ledger.is_file()
+
+    extension.install(root)
+    ledger.write_text("feature: 001-demo\n")
+    assert extension.remove(root, purge=True) == "purged"
+    assert not (root / "specops.json").exists()  # FR-009a
+    assert not ledger.exists()
+
+
+# --- T028: update is idempotent ---
+
+def test_update_is_idempotent(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    extension.install(root)
+    assert extension.update(root) == "unchanged"
+
+
+def test_cli_extension_lifecycle_commands(fake_speckit_repo, compat_ok, monkeypatch):
+    root = fake_speckit_repo
+    monkeypatch.chdir(root)
+    assert "created" in runner.invoke(app, ["extension", "install"]).output
+    assert "unchanged" in runner.invoke(app, ["extension", "update"]).output
+    assert "disabled" in runner.invoke(app, ["extension", "disable"]).output
+    assert "created" in runner.invoke(app, ["extension", "enable"]).output
+    res = runner.invoke(app, ["extension", "remove", "--purge"])
+    assert res.exit_code == 0, res.output
+    assert "purged" in res.output

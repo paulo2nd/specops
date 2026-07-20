@@ -280,5 +280,45 @@ def extension_migrate() -> None:
     typer.echo(f"extension migrate: {status}")
 
 
+@extension_app.command("update")
+@_handle_errors
+def extension_update() -> None:
+    """Refresh the registered hooks/command to the current templates."""
+    root = Path(".")
+    from specops import extension
+    typer.echo(f"extension update: {extension.update(root)}")
+
+
+@extension_app.command("disable")
+@_handle_errors
+def extension_disable() -> None:
+    """Unregister hooks/command from the host while retaining config and ledgers."""
+    root = Path(".")
+    from specops import extension
+    typer.echo(f"extension disable: {extension.disable(root)}")
+
+
+@extension_app.command("enable")
+@_handle_errors
+def extension_enable() -> None:
+    """Re-register from retained configuration."""
+    root = Path(".")
+    from specops import extension
+    typer.echo(f"extension enable: {extension.enable(root)}")
+
+
+@extension_app.command("remove")
+@_handle_errors
+def extension_remove(
+    purge: bool = typer.Option(
+        False, "--purge", help="Also delete SpecOps configuration and feature ledgers.",
+    ),
+) -> None:
+    """Remove the native installation (retains config/ledgers unless --purge)."""
+    root = Path(".")
+    from specops import extension
+    typer.echo(f"extension remove: {extension.remove(root, purge=purge)}")
+
+
 if __name__ == "__main__":
     app()
