@@ -40,11 +40,17 @@ def test_workflow_has_no_forward_transition_or_initspec_steps() -> None:
     and it is idempotent-tolerant (--if-needed)."""
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "init-spec" not in text
-    for forward in ("transition-phase PLAN", "transition-phase TASKS",
-                    "transition-phase IMPLEMENT", "transition-phase REVIEW"):
+    # Pure forward seams (PLAN/TASKS) are owned by the directives — never re-issued.
+    for forward in ("transition-phase PLAN", "transition-phase TASKS"):
         assert forward not in text, f"workflow must not issue forward transition {forward!r}"
-    # The one workflow-owned transition (DONE) is idempotent-tolerant.
+    # The only workflow-owned transitions are the corrective REVIEW→IMPLEMENT round
+    # (no directive performs it) and the idempotent-tolerant final DONE.
+    assert "transition-phase IMPLEMENT -r REJECTED --if-needed" in text
     assert "transition-phase DONE -r APPROVED --if-needed" in text
+    # Any IMPLEMENT transition present must be the corrective (-r REJECTED) form.
+    for line in text.splitlines():
+        if "transition-phase IMPLEMENT" in line:
+            assert "-r REJECTED" in line
 
 
 # --- FR-006: the skip decision the workflow records lands in the ledger --------

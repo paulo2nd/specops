@@ -203,6 +203,12 @@ def review(
     json_out: bool = typer.Option(
         False, "--json", help="Emit the stable outcome JSON (Feature 007)."
     ),
+    soft: bool = typer.Option(
+        False, "--soft",
+        help="With --json, always exit 0 (the verdict is in the JSON). Use inside a "
+             "do-while loop body so a REJECTED verdict drives the loop instead of "
+             "aborting the run (Feature 007).",
+    ),
 ) -> None:
     """Run the deterministic review gates (reconcile → lint → test → working tree)."""
     repo = _require_git(Path("."))
@@ -226,7 +232,11 @@ def review(
         typer.echo(
             outcome.render("review", outcome.GATE_REJECTION, verdict="REJECTED", gates=gates)
         )
-        raise typer.Exit(outcome.EXIT_BLOCKED)
+        # --soft keeps exit 0 so a do-while body can branch on the verdict; the
+        # terminal gate (hard `specops review`) is what fails closed on REJECTED.
+        if not soft:
+            raise typer.Exit(outcome.EXIT_BLOCKED)
+        return
     typer.echo(review_mod.run_gates(root))
 
 

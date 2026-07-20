@@ -81,3 +81,28 @@ def test_optional_steps_are_human_gated() -> None:
 def test_no_duplicate_step_ids() -> None:
     ids = [s["id"] for s in _flatten(_load()["steps"])]
     assert len(ids) == len(set(ids))
+
+
+# --- US3: corrective loop + terminal deterministic gate (FR-015..FR-019) -------
+
+def test_corrective_loop_is_native_do_while_on_verdict() -> None:
+    steps = {s["id"]: s for s in _load()["steps"]}
+    loop = steps["corrective-loop"]
+    assert loop["type"] == "do-while"
+    assert "max_iterations" in loop  # native bound (FR-015)
+    assert "REJECTED" in loop["condition"]  # loops while the review verdict is REJECTED
+    body = [s["id"] for s in loop["steps"]]
+    assert "implement" in body and "review-soft" in body
+
+
+def test_in_loop_review_is_soft_terminal_gate_is_hard() -> None:
+    """The in-loop review must not abort the run (--soft, exit 0); the terminal
+    gate must fail closed (hard `specops review`) — FR-019."""
+    all_steps = {s["id"]: s for s in _flatten(_load()["steps"])}
+    assert "--soft" in all_steps["review-soft"]["run"]
+    assert all_steps["terminal-gate"]["run"] == "specops review"  # no --soft → fails closed
+
+
+def test_terminal_gate_between_loop_and_done() -> None:
+    ids = [s["id"] for s in _load()["steps"]]
+    assert ids.index("corrective-loop") < ids.index("terminal-gate") < ids.index("done")

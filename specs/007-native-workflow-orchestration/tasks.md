@@ -106,16 +106,16 @@ Single project: `src/specops/`, `tests/unit/`, `tests/integration/` (existing la
 
 ### Tests for User Story 3 (write first) ⚠️
 
-- [ ] T022 [P] [US3] Unit test: the workflow's `do-while` + terminal-gate structure (C7–C9) in `tests/unit/test_workflow_definition.py` [SC-005][SC-008]
-- [ ] T023 [P] [US3] Unit test: `review --json` verdict emission (`REJECTED` ⇔ exit 1, `gates[]` present, G2) in `tests/unit/test_review.py` [SC-005]
-- [ ] T024 [P] [US3] Integration test: reject → loop + new review cycle per round; exhaust bound still-rejecting → terminal gate halts with 0 fall-through to DONE; then pass → DONE, in `tests/integration/test_workflow_orchestration.py` [SC-005][SC-008]
+- [x] T022 [P] [US3] Unit test: the workflow's `do-while` + terminal-gate structure (C7–C9) in `tests/unit/test_workflow_definition.py` [SC-005][SC-008]
+- [x] T023 [P] [US3] Unit test: `review --json` verdict emission (`REJECTED` ⇔ exit 1, `gates[]` present, G2) in `tests/unit/test_review.py` [SC-005]
+- [x] T024 [P] [US3] Integration test: reject → loop + new review cycle per round; exhaust bound still-rejecting → terminal gate halts with 0 fall-through to DONE; then pass → DONE, in `tests/integration/test_workflow_orchestration.py` [SC-005][SC-008]
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Add machine-readable verdict output (`--json`: `verdict`, `gates[]`) to `specops review` in `src/specops/review.py` and `src/specops/cli.py` [SC-005][SC-006]
-- [ ] T026 [US3] Replace the US1 linear implement→review→done segment with a native `do-while` (body: reconcile-pre → implement → review → record-verdict; condition `verdict == "REJECTED"`; native `max_iterations`) in `src/specops/templates/workflows/specops/workflow.yml` [SC-005]
-- [ ] T027 [US3] Add the terminal deterministic gate step (final `specops review`; fail closed when verdict ≠ `APPROVED`; not a human gate) after the loop in `src/specops/templates/workflows/specops/workflow.yml` [SC-005][SC-008]
-- [ ] T028 [US3] Wire each REJECTED round to open a new review cycle via a `specops status transition-phase REVIEW→IMPLEMENT -r REJECTED` step in `src/specops/templates/workflows/specops/workflow.yml` [SC-005]
+- [x] T025 [US3] Add machine-readable verdict output (`--json`: `verdict`, `gates[]`) to `specops review` in `src/specops/review.py` and `src/specops/cli.py` [SC-005][SC-006]
+- [x] T026 [US3] Replace the US1 linear implement→review→done segment with a native `do-while` (body: reconcile-pre → implement → review → record-verdict; condition `verdict == "REJECTED"`; native `max_iterations`) in `src/specops/templates/workflows/specops/workflow.yml` [SC-005]
+- [x] T027 [US3] Add the terminal deterministic gate step (final `specops review`; fail closed when verdict ≠ `APPROVED`; not a human gate) after the loop in `src/specops/templates/workflows/specops/workflow.yml` [SC-005][SC-008]
+- [x] T028 [US3] Wire each REJECTED round to open a new review cycle via a `specops status transition-phase REVIEW→IMPLEMENT -r REJECTED` step in `src/specops/templates/workflows/specops/workflow.yml` [SC-005]
 
 **Checkpoint**: US1–US3 independently functional.
 

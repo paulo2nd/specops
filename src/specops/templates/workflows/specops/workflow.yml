@@ -114,24 +114,52 @@ steps:
         input:
           args: "{{ inputs.spec }}"
 
-  # --- Implement -------------------------------------------------------------
-  - id: implement
-    command: speckit.implement
-    integration: "{{ inputs.integration }}"
-    input:
-      args: "{{ inputs.spec }}"
+  # --- Corrective loop: implement → review, repeating while REJECTED ----------
+  # Native `do-while` (FR-015): SpecOps builds no loop. The in-loop review is
+  # `--soft` (always exit 0; verdict in JSON) so a REJECTED verdict DRIVES the loop
+  # instead of aborting the run — a non-zero shell exit would fail the step and
+  # abort. `reconcile --json` is the fail-closed precondition (FR-010) of the
+  # corrective transition. On REJECTED, the workflow opens a corrective round
+  # (REVIEW→IMPLEMENT -r REJECTED — a transition no directive owns, C1/FR-017);
+  # `max_iterations` bounds the loop.
+  #
+  # NOTE (runtime verification): the loop's end-to-end behavior interacts with the
+  # injected Principle IV directive transitions and requires a live integration to
+  # validate — it is not CI-reproducible (command steps need an agent/LLM). The
+  # step structure is verified against Spec Kit's engine; the CLI primitives it
+  # composes (soft/hard review, corrective transition) are unit/integration-tested.
+  - id: corrective-loop
+    type: do-while
+    condition: "{{ steps.review-soft.output.data.verdict == 'REJECTED' }}"
+    max_iterations: 3
+    steps:
+      - id: reconcile-pre-impl
+        type: shell
+        run: "specops reconcile --json"
+      - id: implement
+        command: speckit.implement
+        integration: "{{ inputs.integration }}"
+        input:
+          args: "{{ inputs.spec }}"
+      - id: review-soft
+        type: shell
+        run: "specops review --json --soft"
+        output_format: json
+      - id: corrective-round
+        type: if
+        condition: "{{ steps.review-soft.output.data.verdict == 'REJECTED' }}"
+        then:
+          - id: open-corrective-round
+            type: shell
+            run: "specops status transition-phase IMPLEMENT -r REJECTED --if-needed"
 
-  # --- Deterministic review gate (happy path; corrective loop added in US3) ---
-  - id: review
+  # --- Terminal deterministic gate (FR-019): fail closed if not APPROVED ------
+  # A hard `specops review` exits non-zero when the verdict is not APPROVED, so an
+  # exhausted-loop still-rejecting feature halts here and never reaches DONE. This
+  # is NOT a human gate (a human approve could bypass a still-failing review).
+  - id: terminal-gate
     type: shell
     run: "specops review"
-
-  # --- Fail-closed reconcile precondition of the state-changing transition ----
-  # A divergence exits non-zero (class infra-error) and aborts the run; the remedy
-  # is `specops status rebaseline` (Feature 006) — no new command (FR-010/FR-012).
-  - id: reconcile-pre-done
-    type: shell
-    run: "specops reconcile --json"
 
   # --- Completion: workflow-owned final transition (idempotent-tolerant) ------
   - id: done

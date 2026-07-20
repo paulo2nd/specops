@@ -98,6 +98,19 @@ class TestReviewJsonOutcome:
         obj = json.loads(r.stdout)
         assert obj["class"] == "infra-error"
 
+    def test_soft_rejection_exits_zero_with_verdict(self, fake_speckit_repo: Path) -> None:
+        """US3: --soft keeps exit 0 on REJECTED so a do-while body can loop on it."""
+        _all_pass_setup(fake_speckit_repo)
+        (fake_speckit_repo / "stray.txt").write_text("x\n")
+        r = subprocess.run(
+            ["specops", "review", "--json", "--soft"],
+            cwd=fake_speckit_repo, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        )
+        assert r.returncode == 0  # soft: does not abort the loop
+        obj = json.loads(r.stdout)
+        assert obj["verdict"] == "REJECTED"
+        assert obj["class"] == "gate-rejection"
+
 
 class TestReviewExitCodes:
     def test_all_pass_exit_zero_report_on_stdout(self, fake_speckit_repo: Path) -> None:
