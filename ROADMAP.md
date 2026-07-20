@@ -22,6 +22,17 @@ for an active feature remains that feature's `specs/NNN-*/status.yaml`.
    behavior in the SpecOps core.
 7. Update this roadmap only when a feature is merged, split, reordered, or
    removed. In-progress details belong to the feature artifacts.
+8. SpecOps is a **complement** to Spec Kit, never a replacement, and never
+   reimplements a capability Spec Kit already ships. Spec Kit already provides a
+   resumable workflow engine with native step types (`command`, `shell`,
+   `prompt`, `gate`, `if`, `switch`, `while`, `do-while`, `fan-out`, `fan-in`),
+   the `specify workflow` lifecycle (`run`, `resume`, `status`, `add`, `remove`,
+   `catalog`, `step`, …), `specify check`, and the extension/integration/preset
+   systems. Any feature that needs orchestration, a human gate, a loop, resume,
+   or a status/diagnostic surface MUST compose or extend those primitives and add
+   only the deterministic ledger, validation, evidence, reconciliation, and
+   verdict layer that Spec Kit lacks — plus workflow *definitions* and CLI
+   outcome contracts that plug into the native engine.
 
 ## Tracking Model
 
@@ -36,7 +47,7 @@ Roadmap status uses four values:
 |---|---|---|---|---|
 | 005 | Native Spec Kit Extension | MERGED | — | Foundation |
 | 006 | Ledger v2 Integrity | MERGED | 005 | Foundation |
-| 007 | Native Workflow Orchestration | PLANNED | 005, 006 | Foundation |
+| 007 | Native Workflow Orchestration | ACTIVE | 005, 006 | Foundation |
 | 008 | Context Map Core | PLANNED | 005, 006 | Context Intelligence |
 | 009 | Context-Aware Planning and Impact | PLANNED | 008 | Context Intelligence |
 | 010 | End-to-End Traceability | PLANNED | 006, 009 | Auditability |
@@ -47,7 +58,26 @@ Roadmap status uses four values:
 
 ## Standard Spec Kit Execution Protocol
 
-Apply this protocol to every roadmap feature.
+This protocol has **two distinct layers**; do not conflate them.
+
+- **Development protocol (how the SpecOps team builds each feature)**: we build
+  SpecOps using **plain Spec Kit artifacts only**. We do **not** run SpecOps
+  against the SpecOps repository, do not create a SpecOps ledger or `status.yaml`
+  here, and do not run `specops` gates on our own commits. Our dev loop is:
+  `/speckit.specify → /speckit.clarify → /speckit.checklist → /speckit.plan →
+  human approval → /speckit.tasks → /speckit.analyze → /speckit.implement`,
+  followed by ordinary PR review and the repository quality gates
+  (ruff, mypy, pytest). See the "No Self-Application" constraint.
+- **Delivered capability (what each feature must give end users)**: the SpecOps
+  command behavior described per feature (ledger creation, `specops consistency`,
+  `specops reconcile`, `specops review`, the workflow definition, etc.) is what
+  the feature ships to adopters. It is proven by that feature's own automated
+  tests against fixtures and sample repositories — never by dogfooding on this
+  repository.
+
+Apply the steps below with that separation in mind: the `/speckit.*` steps are
+our real dev process; every `specops *` behavior is a delivered capability we
+build and test, not a gate we run on this repo.
 
 ### 1. Start
 
@@ -69,7 +99,8 @@ Apply this protocol to every roadmap feature.
 - Run `/speckit.plan` and verify every path and convention against the current
   repository before declaring it.
 - Record migration, compatibility, security, and rollback decisions explicitly.
-- Run `specops consistency` after the plan is ready.
+- Ensure the feature *delivers* a working `specops consistency` for end users,
+  covered by the feature's tests — do not run it against this repository.
 - Obtain explicit human approval of `spec.md` and `plan.md` before generating
   tasks or implementing code.
 
@@ -77,18 +108,19 @@ Apply this protocol to every roadmap feature.
 
 - Run `/speckit.tasks`; every task must carry one or more `[SC-xxx]` tags.
 - Run `/speckit.analyze` and resolve all critical cross-artifact findings.
-- Create or synchronize the SpecOps ledger through the installed directives.
-- Do not manually edit `status.yaml` or task checkboxes.
+- Track our own development state with plain Spec Kit artifacts (`spec.md`,
+  `plan.md`, `tasks.md`). The SpecOps ledger and `status.yaml` are a **delivered
+  capability** exercised in the feature's tests, not created for this repository.
 
 ### 5. Implementation and review
 
-- Run `/speckit.implement` using the ledger loop and the configured commit
+- Run `/speckit.implement` to build the feature, using the configured commit
   granularity.
 - Run all feature-specific tests plus the repository quality gates.
-- Enter `REVIEW` only when all tasks are complete and evidence is recorded.
-- Run the deterministic SpecOps review gates before any agent code review.
-- A rejection must return through a versioned corrective handoff and a new
-  review cycle.
+- The deterministic SpecOps review gates, ledger review cycles, and versioned
+  corrective handoffs are **delivered capabilities** the feature must implement
+  and cover with tests; our own change is reviewed through ordinary PR review,
+  not by running `specops review` on this repository.
 
 ### 6. Completion
 
@@ -103,7 +135,12 @@ Apply this protocol to every roadmap feature.
 Every feature must satisfy all applicable items:
 
 - All success criteria have task coverage and objective evidence.
-- `specops consistency`, `specops reconcile`, and `specops review` pass.
+- The delivered SpecOps commands (`specops consistency`, `specops reconcile`,
+  `specops review`, and any new surfaces) pass in the feature's own tests against
+  fixtures/sample repositories — not by running them against this repository.
+- No capability reimplements something Spec Kit already provides (Rule 8); any
+  orchestration, gate, loop, resume, or status surface composes native Spec Kit
+  primitives.
 - Ruff, mypy, and the complete pytest suite pass at the repository thresholds.
 - New CLI surfaces have unit, integration, error-path, and idempotency coverage.
 - Persisted formats are versioned and have forward migration tests.
@@ -197,36 +234,55 @@ valid ledger readable.
 
 ### Objective
 
-Provide an installable Spec Kit workflow that orchestrates the complete feature
-lifecycle while keeping all deterministic state transitions inside SpecOps.
+Ship an installable **workflow definition** that composes Spec Kit's native
+workflow engine to run the SpecOps-augmented lifecycle, plus the ledger
+reconciliation and CLI outcome contract that keep SpecOps's deterministic state
+authoritative. SpecOps builds **no** orchestrator: Spec Kit already provides the
+resumable engine, human gate, bounded loop, and branching (Rule 8).
 
 ### Required outcomes
 
-- Orchestrate specify, clarify, checklist, plan, tasks, analyze, implement, and
-  review as resumable workflow steps.
-- Add an explicit human readiness gate between planning and task generation.
-- Model rejection and corrective review as a bounded workflow loop.
-- Resume from Spec Kit workflow state and reconcile it with the SpecOps ledger.
-- Distinguish gate rejection, agent execution failure, and infrastructure error.
-- Avoid a separate integration-specific agent command dispatcher in SpecOps.
+- Deliver a workflow *definition* that composes Spec Kit native steps
+  (`command`, `shell`, `gate`, `do-while`, `if`/`switch`) to run specify,
+  clarify, checklist, plan, tasks, analyze, implement, and review, interleaving
+  the deterministic SpecOps gates at the right points.
+- Position the human readiness gate between planning and task generation using
+  Spec Kit's native `gate` step — not a SpecOps-built gate.
+- Model rejection and corrective review as Spec Kit's native `do-while` loop,
+  bounded by its `max_iterations`, conditioned on the SpecOps review outcome.
+- Provide ledger reconciliation that aligns the SpecOps ledger with the actual
+  repository/workflow state between steps and after a Spec Kit `workflow resume`;
+  fail closed on irreconcilable divergence.
+- Provide a stable CLI outcome contract (exit codes / signals) so native gate/
+  loop/branch steps can distinguish gate rejection, execution failure, and
+  infrastructure error.
+- Avoid a separate integration-specific agent command dispatcher in SpecOps, and
+  avoid reimplementing the engine, resume, gate, or loop.
 
 ### Explicit non-goals
 
+- No SpecOps-built workflow engine, resume mechanism, human gate, loop, or
+  branching primitive — all are Spec Kit's.
 - No lightweight lane.
 - No context map.
 - No parallel multi-agent fan-out until state ownership is proven safe.
 
 ### Acceptance gate
 
-The workflow can pause, resume, reject, correct, approve, and recover after
-interruption without duplicating steps or diverging from the ledger.
+Running the shipped definition under Spec Kit's engine can pause, resume (via
+`specify workflow resume`), reject, correct, approve, and recover after
+interruption, while SpecOps reconciliation keeps the ledger authoritative and
+never lets it diverge silently — and no orchestration primitive is implemented
+inside SpecOps.
 
 ### `/speckit.specify` brief
 
-> Create a native, resumable Spec Kit workflow for the full SpecOps lifecycle,
-> including requirements quality stages, a human planning readiness gate,
-> deterministic CLI gates, corrective review loops, and ledger reconciliation.
-> Do not implement a separate agent-dispatch abstraction in SpecOps.
+> Ship a SpecOps lifecycle workflow *definition* that composes Spec Kit's native
+> engine (command/shell/gate/do-while/if) to run the augmented lifecycle with
+> deterministic SpecOps gates interleaved, plus ledger reconciliation and a
+> stable CLI outcome contract that keep the ledger authoritative. Build no
+> engine, resume, gate, or loop inside SpecOps, and no separate agent-dispatch
+> abstraction — compose Spec Kit's primitives.
 
 ## Feature 008 — Context Map Core
 
@@ -399,6 +455,10 @@ context-aware gate profiles and verifiable evidence records.
 
 - SpecOps does not interpret test-framework-specific result formats in the core.
 - No remote artifact storage.
+- No overlap with Spec Kit's native `gate` step or capability system: SpecOps
+  gate *profiles* are deterministic verification command suites invoked as native
+  `shell`/`command` steps that produce evidence — a distinct concept from Spec
+  Kit's human `gate` (Rule 8).
 
 ### Acceptance gate
 
@@ -436,6 +496,10 @@ the safety gates required for high-impact work.
 - No automatic classification of a change as lightweight without confirmation.
 - No formal independent review cycle inside the lightweight lane.
 - No bypass for applicable deterministic gate profiles.
+- No SpecOps-built lane orchestrator: the lane is a Spec Kit workflow definition
+  (installed via `specify workflow add`) using native `gate`/`prompt` steps for
+  the stop-and-ask checkpoints; SpecOps adds only the eligibility/promotion
+  logic, retrospective evidence, and ledger state (Rule 8).
 
 ### Acceptance gate
 
@@ -473,6 +537,10 @@ state, ledger integrity, context health, gate readiness, and the next safe actio
 - No automatic repair in the first version.
 - No telemetry transmission.
 - No hosted dashboard.
+- No re-checking of what `specify check` and `specify workflow status` already
+  report; `specops doctor` complements them, adding only SpecOps-specific
+  diagnostics (ledger schema, context-map health, workflow/ledger divergence) and
+  deferring to the native commands for engine and integration health (Rule 8).
 
 ### Acceptance gate
 
