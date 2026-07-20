@@ -142,21 +142,21 @@ def reconcile(
         except (LedgerParseError, SpecopsError) as exc:
             typer.echo(outcome.render("reconcile", outcome.INFRA_ERROR, detail=exc.message))
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
-        w = warnings or None
+        warns = warnings or None
         if dim is not None:
             # Workspace/identity/workflow-state divergence — rebaseline re-anchors it.
             typer.echo(outcome.render(
                 "reconcile", outcome.INFRA_ERROR,
-                diverged_dimension=dim, remedy="specops status rebaseline", warnings=w,
+                diverged_dimension=dim, remedy="specops status rebaseline", warnings=warns,
             ))
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR))
         if violations:
             # Commit-history / evidence integrity — NOT rebaseline-fixable (no remedy).
             typer.echo(outcome.render(
-                "reconcile", outcome.INFRA_ERROR, violations=violations, warnings=w,
+                "reconcile", outcome.INFRA_ERROR, violations=violations, warnings=warns,
             ))
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR))
-        typer.echo(outcome.render("reconcile", outcome.PASS, warnings=w))
+        typer.echo(outcome.render("reconcile", outcome.PASS, warnings=warns))
         return
     warnings, violations = rec_mod.run(root)
     for w in warnings:
