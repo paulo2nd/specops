@@ -126,6 +126,13 @@ steps:
     type: shell
     run: "specops review"
 
+  # --- Fail-closed reconcile precondition of the state-changing transition ----
+  # A divergence exits non-zero (class infra-error) and aborts the run; the remedy
+  # is `specops status rebaseline` (Feature 006) — no new command (FR-010/FR-012).
+  - id: reconcile-pre-done
+    type: shell
+    run: "specops reconcile --json"
+
   # --- Completion: workflow-owned final transition (idempotent-tolerant) ------
   - id: done
     type: shell

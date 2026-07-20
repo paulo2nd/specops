@@ -81,3 +81,43 @@ def run(root: Path) -> tuple[list[str], list[str]]:
             violations.append(f"{tid}: DONE but no evidence recorded")
 
     return warnings, violations
+
+
+def divergence(root: Path) -> str | None:
+    """Return the first diverged reconciliation dimension, or None (Feature 007).
+
+    Powers the workflow's fail-closed `reconcile` precondition (FR-010/FR-012).
+    Checks the Feature 006 workspace identity (feature / branch / baseline) and the
+    007 **workflow-state** dimension — the current phase's active artifact must
+    exist on disk. Unlike :func:`run` (which warns on branch/baseline so read-only
+    review stays lenient), this is the blocking signal the `--json` surface reports;
+    the remedy for any divergence is `specops status rebaseline` — no new command.
+    A missing ledger returns None (nothing to reconcile yet).
+    """
+    feature_dir = speckit.resolve_feature_dir(root)
+    if feature_dir is None:
+        return "feature"
+
+    ledger_path = feature_dir / "status.yaml"
+    if not ledger_path.is_file():
+        return None
+
+    try:
+        data = yaml.safe_load(ledger_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise LedgerParseError(f"Cannot parse ledger: {exc}") from exc
+    if not isinstance(data, dict):
+        raise LedgerParseError("Ledger has invalid structure.")
+
+    repo = gitops.find_repo(root)
+    if repo is None:
+        raise SpecopsError("Not a Git repository.")
+
+    dim = ledger.validate_identity(root, repo, data)
+    if dim is not None:
+        return dim
+
+    artifact = ledger.artifact_for_phase(data.get("current_phase"))
+    if not (feature_dir / artifact).is_file():
+        return "workflow-state"
+    return None

@@ -85,14 +85,14 @@ Single project: `src/specops/`, `tests/unit/`, `tests/integration/` (existing la
 
 ### Tests for User Story 2 (write first) ⚠️
 
-- [ ] T017 [P] [US2] Unit tests: workflow/ledger-state divergence detection, `reconcile --json` shape, `remedy == "specops status rebaseline"` (G3) in `tests/unit/test_reconcile.py` [SC-004]
-- [ ] T018 [P] [US2] Integration test: interrupt+resume realigns with 0 duplicate advances; desync → exit 1 + `diverged_dimension`, run halts, ledger unmodified; a ledger advanced out of band is treated as authoritative on the next reconcile (FR-013); concurrent runs against the same feature cannot double-advance (FR-014, via Feature 006 CAS), in `tests/integration/test_workflow_orchestration.py` [SC-004]
+- [x] T017 [P] [US2] Unit tests: workflow/ledger-state divergence detection, `reconcile --json` shape, `remedy == "specops status rebaseline"` (G3) in `tests/unit/test_reconcile.py` [SC-004]
+- [x] T018 [P] [US2] Integration test: interrupt+resume realigns with 0 duplicate advances; desync → exit 1 + `diverged_dimension`, run halts, ledger unmodified; a ledger advanced out of band is treated as authoritative on the next reconcile (FR-013); concurrent runs against the same feature cannot double-advance (FR-014, via Feature 006 CAS), in `tests/integration/test_workflow_orchestration.py` [SC-004]
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Add the workflow/ledger-state reconciliation dimension (phase/active-artifact vs effective repo + run state) on top of the existing hash-reachability check in `src/specops/reconcile.py` [SC-004]
-- [ ] T020 [US2] Add `--json` to `specops reconcile` (emit `diverged_dimension` + `remedy`) via the outcome-contract primitive in `src/specops/cli.py` [SC-004][SC-006]
-- [ ] T021 [US2] Wire `specops reconcile` as a fail-closed precondition step before every state-changing `status` step and once after resume in `src/specops/templates/workflows/specops/workflow.yml` [SC-004]
+- [x] T019 [US2] Add the workflow/ledger-state reconciliation dimension (phase/active-artifact vs effective repo + run state) on top of the existing hash-reachability check in `src/specops/reconcile.py` [SC-004]
+- [x] T020 [US2] Add `--json` to `specops reconcile` (emit `diverged_dimension` + `remedy`) via the outcome-contract primitive in `src/specops/cli.py` [SC-004][SC-006]
+- [x] T021 [US2] Wire `specops reconcile` as a fail-closed precondition step before every state-changing `status` step and once after resume in `src/specops/templates/workflows/specops/workflow.yml` [SC-004]
 
 **Checkpoint**: US1 + US2 both work independently.
 

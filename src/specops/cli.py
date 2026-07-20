@@ -124,11 +124,36 @@ def init(
 
 @app.command("reconcile")
 @_handle_errors
-def reconcile() -> None:
-    """Validate ledger commit hashes against Git history."""
+def reconcile(
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
+    ),
+) -> None:
+    """Validate the ledger against Git history and the workspace."""
     root = Path(".")
     _require_git(root)
+    from specops import outcome
     from specops import reconcile as rec_mod
+    if json_out:
+        try:
+            _warnings, violations = rec_mod.run(root)
+            dim = rec_mod.divergence(root)
+        except LedgerParseError as exc:
+            typer.echo(outcome.render("reconcile", outcome.INFRA_ERROR, detail=exc.message))
+            raise typer.Exit(outcome.EXIT_ERROR) from None
+        except SpecopsError as exc:
+            typer.echo(outcome.render("reconcile", outcome.INFRA_ERROR, detail=exc.message))
+            raise typer.Exit(outcome.EXIT_ERROR) from None
+        if violations or dim is not None:
+            typer.echo(outcome.render(
+                "reconcile", outcome.INFRA_ERROR,
+                diverged_dimension=dim,
+                remedy="specops status rebaseline",
+                violations=violations or None,
+            ))
+            raise typer.Exit(outcome.EXIT_BLOCKED)
+        typer.echo(outcome.render("reconcile", outcome.PASS))
+        return
     warnings, violations = rec_mod.run(root)
     for w in warnings:
         typer.echo(w)
