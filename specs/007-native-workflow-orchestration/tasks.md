@@ -144,9 +144,9 @@ Single project: `src/specops/`, `tests/unit/`, `tests/integration/` (existing la
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T034 [P] Update `CHANGELOG.md`, `README.md`, and `README.pt-br.md` (behaviorally equivalent EN/PT) at the repo root for the `specops` workflow, the outcome contract, and the reconcile changes [SC-001][SC-006]
-- [ ] T035 [P] Sync `specs/007-native-workflow-orchestration/contracts/*` and `quickstart.md` with the final workflow step IDs [SC-002]
-- [ ] T036 Run the full repository quality gates — ruff, mypy, and the complete pytest suite at repo thresholds — confirming unit + integration + error-path + idempotency coverage across all stories [SC-001][SC-002][SC-003][SC-004][SC-005][SC-006][SC-007][SC-008]
+- [x] T034 [P] Update `CHANGELOG.md`, `README.md`, and `README.pt-br.md` (behaviorally equivalent EN/PT) at the repo root for the `specops` workflow, the outcome contract, and the reconcile changes [SC-001][SC-006]
+- [x] T035 [P] Sync `specs/007-native-workflow-orchestration/contracts/*` and `quickstart.md` with the final workflow step IDs [SC-002]
+- [x] T036 Run the full repository quality gates — ruff, mypy, and the complete pytest suite at repo thresholds — confirming unit + integration + error-path + idempotency coverage across all stories [SC-001][SC-002][SC-003][SC-004][SC-005][SC-006][SC-007][SC-008]
 
 ---
 

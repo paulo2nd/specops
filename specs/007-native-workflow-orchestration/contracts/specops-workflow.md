@@ -6,35 +6,40 @@ finalized in implementation). This is a *contract on structure*, not an implemen
 
 ## Step graph (normative order)
 
+As implemented in `src/specops/templates/workflows/specops/workflow.yml` (16 top-level steps;
+the corrective loop nests its body). IDs match the shipped file.
+
 ```text
-1.  specify            command  → speckit.specify
-2.  clarify-gate       gate     → "Run clarify? [run/skip]" (default run); record via specops status
-3.  clarify            command  → speckit.clarify            (skipped if gate=skip)
-4.  checklist-gate     gate     → "Run checklist? [run/skip]" (default run); record
-5.  checklist          command  → speckit.checklist          (skipped if gate=skip)
-6.  plan               command  → speckit.plan
-7.  reconcile-pre      shell    → specops reconcile --json   (fail-closed precondition)
-8.  readiness-gate     gate     → "Approve spec+plan before tasks?" (approve/reject; on_reject: abort)   [FR-004]
-9.  tasks              command  → speckit.tasks     (its after_tasks Principle IV directive creates the ledger + transitions to TASKS — the workflow does NOT re-issue this)  [FR-008]
-10. analyze-gate       gate     → "Run analyze? [run/skip]" (default run); record via specops status
-11. analyze            command  → speckit.analyze            (skipped if gate=skip)
-12. corrective-loop    do-while:
+specify              command  → speckit.specify
+clarify-gate         gate     → "Run clarify? [run/skip]"; clarify-record shell → specops status record-step
+clarify              if       → then: speckit.clarify        (choice == 'run')
+checklist-gate       gate     → "Run checklist? [run/skip]"; checklist-record shell → specops status record-step
+checklist            if       → then: speckit.checklist      (choice == 'run')
+plan                 command  → speckit.plan
+readiness-gate       gate     → "Approve spec.md and plan.md before generating tasks?" (on_reject: abort)  [FR-004]
+tasks                command  → speckit.tasks   (its after_tasks Principle IV directive creates the ledger + transitions — not re-issued)  [FR-008]
+analyze-gate         gate     → "Run analyze? [run/skip]"; analyze-record shell → specops status record-step
+analyze              if       → then: speckit.analyze        (choice == 'run')
+corrective-loop      do-while  condition: steps.review-soft.output.data.verdict == 'REJECTED'; max_iterations: 3  [FR-015]
       body:
-        a. reconcile-pre   shell → specops reconcile --json          (precondition of state change)  [FR-010]
-        b. implement       command → speckit.implement
-        c. review          shell → specops review --json             (deterministic gate)
-        d. record-verdict  shell → specops status transition-phase … (-r APPROVED | -r REJECTED)     [FR-017]
-      condition: review.verdict == "REJECTED"
-      max_iterations: <native default>                                                               [FR-015]
-13. terminal-gate      shell    → specops review --json ; fail closed if verdict != APPROVED         [FR-019]
-14. done               shell    → specops status transition-phase REVIEW→DONE -r APPROVED (idempotent-tolerant)
+        reconcile-pre-impl  shell → specops reconcile --json                         (fail-closed precondition)  [FR-010]
+        implement           command → speckit.implement
+        review-soft         shell → specops review --json --soft  (output_format: json; exit 0 so the loop can branch on verdict)
+        corrective-round    if (verdict == 'REJECTED') → specops status transition-phase IMPLEMENT -r REJECTED --if-needed  [FR-017]
+terminal-gate        shell    → specops review           (HARD: exit ≠ 0 if verdict != APPROVED → aborts, never reaches done)  [FR-019]
+done                 shell    → specops status transition-phase DONE -r APPROVED --if-needed
 ```
+
+**Soft vs hard review (implementation discovery)**: a non-zero shell exit FAILS the step and aborts
+the run, so the **in-loop** review is `--soft` (always exit 0; verdict in the JSON) to *drive* the
+`do-while`, while the **terminal** review is hard (`specops review`) to *fail closed*. The verdict is
+consumed via `output_format: json` (exposed under `output.data`).
 
 **Ownership note (analyze C1)**: forward-seam ledger creation and `SPECIFY→…→REVIEW` transitions are
 owned by the injected Principle IV directives that fire on the lifecycle `command` steps; the workflow
-does **not** re-issue them. The workflow owns only the corrective `REVIEW→IMPLEMENT -r REJECTED` round
-(13d), the terminal gate, the final `REVIEW→DONE` (14), and the additive skip records. Every
-workflow-issued `specops status` call is idempotent-tolerant (no-op-and-continue if already in state).
+does **not** re-issue them. The workflow owns only the corrective `REVIEW→IMPLEMENT -r REJECTED` round,
+the terminal gate, the final `REVIEW→DONE`, and the additive skip records. Every workflow-issued
+`specops status` call is idempotent-tolerant (`--if-needed`: no-op-and-continue if already in state).
 
 ## Contract rules
 

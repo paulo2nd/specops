@@ -144,6 +144,29 @@ O caminho legado `specops init` acima permanece totalmente suportado. Requer o
 CLI `specops` `>= 0.3.0` (a primeira versão que entende o schema do manifest
 nativo).
 
+O `install` também registra aditivamente o **workflow `specops`** (abaixo),
+deixando o workflow `speckit` embutido do Spec Kit intocado.
+
+### O workflow `specops`
+
+O `specops extension install` registra um workflow instalável, de propriedade do
+SpecOps, que compõe **o próprio engine de workflow nativo do Spec Kit** para rodar
+o ciclo aumentado — o SpecOps não constrói engine, resume, gate nem loop. Execute
+com:
+
+```bash
+specify workflow run specops
+```
+
+Ele conduz specify → clarify/checklist (gates de skip humanos, registrados no
+ledger) → plan → **gate humano de prontidão do planejamento** (nenhuma task antes
+da aprovação) → tasks → analyze → um **loop corretivo `do-while`** limitado
+(implement → review, repetindo enquanto o veredito determinístico for `REJECTED`)
+→ um **gate terminal de review** que falha fechado a menos que o veredito seja
+`APPROVED`. As transições de fase forward permanecem de propriedade dos directives
+injetados; o workflow nunca as duplica, e uma precondição `specops reconcile`
+fail-closed mantém o ledger como autoridade.
+
 ### `specops status show`
 
 Somente leitura. Imprime o estado do ledger: feature, branch, fase, tarefa

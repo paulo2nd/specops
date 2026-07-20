@@ -13,6 +13,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Native workflow orchestration.** SpecOps ships an installable, SpecOps-owned
+  `specops` workflow that composes Spec Kit's own native workflow engine to run
+  the augmented lifecycle — SpecOps builds no engine, resume, gate, or loop:
+  - `specops extension install` now additively registers the `specops` workflow
+    into `.specify/workflows/specops/workflow.yml` and Spec Kit's
+    `workflow-registry.json`, leaving the bundled `speckit` workflow and all
+    foreign entries untouched; `remove`/`disable` prune only the SpecOps entry.
+    Run it with `specify workflow run specops`.
+  - The workflow enforces a **human planning-readiness gate** between plan and
+    tasks, offers **human-decided skip gates** for the optional clarify/checklist/
+    analyze steps (recorded in the ledger's additive `workflow.skipped_steps`),
+    models rejection as a bounded native **`do-while` corrective loop**, and ends
+    with a **terminal deterministic review gate** that fails closed unless the
+    verdict is `APPROVED`. Forward-seam phase transitions remain owned by the
+    injected directives; the workflow never double-issues them.
+  - A stable **CLI outcome contract**: `specops review|reconcile|consistency
+    --json` emit `{command, outcome, class, …}` distinguishing `pass`,
+    `gate-rejection`, and `infra-error` for the workflow's native conditions.
+    `review --json --soft` reports a REJECTED verdict without a non-zero exit so
+    it can drive the corrective loop. Exit codes are unchanged (0/1/2).
+  - **Ledger reconciliation** stays authoritative: `specops reconcile --json`
+    reports a diverged dimension (feature/branch/baseline/workflow-state) and the
+    `specops status rebaseline` remedy, and runs as a fail-closed precondition of
+    the workflow's state-changing transition. A new `--if-needed` flag makes a
+    transition to the current phase a no-op-and-continue.
 - **Ledger v2 integrity.** The per-feature `status.yaml` ledger is now versioned
   and hardened against upgrades, interruptions, branch changes, and competing
   sessions:
