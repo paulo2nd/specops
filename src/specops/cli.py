@@ -136,23 +136,27 @@ def reconcile(
     from specops import reconcile as rec_mod
     if json_out:
         try:
-            _warnings, violations = rec_mod.run(root)
-            dim = rec_mod.divergence(root)
-        except LedgerParseError as exc:
+            feature_dir, data, repo = rec_mod.load_state(root)
+            warnings, violations = rec_mod.history_checks(root, feature_dir, data, repo)
+            dim = rec_mod.divergence_of(root, feature_dir, data, repo)
+        except (LedgerParseError, SpecopsError) as exc:
             typer.echo(outcome.render("reconcile", outcome.INFRA_ERROR, detail=exc.message))
-            raise typer.Exit(outcome.EXIT_ERROR) from None
-        except SpecopsError as exc:
-            typer.echo(outcome.render("reconcile", outcome.INFRA_ERROR, detail=exc.message))
-            raise typer.Exit(outcome.EXIT_ERROR) from None
-        if violations or dim is not None:
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
+        w = warnings or None
+        if dim is not None:
+            # Workspace/identity/workflow-state divergence — rebaseline re-anchors it.
             typer.echo(outcome.render(
                 "reconcile", outcome.INFRA_ERROR,
-                diverged_dimension=dim,
-                remedy="specops status rebaseline",
-                violations=violations or None,
+                diverged_dimension=dim, remedy="specops status rebaseline", warnings=w,
             ))
-            raise typer.Exit(outcome.EXIT_BLOCKED)
-        typer.echo(outcome.render("reconcile", outcome.PASS))
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR))
+        if violations:
+            # Commit-history / evidence integrity — NOT rebaseline-fixable (no remedy).
+            typer.echo(outcome.render(
+                "reconcile", outcome.INFRA_ERROR, violations=violations, warnings=w,
+            ))
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR))
+        typer.echo(outcome.render("reconcile", outcome.PASS, warnings=w))
         return
     warnings, violations = rec_mod.run(root)
     for w in warnings:
@@ -181,10 +185,10 @@ def consistency(
             _warnings, violations = con_mod.run(root)
         except (LedgerParseError, SpecopsError) as exc:
             typer.echo(outcome.render("consistency", outcome.INFRA_ERROR, detail=exc.message))
-            raise typer.Exit(outcome.EXIT_ERROR) from None
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
         if violations:
             typer.echo(outcome.render("consistency", outcome.GATE_REJECTION, violations=violations))
-            raise typer.Exit(outcome.EXIT_BLOCKED)
+            raise typer.Exit(outcome.exit_for(outcome.GATE_REJECTION))
         typer.echo(outcome.render("consistency", outcome.PASS))
         return
     warnings, violations = con_mod.run(root)
@@ -224,7 +228,7 @@ def review(
             report = review_mod.evaluate(root)
         except (LedgerParseError, SpecopsError) as exc:
             typer.echo(outcome.render("review", outcome.INFRA_ERROR, detail=exc.message))
-            raise typer.Exit(outcome.EXIT_ERROR) from None
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
         gates = [{"name": r.name, "status": r.status} for r in report.results]
         if report.passed:
             typer.echo(outcome.render("review", outcome.PASS, verdict="APPROVED", gates=gates))
@@ -235,7 +239,7 @@ def review(
         # --soft keeps exit 0 so a do-while body can branch on the verdict; the
         # terminal gate (hard `specops review`) is what fails closed on REJECTED.
         if not soft:
-            raise typer.Exit(outcome.EXIT_BLOCKED)
+            raise typer.Exit(outcome.exit_for(outcome.GATE_REJECTION))
         return
     typer.echo(review_mod.run_gates(root))
 

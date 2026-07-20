@@ -42,9 +42,11 @@ class TestReconcileJsonOutcome:
         # Advance to PLAN without a plan.md → the phase's active artifact is missing.
         assert _run(repo, "status", "transition-phase", "PLAN").returncode == 0
         r = _run(repo, "reconcile", "--json")
-        assert r.returncode == 1
+        # infra-error → exit 2 (class↔exit consistent with outcome.exit_for).
+        assert r.returncode == 2
         obj = json.loads(r.stdout)
         assert obj["class"] == "infra-error"
+        assert obj["outcome"] == "error"
         assert obj["diverged_dimension"] == "workflow-state"
         assert obj["remedy"] == "specops status rebaseline"
 
@@ -54,10 +56,33 @@ class TestReconcileJsonOutcome:
         subprocess.run(["git", "checkout", "-b", "other"], cwd=repo,
                        check=True, capture_output=True)
         r = _run(repo, "reconcile", "--json")
-        assert r.returncode == 1
+        assert r.returncode == 2
         obj = json.loads(r.stdout)
         assert obj["diverged_dimension"] == "branch"
         assert obj["remedy"] == "specops status rebaseline"
+
+    def test_json_commit_history_violation_has_no_rebaseline_remedy(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        """A commit-not-in-history violation (no divergence) is infra-error but must
+        NOT suggest `rebaseline`, which cannot prune the bad commit reference."""
+        repo = fake_speckit_repo
+        fd = self._init(repo)
+        data = yaml.safe_load((fd / "status.yaml").read_text())
+        data["tasks"] = [{
+            "id": "T001", "status": "DONE", "started_commit": "aaaaaaa",
+            "commits": ["deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"],
+            "evidence": "CLI_LOG:done",
+        }]
+        (fd / "status.yaml").write_text(yaml.dump(data))
+
+        r = _run(repo, "reconcile", "--json")
+        assert r.returncode == 2
+        obj = json.loads(r.stdout)
+        assert obj["class"] == "infra-error"
+        assert "violations" in obj and obj["violations"]
+        assert "diverged_dimension" not in obj
+        assert "remedy" not in obj  # rebaseline can't fix a history violation
 
 
 class TestScenarioC:
