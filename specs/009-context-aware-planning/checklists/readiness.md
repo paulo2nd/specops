@@ -31,9 +31,9 @@
 
 - [x] CHK016 Are FR-002 (missing context declaration is blocking) and FR-005 (an unpredicted discovered file is NOT blocking) explicitly reconciled so they cannot be read as contradictory? [Conflict, Spec §FR-002, §FR-005]
 - [x] CHK017 Is each new blocking condition (missing required declaration, unknown declared ID, undeclared owner, invalid/ambiguous map) mapped to exit `1` consistently with Feature 008's `0`/`1`/`2` taxonomy and `status` field? [Consistency, Spec §FR-016, §FR-017]
-- [ ] CHK018 Is terminology for the declaration input consistent ("context declaration", "declared context IDs", "declared topology", "planned paths") across FRs, User Stories, and Key Entities? [Consistency, Spec §FR-002, §Key Entities]
-- [ ] CHK019 Does SC-006's provenance claim ("explicit empty/no-map marker") match FR-009 and US3 Scenario 3 (no lingering "omit cleanly" wording that implies field absence)? [Consistency, Spec §FR-009, §SC-006, §US3]
-- [ ] CHK020 Is the phrase "ownership is not a write-permission boundary" applied consistently wherever ownership validation is described (FR-004, Edge Cases), so review scope and declaration checks use the same meaning? [Consistency, Spec §FR-004, §Edge Cases]
+- [x] CHK018 Is terminology for the declaration input consistent ("context declaration", "declared context IDs", "declared topology", "planned paths") across FRs, User Stories, and Key Entities? [Consistency, Spec §FR-002, §Key Entities]
+- [x] CHK019 Does SC-006's provenance claim ("explicit empty/no-map marker") match FR-009 and US3 Scenario 3 (no lingering "omit cleanly" wording that implies field absence)? [Consistency, Spec §FR-009, §SC-006, §US3]
+- [x] CHK020 Is the phrase "ownership is not a write-permission boundary" applied consistently wherever ownership validation is described (FR-004, Edge Cases), so review scope and declaration checks use the same meaning? [Consistency, Spec §FR-004, §Edge Cases]
 
 ## Failure Semantics & Fail-Closed Behavior
 
@@ -64,7 +64,7 @@
 
 - [x] CHK034 Is the assumption that a deterministic map digest is already emitted by Feature 008 validated (i.e., a real 008 output), rather than presumed? [Assumption, Spec §Assumptions]
 - [x] CHK035 Is the dependency on Feature 006's versioned, concurrency-safe ledger for provenance storage stated as a precondition with an explicit schema-extension path? [Dependency, Spec §Assumptions, §FR-009]
-- [ ] CHK036 Is the deferral of scope-drift acknowledgement to Feature 010 stated clearly enough that FR-005's "reported but not blocking" is unambiguous and does not silently require an unbuilt capability? [Assumption, Spec §FR-005, §Complement Boundary]
+- [x] CHK036 Is the deferral of scope-drift acknowledgement to Feature 010 stated clearly enough that FR-005's "reported but not blocking" is unambiguous and does not silently require an unbuilt capability? [Assumption, Spec §FR-005, §Complement Boundary]
 
 ## Notes
 

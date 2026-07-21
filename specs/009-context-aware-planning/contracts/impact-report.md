@@ -75,3 +75,9 @@ No `via` value outside this set may appear, and no context may appear without a 
 7. **Empty & degenerate** — empty explicit set or clean-tree/empty diff → `affected: []`,
    `impact_ok`, exit `0`. Cannot derive from Git → `usage_error`, exit `2` (see
    [context-consume-cli.md](./context-consume-cli.md)).
+8. **Phase-independent** — `context impact` takes no `--phase`. Impact is a property of the
+   dependency graph over changed paths; phase-scoped read sets are obtained separately via
+   `context resolve --phase` / `context plan-check`.
+9. **`policy` edges** — the `policy` `via` is defined and enforced but currently produces no
+   attributions (Feature 008 has no cross-context policy edge); fixtures assert only `ownership`
+   and `dependency` `via` values appear.

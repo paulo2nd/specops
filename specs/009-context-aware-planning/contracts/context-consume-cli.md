@@ -26,12 +26,12 @@ All three are read-only (FR-012): they MUST NOT write the ledger, the map, or an
 | Aspect | Contract |
 |---|---|
 | Purpose | Report contexts affected by a change, expanded over reverse dependency edges (FR-006). |
-| Args | `--path PATH` (repeatable; explicit change set), `--phase TOKEN` (optional), `--json`. When no `--path` is given, derive the change set from Git. |
+| Args | `--path PATH` (repeatable; explicit change set), `--json`. When no `--path` is given, derive the change set from Git. **No `--phase`**: impact is phase-independent (a property of the dependency graph); phase-scoped reads come from `context resolve`/`plan-check`. |
 | Reads | the map; Git (`gitops.name_only_diff(repo, baseline, "HEAD")`, `gitops.is_git_repo`, ledger `baseline`) only when deriving. |
 | Writes | nothing |
 | Success `0` | `impact_ok` — including an **empty** result from a clean tree / empty diff / empty explicit set. |
 | Blocking `1` | `unbounded_expansion` (would leave the closed edge set) · invalid/ambiguous/unsupported map (defer to `validate`) |
-| Usage `2` | cannot derive the change set from Git (not a Git repo, or no resolvable baseline); bad `--phase` |
+| Usage `2` | cannot derive the change set from Git (not a Git repo, or no resolvable baseline) |
 | `extra` | `{"impact": {changed_paths, unowned_paths, affected:[{context_id, via, reason, gates, risk}], bounded}}` (see [impact-report.md](./impact-report.md)) |
 
 ## `specops context stale`
