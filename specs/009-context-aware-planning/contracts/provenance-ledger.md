@@ -48,8 +48,11 @@ context_provenance:
 
 Rules:
 
-1. **Content** — `context_ids` are the owning + reverse-impacted contexts (R2 engine) for the
-   record's **effective changed paths** (task diff for a task; cycle diff for a review), codepoint-ordered.
+1. **Content** — `context_ids` are the contexts that directly **own** the record's **effective
+   changed paths** (task diff for a task; cycle diff for a review), codepoint-ordered. Provenance
+   records what the change *touched* — the owning contexts — not the reverse-dependent expansion
+   `context impact` surfaces for review scoping (which would over-report contexts the change never
+   modified). A residually-ambiguous path (an unbroken specificity tie) is not attributed.
 2. **Recording sites** — task provenance is written by `status.py` at task close; review provenance by
    `review.py` at cycle record. Both go through the existing atomic + revision-CAS `ledger.save(...,
    base_revision=…)` (`ledger.py:455-486`); recording is interruption-safe and lost-update-safe.

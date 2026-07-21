@@ -166,12 +166,22 @@ def digest_drift_warning(root: Path) -> str | None:
         data = ledger.load_raw(feature_dir)
     except SpecopsError:
         return None
+    # Fire when ANY recorded present-provenance digest differs from the current
+    # one. Tasks (recorded during planning/implementation) are scanned first, so
+    # a review-cycle record written at review time — which carries the current,
+    # already-drifted digest — cannot mask a genuinely stale planning digest.
     recorded: str | None = None
     for record in [*(data.get("tasks") or []), *(data.get("review_cycles") or [])]:
         prov = record.get("context_provenance") if isinstance(record, dict) else None
-        if isinstance(prov, dict) and prov.get("map") == "present" and prov.get("digest"):
-            recorded = prov["digest"]  # last one wins → most recent recorded digest
-    if recorded is None or recorded == current:
+        if (
+            isinstance(prov, dict)
+            and prov.get("map") == "present"
+            and prov.get("digest")
+            and prov["digest"] != current
+        ):
+            recorded = prov["digest"]
+            break
+    if recorded is None:
         return None
     return (
         "context-map drift: the map digest changed since it was recorded "
@@ -184,12 +194,14 @@ def run_gates(root: Path) -> str:
     """Evaluate all gates; return the rendered report on success, or raise
     SpecopsError carrying the report (exit 1) on the first FAIL.
 
-    A non-blocking context-map drift warning (SC-008) is prepended to the output
-    when detected; it never changes the pass/fail outcome.
+    A non-blocking context-map drift warning (SC-008) is **appended** after the
+    gate report when detected, so the report header stays at the start of the
+    output/error (stable contract); it never changes the pass/fail outcome.
     """
     report = evaluate(root)
+    rendered = report.render()
     warning = digest_drift_warning(root)
-    prefix = f"[warning] {warning}\n" if warning else ""
+    suffix = f"\n[warning] {warning}" if warning else ""
     if not report.passed:
-        raise SpecopsError(prefix + report.render())
-    return prefix + report.render()
+        raise SpecopsError(rendered + suffix)
+    return rendered + suffix

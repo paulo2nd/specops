@@ -364,3 +364,29 @@ def test_no_drift_warning_when_digest_matches(fake_speckit_repo: Path) -> None:
     current = contextmap.map_digest(fake_speckit_repo)
     _ledger_with_task_provenance(fake_speckit_repo, current)
     assert review.digest_drift_warning(fake_speckit_repo) is None
+
+
+def test_drift_warning_not_masked_by_review_cycle_digest(fake_speckit_repo: Path) -> None:
+    # Finding 2 regression: a review-cycle record written at review time carries
+    # the CURRENT (drifted) digest; it must not mask the stale planning digest
+    # recorded on task records.
+    from specops import contextmap, review
+    from tests.conftest import DEP_GRAPH_MAP, write_map
+    write_map(fake_speckit_repo, DEP_GRAPH_MAP)
+    current = contextmap.map_digest(fake_speckit_repo)
+    feature_dir = fake_speckit_repo / "specs" / "001-demo"
+    data = {
+        "feature": "001-demo", "branch": _branch(fake_speckit_repo),
+        "baseline": _head(fake_speckit_repo), "current_phase": "REVIEW",
+        "recovery": {"active_task": None, "last_commit": None, "blockers": []},
+        "tasks": [{"id": "T001", "status": "DONE", "evidence": "CLI_LOG:ok",
+                   "context_provenance": {"map": "present", "digest": "planning0digest",
+                                          "context_ids": ["api"], "output_version": 1}}],
+        "review_cycles": [{"round": 1, "started_at": "2026-07-05", "completed_at": None,
+                           "result": None,
+                           "context_provenance": {"map": "present", "digest": current,
+                                                  "context_ids": ["api"], "output_version": 1}}],
+    }
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+    warning = review.digest_drift_warning(fake_speckit_repo)
+    assert warning is not None and "planning0dig" in warning

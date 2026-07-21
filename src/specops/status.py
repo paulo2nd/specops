@@ -329,6 +329,10 @@ def cmd_complete_task(
             f"Task '{task_id}' has no started_commit; cannot harvest evidence."
         )
 
+    # Effective changed paths for this task (started_commit → HEAD), computed once
+    # and reused for both --auto evidence and the Feature 009 context provenance.
+    changed_files = gitops.name_only_diff(repo, started)
+
     if auto:
         cfg = _load_config(root)
         test_cmd = cfg.get("test_command", "")
@@ -348,7 +352,7 @@ def cmd_complete_task(
                 f"No commits since task start ({started[:7]}). Commit your work first."
             )
 
-        files = gitops.name_only_diff(repo, started)
+        files = changed_files
         test_summary = result.stdout.strip().splitlines()
         test_line = test_summary[-1] if test_summary else "exit 0 (output not parseable)"
         code_diff = f"{len(files)} files across {len(commits)} commit(s): {', '.join(files[:5])}"
@@ -371,8 +375,7 @@ def cmd_complete_task(
 
     # Feature 009: snapshot context provenance (resolved context ids + map digest,
     # or an explicit no-map/invalid marker) for the task's effective changed paths.
-    changed = gitops.name_only_diff(repo, started)
-    task["context_provenance"] = contextmap.provenance_for(root, changed)
+    task["context_provenance"] = contextmap.provenance_for(root, changed_files)
 
     task["evidence"] = evidence_str
     task["status"] = "DONE"

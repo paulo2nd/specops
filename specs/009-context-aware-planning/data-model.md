@@ -93,7 +93,7 @@ Stored as `context_provenance` on every task record and every review-cycle recor
 |---|---|---|
 | No map | `{"map": "none"}` | No `.specify/specops/context-map.yaml` present. |
 | Invalid map | `{"map": "invalid"}` | Map present but unresolvable at close time (does not block the op). |
-| Present | `{"map": "present", "digest": "<sha256>", "context_ids": ["…"], "output_version": 1}` | Resolvable map; `context_ids` = owning + reverse-impacted contexts for the record's effective changed paths, codepoint-ordered. |
+| Present | `{"map": "present", "digest": "<sha256>", "context_ids": ["…"], "output_version": 1}` | Resolvable map; `context_ids` = the contexts that directly **own** the record's effective changed paths (not the reverse-dependent expansion), codepoint-ordered. |
 
 Backfill: `migrate_to_current` writes `{"map": "none"}` onto records migrated from v1/v2 (FR-018).
 

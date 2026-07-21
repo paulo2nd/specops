@@ -133,8 +133,8 @@ def diagnostic_line(cls: str) -> str | None:
         return "unsupported ledger schema."
     if cls == MIGRATABLE:
         return (
-            "legacy pre-v2 ledger; it will migrate on the next state change "
-            "or via 'specops status migrate'."
+            f"older ledger schema (below v{CURRENT_SCHEMA}); it will migrate on the "
+            "next state change or via 'specops status migrate'."
         )
     return None
 

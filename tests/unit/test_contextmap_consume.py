@@ -113,6 +113,24 @@ def test_impact_catch_all_owner_is_unbounded(context_map_repo: Path) -> None:
     assert r.status == cm.S_UNBOUNDED_EXPANSION and r.exit_code == 1
 
 
+def test_is_catch_all_precision() -> None:
+    # Whole-tree wildcards only; a literal segment makes it a specific selector.
+    assert cm._is_catch_all("**") and cm._is_catch_all("*") and cm._is_catch_all("**/*")
+    assert not cm._is_catch_all("**/config.yaml")
+    assert not cm._is_catch_all("**/*.py")
+    assert not cm._is_catch_all("src/**")
+
+
+def test_impact_specific_deep_glob_not_unbounded(context_map_repo: Path) -> None:
+    # `**/config.yaml` is a specific selector, not a catch-all → normal impact.
+    write_map(context_map_repo, {"schema_version": 1,
+              "contexts": [{"id": "cfg", "match": ["**/config.yaml"],
+                            "reads": {"base": ["."]}}]})
+    r = cm.cmd_impact(context_map_repo, paths=["src/nested/config.yaml"])
+    assert r.status == cm.S_IMPACT_OK
+    assert [a["context_id"] for a in r.extra["impact"]["affected"]] == ["cfg"]
+
+
 def test_impact_bounded_flag_true_on_normal(context_map_repo: Path) -> None:
     write_map(context_map_repo, DEP_GRAPH_MAP)
     r = cm.cmd_impact(context_map_repo, paths=["src/api/x.py"])
@@ -244,13 +262,29 @@ def test_stale_no_map_is_pass(context_map_repo: Path) -> None:
 # provenance_for (R6, SC-006)
 # ---------------------------------------------------------------------------
 
-def test_provenance_present(context_map_repo: Path) -> None:
+def test_provenance_present_records_owners_only(context_map_repo: Path) -> None:
+    # Provenance records the OWNING context of the change (config), NOT the
+    # reverse-dependent expansion (api, web) that `context impact` surfaces.
     write_map(context_map_repo, DEP_GRAPH_MAP)
     prov = cm.provenance_for(context_map_repo, ["src/config/x.py"])
     assert prov["map"] == "present"
     assert prov["digest"] == cm.map_digest(context_map_repo)
-    assert prov["context_ids"] == ["api", "config", "web"]
+    assert prov["context_ids"] == ["config"]
     assert prov["output_version"] == cm.OUTPUT_VERSION
+
+
+def test_provenance_multi_owner(context_map_repo: Path) -> None:
+    write_map(context_map_repo, DEP_GRAPH_MAP)
+    prov = cm.provenance_for(context_map_repo, ["src/config/x.py", "src/api/y.py"])
+    assert prov["context_ids"] == ["api", "config"]
+
+
+def test_provenance_catch_all_owner_records_owner(context_map_repo: Path) -> None:
+    # A catch-all owner must still be recorded (not an empty context_ids set).
+    write_map(context_map_repo, {"schema_version": 1,
+              "contexts": [{"id": "root", "match": ["**"], "reads": {"base": ["."]}}]})
+    prov = cm.provenance_for(context_map_repo, ["anything/here.py"])
+    assert prov["map"] == "present" and prov["context_ids"] == ["root"]
 
 
 def test_provenance_no_map(context_map_repo: Path) -> None:

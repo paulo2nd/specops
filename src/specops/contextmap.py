@@ -18,6 +18,7 @@ import hashlib
 import json as _json
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -208,8 +209,14 @@ def _classify_pattern(pat: Any) -> str | None:
     return None
 
 
+@lru_cache(maxsize=4096)
 def _translate_glob(pattern: str) -> re.Pattern[str]:
-    """Translate a gitignore-style glob into an anchored regex over a posix path."""
+    """Translate a gitignore-style glob into an anchored regex over a posix path.
+
+    Cached: the same pattern is compiled once and reused across every path it is
+    tested against (so e.g. `context stale` is O(patterns + patterns*files) match
+    work, not O(patterns*files) regex compilations).
+    """
     i, n = 0, len(pattern)
     out: list[str] = []
     while i < n:
@@ -797,8 +804,46 @@ def _reverse_adjacency(contexts: list[Context]) -> dict[str, list[str]]:
 
 
 def _is_catch_all(pattern: str) -> bool:
-    """True for a near-root recursive wildcard that would span the whole tree (R3)."""
-    return _specificity(pattern)[0] == 0 and "**" in pattern
+    """True only for a whole-tree wildcard (every segment is ``*`` or ``**``) (R3).
+
+    A pattern with any literal segment — e.g. ``**/config.yaml`` or ``**/*.py`` —
+    is a specific selector, not a catch-all, and must not trigger the
+    unbounded-expansion guard.
+    """
+    segs = [s for s in pattern.split("/") if s]
+    return bool(segs) and all(s in ("*", "**") for s in segs)
+
+
+def _owner_of(contexts: list[Context], path: str) -> tuple[Context | None, str | None]:
+    """Return (owner, pattern) for *path*'s most-specific **unambiguous** owner.
+
+    Returns (None, None) when *path* matches no context, or when the top two
+    candidates tie on specificity (a residual ambiguity `validate`'s witness
+    probe may miss) — impact/provenance never silently guess an owner, matching
+    the fail-safe stance of `_resolve`/`cmd_plan_check`.
+    """
+    cands = _candidates_for_path(contexts, path)
+    if not cands:
+        return None, None
+    if len(cands) >= 2 and cands[0][2] == cands[1][2]:
+        return None, None
+    return cands[0][0], cands[0][1]
+
+
+def _owning_context_ids(contexts: list[Context], changed_paths: list[str]) -> list[str]:
+    """Return the sorted ids of the contexts that directly **own** *changed_paths*.
+
+    This is what a task/review record's provenance captures — the contexts the
+    diff actually touches — NOT the reverse-dependent expansion `cmd_impact`
+    surfaces for review scoping (which would over-report contexts the change did
+    not modify).
+    """
+    ids: set[str] = set()
+    for path in set(changed_paths):
+        owner, _pat = _owner_of(contexts, path)
+        if owner is not None:
+            ids.add(owner.id)
+    return sorted(ids)
 
 
 def _affected(contexts: list[Context], changed_paths: list[str]) -> dict[str, Any]:
@@ -812,13 +857,12 @@ def _affected(contexts: list[Context], changed_paths: list[str]) -> dict[str, An
     affected: dict[str, dict[str, str]] = {}
     unowned: list[str] = []
     for path in sorted(set(changed_paths)):
-        cands = _candidates_for_path(contexts, path)
-        if not cands:
+        owner, pat = _owner_of(contexts, path)
+        if owner is None:
             unowned.append(path)
             continue
-        if _is_catch_all(cands[0][1]):
+        if pat is not None and _is_catch_all(pat):
             return {"affected": {}, "unowned": unowned, "unbounded": path}
-        owner = cands[0][0]
         affected.setdefault(owner.id, {"via": "ownership", "reason": f"owns {path}"})
 
     dependents = _reverse_adjacency(contexts)
@@ -883,11 +927,10 @@ def provenance_for(root: Path, changed_paths: list[str]) -> dict[str, Any]:
     if vr.status not in _RESOLVABLE:
         return {"map": "invalid"}
     contexts = vr.contexts or []
-    result = _affected(contexts, changed_paths)
     return {
         "map": "present",
         "digest": _digest_contexts(contexts),
-        "context_ids": sorted(result["affected"]),
+        "context_ids": _owning_context_ids(contexts, changed_paths),
         "output_version": OUTPUT_VERSION,
     }
 

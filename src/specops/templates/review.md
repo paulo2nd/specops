@@ -17,9 +17,10 @@ Run `specops review`.
 
 If a context map exists (`.specify/specops/context-map.yaml`):
 
-- The `specops review` output prepends a non-blocking `[warning] context-map drift: …`
-  line when the map digest changed since planning. This never rejects the review on
-  its own — note it in the revision report (Step 4) so the change is visible.
+- The `specops review` output appends a non-blocking `[warning] context-map drift: …`
+  line (after the gate report) when the map digest changed since planning. This never
+  rejects the review on its own — note it in the revision report (Step 4) so the
+  change is visible.
 - Run `specops context impact` to see the contexts affected by the effective diff
   (directly-owned plus their reverse dependents). Use it to scope the diff review in
   Step 3: every expanded context is attributable to an `ownership`/`dependency` edge —

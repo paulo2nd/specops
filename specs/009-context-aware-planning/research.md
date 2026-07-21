@@ -110,9 +110,11 @@ gains v2→v3 coverage.
 `{"map": "invalid"}` (map present but unresolvable at close time — recorded, does not block the
 underlying status/review op which has its own gates), or
 `{"map": "present", "digest": "<sha256>", "context_ids": ["…"], "output_version": 1}` when resolvable.
-The `context_ids` are the owning + reverse-impacted contexts for the record's **effective changed
-paths** (task diff for a task record; the cycle's effective diff for a review record), resolved
-through the same R2 engine and codepoint-ordered. Domain-agnostic strings only (Principle V).
+The `context_ids` are the contexts that directly **own** the record's **effective changed
+paths** (task diff for a task record; the cycle's effective diff for a review record),
+codepoint-ordered — what the change *touched*, not the reverse-dependent expansion `context
+impact` surfaces for review scoping (which would over-report contexts the change never modified).
+Domain-agnostic strings only (Principle V).
 
 **Rationale**: Records exactly what SC-006/SC-008 need — reproduce which contexts and which map
 version a record targeted — without coupling the ledger to context internals. Deterministic and
