@@ -31,6 +31,13 @@ For each task:
 Never edit `status.yaml` or `tasks.md` checkboxes by hand.
 The ledger is the authority; the agent is the executor.
 
+### Context Provenance (Feature 009)
+
+- When a context map exists, closing a task automatically snapshots the resolved
+  context ids and the map digest into the ledger record (or an explicit
+  `{map: none}`/`{map: invalid}` marker). This is mechanical — no agent action is
+  required and nothing to record by hand.
+
 ### Skills
 
 Before starting the first task, check `skills_dir` (from `specops.json`). Load any skill files present. If the directory is empty or missing, proceed — skills are optional, not a gate.

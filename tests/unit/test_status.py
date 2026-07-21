@@ -362,6 +362,42 @@ def test_complete_task_manual_evidence_valid(tmp_path: Path) -> None:
     assert t["evidence"] == "CLI_LOG:manual ok"
 
 
+def _in_progress_task_setup(tmp_path: Path) -> tuple[Path, Path, str]:
+    root, feature_dir = _setup_feature(tmp_path)
+    (feature_dir / "tasks.md").write_text("- [ ] T001\n")
+    import subprocess as sp
+    head = sp.run(["git", "rev-parse", "HEAD"], cwd=root,
+                  capture_output=True, text=True).stdout.strip()
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    data["tasks"] = [_task("T001", "IN_PROGRESS", started=head)]
+    data["recovery"]["active_task"] = "T001"
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+    return root, feature_dir, head
+
+
+def test_complete_task_records_no_map_provenance(tmp_path: Path) -> None:
+    # Feature 009: with no context map, the task record carries {map: none}.
+    root, feature_dir, _head = _in_progress_task_setup(tmp_path)
+    s.cmd_complete_task(root, "T001", auto=False, evidence="CLI_LOG:ok")
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    t = next(t for t in data["tasks"] if t["id"] == "T001")
+    assert t["context_provenance"] == {"map": "none"}
+
+
+def test_complete_task_records_present_provenance(tmp_path: Path) -> None:
+    # Feature 009: with a map present, the record carries a digest + context_ids.
+    from tests.conftest import DEP_GRAPH_MAP, write_map
+    root, feature_dir, _head = _in_progress_task_setup(tmp_path)
+    (root / ".specify" / "specops").mkdir(parents=True, exist_ok=True)
+    write_map(root, DEP_GRAPH_MAP)
+    s.cmd_complete_task(root, "T001", auto=False, evidence="CLI_LOG:ok")
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    prov = next(t for t in data["tasks"] if t["id"] == "T001")["context_provenance"]
+    assert prov["map"] == "present"
+    assert isinstance(prov["digest"], str) and prov["digest"]
+    assert isinstance(prov["context_ids"], list)
+
+
 def test_complete_task_invalid_evidence_class_fails(tmp_path: Path) -> None:
     root, feature_dir = _setup_feature(tmp_path)
     (feature_dir / "tasks.md").write_text("- [ ] T001\n")
@@ -409,6 +445,15 @@ def _setup_review(tmp_path: Path, extra_cycles: list | None = None) -> tuple[Pat
     data["review_cycles"] = cycles
     (feature_dir / "status.yaml").write_text(yaml.dump(data))
     return root, feature_dir
+
+
+def test_transition_to_review_records_cycle_provenance(tmp_path: Path) -> None:
+    # Feature 009: entering REVIEW opens a cycle carrying a context-provenance marker.
+    root, feature_dir = _setup_feature(tmp_path, "IMPLEMENT")
+    s.cmd_transition_phase(root, "REVIEW", result=None)
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    cycle = data["review_cycles"][-1]
+    assert cycle["context_provenance"] == {"map": "none"}
 
 
 def test_done_with_approved_records_and_advances(tmp_path: Path) -> None:

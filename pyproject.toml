@@ -51,6 +51,12 @@ line-length = 100
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 ignore = []
 
+[tool.ruff.lint.flake8-bugbear]
+# Typer's option/argument factories are the idiomatic default for CLI params
+# (e.g. a repeatable `list[str] = typer.Option(None, ...)`); they are not the
+# mutable-default-argument trap B008 targets.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
 [tool.mypy]
 python_version = "3.10"
 disallow_untyped_defs = true

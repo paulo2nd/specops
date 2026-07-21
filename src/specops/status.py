@@ -8,7 +8,7 @@ from pathlib import Path
 import git
 import yaml
 
-from specops import config, gitops, ledger, shell, speckit
+from specops import config, contextmap, gitops, ledger, shell, speckit
 from specops.errors import LedgerParseError, SpecopsError
 from specops.ledger import now_utc
 
@@ -369,6 +369,11 @@ def cmd_complete_task(
         if commits:
             data["recovery"]["last_commit"] = commits[0]
 
+    # Feature 009: snapshot context provenance (resolved context ids + map digest,
+    # or an explicit no-map/invalid marker) for the task's effective changed paths.
+    changed = gitops.name_only_diff(repo, started)
+    task["context_provenance"] = contextmap.provenance_for(root, changed)
+
     task["evidence"] = evidence_str
     task["status"] = "DONE"
     task["completed_at"] = now_utc()
@@ -479,7 +484,7 @@ def cmd_transition_phase(
         normalized_result = upper
 
     feature_dir = _get_feature_dir(root)
-    data, base_rev, base_violations, _repo = _load_for_write(root, feature_dir)
+    data, base_rev, base_violations, repo = _load_for_write(root, feature_dir)
 
     current = data.get("current_phase", "SPECIFY")
     target = phase.upper()
@@ -524,6 +529,10 @@ def cmd_transition_phase(
     # activate that placeholder instead of appending a second open round.
     if target == "REVIEW":
         cycles = data.setdefault("review_cycles", [])
+        # Feature 009: provenance for the cycle's effective diff (baseline → HEAD).
+        cycle_prov = contextmap.provenance_for(
+            root, gitops.name_only_diff(repo, str(data.get("baseline") or ""), "HEAD")
+        )
         pending = cycles[-1] if cycles else None
         if (
             pending
@@ -531,6 +540,7 @@ def cmd_transition_phase(
             and pending.get("started_at") is None
         ):
             pending["started_at"] = now_utc()
+            pending["context_provenance"] = cycle_prov
         else:
             round_num = len(cycles) + 1
             cycles.append({
@@ -538,6 +548,7 @@ def cmd_transition_phase(
                 "started_at": now_utc(),
                 "completed_at": None,
                 "result": None,
+                "context_provenance": cycle_prov,
             })
 
     # Closing REVIEW via corrective REVIEW→IMPLEMENT(REJECTED)
@@ -624,7 +635,7 @@ def cmd_migrate(root: Path) -> str:
     data = ledger.migrate_to_current(copy.deepcopy(on_disk))
     data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
     ledger.save(feature_dir, data, base_revision=base_rev)
-    return "migrated (v1 → v2)"
+    return f"migrated to schema v{ledger.CURRENT_SCHEMA}"
 
 
 def cmd_rebaseline(root: Path) -> str:

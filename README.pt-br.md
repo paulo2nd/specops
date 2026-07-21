@@ -297,6 +297,29 @@ o mesmo mapa e as mesmas entradas sempre produzem o mesmo resultado ordenado.
   de razões ordenado: candidatos considerados, o vencedor e qual dimensão de
   especificidade decidiu.
 
+O mapa é **consumido** no ciclo de vida por mais três comandos somente-leitura:
+
+- `specops context plan-check [--plan <p>] [--phase <phase>]` — valida a topologia
+  de contextos declarada no plano (uma linha `**SpecOps-Contexts**: …`) contra o
+  mapa e exibe o conjunto de leitura mínimo da fase. Bloqueia (saída `1`) quando a
+  declaração falta, um contexto declarado é desconhecido, ou um caminho declarado
+  é de um contexto não declarado; um caminho sem dono é não-bloqueante. Não
+  consulta o sistema de arquivos.
+- `specops context impact [--path <p> …]` — os contextos afetados por uma mudança:
+  o contexto dono mais seus **dependentes reversos** transitivos, cada um
+  atribuído a uma aresta `ownership`/`dependency`/`policy`. Sem `--path`, o
+  conjunto de mudanças vem do Git (árvore limpa → vazio, saída `0`; fora de repo /
+  sem baseline → saída `2`).
+- `specops context stale` — padrões do mapa que não correspondem a nenhum arquivo
+  **rastreado pelo Git** (movidos/removidos), com o contexto dono; nunca edita o
+  mapa.
+
+Consumir esses comandos também registra a **proveniência de contexto** (ids de
+contexto resolvidos + digest do mapa, ou um marcador explícito
+`{map: none}`/`{map: invalid}`) em cada registro de tarefa e de ciclo de revisão
+do ledger (esquema v3), e `specops review` exibe um aviso não-bloqueante quando o
+mapa mudou desde o planejamento.
+
 Todos os comandos aceitam `--json` para uma superfície de máquina estável e
 versionada. Códigos de saída: `0` sucesso (incluindo os estados suportados "sem
 mapa" e "sem contexto correspondente"), `1` mapa bloqueante/inválido, `2` erro de

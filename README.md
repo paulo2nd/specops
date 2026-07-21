@@ -278,6 +278,25 @@ inputs always produce the same ordered result.
   reason trace: candidates considered, the winner, and which specificity
   dimension decided it.
 
+The map is **consumed** in the lifecycle by three more read-only commands:
+
+- `specops context plan-check [--plan <p>] [--phase <phase>]` — validate a plan's
+  declared context topology (a `**SpecOps-Contexts**: …` line) against the map and
+  display the minimal phase read set. Blocks (exit `1`) on a missing declaration,
+  an unknown declared context, or a declared path owned by an undeclared context;
+  an unowned declared path is non-blocking. Existence-agnostic.
+- `specops context impact [--path <p> …]` — the contexts affected by a change: the
+  owning context plus its transitive **reverse** dependents, each attributed to an
+  `ownership`/`dependency`/`policy` edge. Omit `--path` to derive the change set
+  from Git (clean tree → empty, exit `0`; not-a-repo / no-baseline → exit `2`).
+- `specops context stale` — context-map patterns matching zero **Git-tracked**
+  files (moved/removed), with the owning context; never edits the map.
+
+Consuming these also snapshots **context provenance** (resolved context ids + map
+digest, or an explicit `{map: none}`/`{map: invalid}` marker) into every task and
+review-cycle ledger record (schema v3), and `specops review` surfaces a
+non-blocking warning when the map changed since planning.
+
 All commands accept `--json` for a stable, versioned machine surface. Exit codes:
 `0` success (including the supported "no map present" and "no matching context"
 states), `1` a blocking/unsound map, `2` a usage error. Path matching is

@@ -193,6 +193,31 @@ def make_v1_ledger(
     return data
 
 
+# ---------------------------------------------------------------------------
+# Feature 009 — Context-Aware Planning and Impact builders
+# ---------------------------------------------------------------------------
+
+# A small dependency-graph map reused by 009 tests: web -> api -> config.
+# Reverse dependents of `config` = {api, web}; of `api` = {web}.
+DEP_GRAPH_MAP = {
+    "schema_version": 1,
+    "contexts": [
+        {"id": "api", "match": ["src/api/**"],
+         "reads": {"base": ["src/api"], "plan": ["docs/api.md", "src/api"]},
+         "dependencies": ["config"], "gates": ["contract-tests"], "risk": {"tier": "high"}},
+        {"id": "web", "match": ["src/web/**"],
+         "reads": {"base": ["src/web"]}, "dependencies": ["api"]},
+        {"id": "config", "match": ["src/config/**"],
+         "reads": {"base": ["src/config"]}},
+    ],
+}
+
+
+def context_provenance_of(record: dict) -> object:
+    """Return a task/review-cycle record's ``context_provenance`` (or None)."""
+    return record.get("context_provenance")
+
+
 def make_v2_ledger(feature_dir: Path, *, revision: int = 1, **kwargs: object) -> dict:
     """Write a valid v2-shaped ledger and return it."""
     data = make_v1_ledger(feature_dir, **kwargs)  # type: ignore[arg-type]

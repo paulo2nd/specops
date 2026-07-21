@@ -1,6 +1,29 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.4.0 → 1.5.0
+Rationale (1.5.0, 2026-07-21): Amended during /speckit-implement of
+specs/009-context-aware-planning (Context-Aware Planning and Impact). Feature 009
+consumes the Feature 008 context map inside the planning, implementation, and
+review phases, which are governed by the Principle IV injected directives. Two
+existing directives are broadened (no principle removed or redefined): Empirical
+Verification now also has agents declare the contexts the work touches and
+validate the declared topology with `specops context plan-check` (resolving and
+displaying the minimal phase read set); Ledger & Phase Wiring now also snapshots
+context provenance (resolved context ids + map digest, or an explicit
+`{map: none}`/`{map: invalid}` marker) into task/review ledger records, scopes
+review by `specops context impact`, and surfaces a non-blocking map-digest drift
+warning. The delivered CLI (`context plan-check`/`impact`/`stale`) and the Ledger
+v2→v3 provenance migration are covered by the feature's own tests, never run
+against this repository (No Self-Application). MINOR bump: materially expanded
+guidance added to a non-removed principle; the additive/never-destructive intent
+is preserved. Templates updated in the same change set:
+src/specops/templates/directives/plan.md (context declaration + plan-check),
+implement.md (automatic provenance note), src/specops/templates/review.md
+(impact-scoped review + drift warning). The generic plan/spec/tasks templates
+under .specify/templates/ remain compatible and need no change.
+
+Previous report (1.4.0):
 Version change: 1.3.0 → 1.4.0
 Rationale (1.4.0, 2026-07-19): Amended during /speckit-specify → plan of
 specs/005-native-speckit-extension (Native Spec Kit Extension). Feature 005
@@ -215,7 +238,11 @@ sourced identically from the SpecOps templates. The directives are:
   conventions in `plan.md` from memory; declared paths carry action suffixes
   (`(create)`, `(modify)`, etc.) and are validated against the worktree by
   `specops consistency`, which also checks that every success criterion of
-  the spec is covered by at least one task.
+  the spec is covered by at least one task. When a context map is present,
+  agents also declare the contexts the work touches (`**SpecOps-Contexts**: …`)
+  and validate the declared topology with `specops context plan-check` (a
+  supported no-op when no map exists); the minimal phase-specific read set is
+  resolved and displayed rather than read wholesale.
 - **Token-Optimized Review (§18)**: the review agent loads the Spec's
   required Skills from the client's skills directory, runs `specops
   reconcile` and aborts immediately on failure, rejects changes outside
@@ -233,6 +260,11 @@ sourced identically from the SpecOps templates. The directives are:
   stage seam, never left to the human to trigger manually. The ledger is created
   at the tasks stage (after `tasks.md` exists), and the review cycle is opened at
   implement completion so `/specops-review` has an open cycle to record into.
+  When a context map is present, closing a task or opening a review cycle also
+  snapshots the resolved context ids and the context-map digest into the ledger
+  record (or an explicit `{map: none}`/`{map: invalid}` marker), the review
+  agent scopes its diff review by `specops context impact`, and a map-digest
+  drift between planning and review is surfaced as a **non-blocking** warning.
   Where SpecOps is not initialized, the injected directives degrade to no-ops and
   the underlying Speckit prompt still works standalone.
 
@@ -327,4 +359,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.4.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-19
+**Version**: 1.5.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-21

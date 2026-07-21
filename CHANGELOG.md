@@ -13,6 +13,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Context-aware planning and impact (Feature 009).** Consumes the context map
+  inside the planning, implementation, and review phases, adding three read-only
+  commands under `specops context`:
+  - `plan-check` validates a plan's declared context topology against the map:
+    a plan declares the contexts it touches with a `**SpecOps-Contexts**: …`
+    line, and the command blocks (exit `1`) on a missing declaration, an unknown
+    declared context id, or a declared path owned by an undeclared context; an
+    unowned declared path is reported non-blocking. Existence-agnostic (never
+    stats the filesystem) and displays the minimal phase-specific read set.
+  - `impact [--path …]` reports the contexts affected by a change — the directly
+    owning context plus its transitive **reverse** dependents — each attributed
+    to exactly one `ownership`/`dependency`/`policy` edge (the `policy` edge is
+    defined and enforced but unpopulated against the current schema). With no
+    `--path` the change set is derived from Git (baseline → HEAD); a clean tree
+    yields an empty result (exit `0`), while not-a-repo / no-baseline is a usage
+    error (exit `2`).
+  - `stale` reports context-map patterns that match zero **Git-tracked** files
+    (moved/removed), with the owning context, without editing the map;
+    `context validate` stays syntactic-only.
+- **Ledger v3 — context provenance.** Every task and review-cycle record now
+  carries a `context_provenance` object: `{map: present, digest, context_ids,
+  output_version}` when a map is present, or an explicit `{map: none}` /
+  `{map: invalid}` marker otherwise. A new deterministic `v2 → v3` migration
+  back-fills the `{map: none}` marker onto pre-existing records; prior ledgers
+  remain readable. `specops review` prepends a **non-blocking** context-map drift
+  warning when the recorded digest differs from the current one. All new surfaces
+  are deterministic, read-only, and reuse the `0`/`1`/`2` exit-code contract.
+
+### Changed
+
+- The execution ledger schema advances **v2 → v3**. New ledgers are written at
+  v3; v1/v2 ledgers migrate automatically on the next state change (backed up
+  first) and gain the no-map provenance marker. No manual action is required.
+
 - **Context map core.** A new versioned, stack-neutral repository context map at
   `.specify/specops/context-map.yaml`, with four commands under `specops context`:
   - `init` scaffolds a schema-valid starter map (idempotent, atomic; never

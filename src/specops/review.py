@@ -13,7 +13,7 @@ from pathlib import Path
 
 import git
 
-from specops import config, gitops, shell, status
+from specops import config, contextmap, gitops, ledger, shell, speckit, status
 from specops import reconcile as reconcile_mod
 from specops.errors import SpecopsError
 
@@ -147,10 +147,49 @@ def evaluate(root: Path) -> GateReport:
     return report
 
 
+def digest_drift_warning(root: Path) -> str | None:
+    """Return a non-blocking warning when the map changed since planning (SC-008).
+
+    Compares the most recent context-map digest recorded in the ledger's
+    provenance (the plan/implement-time digest) with the current map digest. A
+    difference is surfaced as a warning only — it never blocks review in this
+    feature (enforcement is deferred to Feature 010). Returns None when there is
+    no map, no recorded digest, or the digests match.
+    """
+    current = contextmap.map_digest(root)
+    if current is None:
+        return None
+    feature_dir = speckit.resolve_feature_dir(root)
+    if feature_dir is None:
+        return None
+    try:
+        data = ledger.load_raw(feature_dir)
+    except SpecopsError:
+        return None
+    recorded: str | None = None
+    for record in [*(data.get("tasks") or []), *(data.get("review_cycles") or [])]:
+        prov = record.get("context_provenance") if isinstance(record, dict) else None
+        if isinstance(prov, dict) and prov.get("map") == "present" and prov.get("digest"):
+            recorded = prov["digest"]  # last one wins → most recent recorded digest
+    if recorded is None or recorded == current:
+        return None
+    return (
+        "context-map drift: the map digest changed since it was recorded "
+        f"(planned {recorded[:12]}… → current {current[:12]}…). Non-blocking; "
+        "re-run planning if the change affects this work."
+    )
+
+
 def run_gates(root: Path) -> str:
     """Evaluate all gates; return the rendered report on success, or raise
-    SpecopsError carrying the report (exit 1) on the first FAIL."""
+    SpecopsError carrying the report (exit 1) on the first FAIL.
+
+    A non-blocking context-map drift warning (SC-008) is prepended to the output
+    when detected; it never changes the pass/fail outcome.
+    """
     report = evaluate(root)
+    warning = digest_drift_warning(root)
+    prefix = f"[warning] {warning}\n" if warning else ""
     if not report.passed:
-        raise SpecopsError(report.render())
-    return report.render()
+        raise SpecopsError(prefix + report.render())
+    return prefix + report.render()

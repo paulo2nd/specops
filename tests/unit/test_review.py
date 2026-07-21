@@ -320,3 +320,47 @@ def test_report_passed_property() -> None:
     ])
     assert ok.passed
     assert not bad.passed
+
+
+# ---------------------------------------------------------------------------
+# Feature 009 — context-map digest drift (non-blocking warning) [SC-008]
+# ---------------------------------------------------------------------------
+
+def _ledger_with_task_provenance(root: Path, digest: str) -> None:
+    feature_dir = root / "specs" / "001-demo"
+    data = {
+        "feature": "001-demo", "branch": _branch(root), "baseline": _head(root),
+        "current_phase": "IMPLEMENT",
+        "recovery": {"active_task": None, "last_commit": None, "blockers": []},
+        "tasks": [{"id": "T001", "status": "DONE", "evidence": "CLI_LOG:ok",
+                   "context_provenance": {"map": "present", "digest": digest,
+                                          "context_ids": ["api"], "output_version": 1}}],
+        "review_cycles": [],
+    }
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+
+
+def test_no_drift_warning_when_no_map(fake_speckit_repo: Path) -> None:
+    from specops import review
+    _ledger_with_task_provenance(fake_speckit_repo, "deadbeef")
+    assert review.digest_drift_warning(fake_speckit_repo) is None
+
+
+def test_drift_warning_when_digest_changed(fake_speckit_repo: Path) -> None:
+    from specops import contextmap, review
+    from tests.conftest import DEP_GRAPH_MAP, write_map
+    write_map(fake_speckit_repo, DEP_GRAPH_MAP)
+    _ledger_with_task_provenance(fake_speckit_repo, "stale000digest")
+    warning = review.digest_drift_warning(fake_speckit_repo)
+    assert warning is not None and "drift" in warning
+    # sanity: recorded != current
+    assert contextmap.map_digest(fake_speckit_repo) != "stale000digest"
+
+
+def test_no_drift_warning_when_digest_matches(fake_speckit_repo: Path) -> None:
+    from specops import contextmap, review
+    from tests.conftest import DEP_GRAPH_MAP, write_map
+    write_map(fake_speckit_repo, DEP_GRAPH_MAP)
+    current = contextmap.map_digest(fake_speckit_repo)
+    _ledger_with_task_provenance(fake_speckit_repo, current)
+    assert review.digest_drift_warning(fake_speckit_repo) is None

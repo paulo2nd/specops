@@ -25,7 +25,12 @@ def test_classify_v1_is_migratable() -> None:
 
 
 def test_classify_current() -> None:
-    assert ledger.classify({"schema_version": 2}) == ledger.CURRENT
+    assert ledger.classify({"schema_version": ledger.CURRENT_SCHEMA}) == ledger.CURRENT
+
+
+def test_classify_v2_is_migratable() -> None:
+    # v2 predates the Feature 009 provenance schema (v3) → migratable, not current.
+    assert ledger.classify({"schema_version": 2}) == ledger.MIGRATABLE
 
 
 def test_classify_too_new() -> None:
@@ -94,7 +99,7 @@ def _v1_dict() -> dict:
 
 def test_migrate_backfills_v2_fields() -> None:
     out = ledger.migrate_to_current(_v1_dict())
-    assert out["schema_version"] == 2
+    assert out["schema_version"] == ledger.CURRENT_SCHEMA
     assert out["revision"] == 1
     assert out["workflow_lane"] == "full"
     assert out["active_artifact"] == "tasks.md"  # REVIEW → tasks.md
@@ -123,8 +128,16 @@ def test_migrate_converts_every_timestamp_to_aware() -> None:
 def test_migrate_idempotent_on_current() -> None:
     once = ledger.migrate_to_current(_v1_dict())
     twice = ledger.migrate_to_current(once)
-    assert twice["schema_version"] == 2
+    assert twice["schema_version"] == ledger.CURRENT_SCHEMA
     assert twice["revision"] == once["revision"]
+
+
+def test_migrate_backfills_context_provenance_no_map_marker() -> None:
+    # Feature 009: every task and review-cycle record gains the explicit no-map
+    # marker (never an omitted field) so a pre-v3 ledger stays unambiguous.
+    out = ledger.migrate_to_current(_v1_dict())
+    assert out["tasks"][0]["context_provenance"] == {"map": "none"}
+    assert out["review_cycles"][0]["context_provenance"] == {"map": "none"}
 
 
 def test_migrate_refuses_too_new() -> None:

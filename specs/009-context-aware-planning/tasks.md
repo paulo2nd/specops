@@ -28,7 +28,7 @@ Single-project layout: engine in `src/specops/`, tests in `tests/unit` + `tests/
 
 **Purpose**: Shared test scaffolding reused across stories.
 
-- [ ] T001 [P] Add shared pytest builders in `tests/conftest.py` — a dependency-graph map builder (contexts with `dependencies`/`gates`/`risk`) and a helper to read `context_provenance` off task/review ledger records — reused by US1–US4 [SC-001] [SC-006]
+- [X] T001 [P] Add shared pytest builders in `tests/conftest.py` — a dependency-graph map builder (contexts with `dependencies`/`gates`/`risk`) and a helper to read `context_provenance` off task/review ledger records — reused by US1–US4 [SC-001] [SC-006]
 
 ---
 
@@ -38,7 +38,7 @@ Single-project layout: engine in `src/specops/`, tests in `tests/unit` + `tests/
 
 **⚠️ CRITICAL**: Must complete before US1/US2/US4 CLI tasks.
 
-- [ ] T002 Add the new status constants (`plan_check_ok`, `missing_declaration`, `unknown_declared_context`, `undeclared_owner`, `impact_ok`, `unbounded_expansion`, `stale_ok`, `stale_found`, and the non-blocking `unowned` detail) and map each in `_CLASS_FOR_STATUS` (PASS/GATE_REJECTION/INFRA_ERROR) in `src/specops/contextmap.py` [SC-007]
+- [X] T002 Add the new status constants (`plan_check_ok`, `missing_declaration`, `unknown_declared_context`, `undeclared_owner`, `impact_ok`, `unbounded_expansion`, `stale_ok`, `stale_found`, and the non-blocking `unowned` detail) and map each in `_CLASS_FOR_STATUS` (PASS/GATE_REJECTION/INFRA_ERROR) in `src/specops/contextmap.py` [SC-007]
 
 **Checkpoint**: Status taxonomy ready — command stories can begin (US1, US2, US4 in parallel; US3 after US2).
 
@@ -52,15 +52,15 @@ Single-project layout: engine in `src/specops/`, tests in `tests/unit` + `tests/
 
 ### Tests for User Story 1
 
-- [ ] T003 [P] [US1] Create plan-topology fixtures — `plan.md` samples (valid declaration, missing `SpecOps-Contexts`, unknown ID, undeclared owner, unowned path) plus their maps — in `tests/fixtures/context_maps/` [SC-004]
-- [ ] T004 [P] [US1] Unit tests for `speckit.parse_plan_context_ids` and the `cmd_plan_check` rule matrix (rules 1–7 of plan-topology.md: no-map pass, missing-declaration block, unknown-ID block, undeclared-owner block, unowned non-blocking, existence-agnostic, fail-closed on bad map, byte-stable output) in `tests/unit/test_contextmap_consume.py` [SC-004] [SC-001] [SC-007]
-- [ ] T005 [P] [US1] Integration tests for `context plan-check` (exit/status/`--json` matrix, no-map exit 0, read-only before/after state check) in `tests/integration/test_context_consume_cli.py` [SC-004] [SC-007]
+- [X] T003 [P] [US1] Create plan-topology fixtures — `plan.md` samples (valid declaration, missing `SpecOps-Contexts`, unknown ID, undeclared owner, unowned path) plus their maps — in `tests/fixtures/context_maps/` [SC-004]
+- [X] T004 [P] [US1] Unit tests for `speckit.parse_plan_context_ids` and the `cmd_plan_check` rule matrix (rules 1–7 of plan-topology.md: no-map pass, missing-declaration block, unknown-ID block, undeclared-owner block, unowned non-blocking, existence-agnostic, fail-closed on bad map, byte-stable output) in `tests/unit/test_contextmap_consume.py` [SC-004] [SC-001] [SC-007]
+- [X] T005 [P] [US1] Integration tests for `context plan-check` (exit/status/`--json` matrix, no-map exit 0, read-only before/after state check) in `tests/integration/test_context_consume_cli.py` [SC-004] [SC-007]
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Implement `speckit.parse_plan_context_ids(plan_text)` (parse the `**SpecOps-Contexts**: …` line; ID-regex validated; de-duplicated) in `src/specops/speckit.py` [SC-004]
-- [ ] T007 [US1] Implement `contextmap.cmd_plan_check(root, *, plan, phase)` (declared IDs exist → else `unknown_declared_context`; declared path owner ∈ declared IDs → else `undeclared_owner`; unowned path → non-blocking observation; empty declaration + map present → `missing_declaration`; existence-agnostic; display minimal phase read set via existing `cmd_resolve`) in `src/specops/contextmap.py` [SC-004] [SC-001]
-- [ ] T008 [US1] Register the `context plan-check` subcommand (`--plan`, `--phase`, `--json`, via `_emit_context`) in `src/specops/cli.py` [SC-004] [SC-007]
+- [X] T006 [US1] Implement `speckit.parse_plan_context_ids(plan_text)` (parse the `**SpecOps-Contexts**: …` line; ID-regex validated; de-duplicated) in `src/specops/speckit.py` [SC-004]
+- [X] T007 [US1] Implement `contextmap.cmd_plan_check(root, *, plan, phase)` (declared IDs exist → else `unknown_declared_context`; declared path owner ∈ declared IDs → else `undeclared_owner`; unowned path → non-blocking observation; empty declaration + map present → `missing_declaration`; existence-agnostic; display minimal phase read set via existing `cmd_resolve`) in `src/specops/contextmap.py` [SC-004] [SC-001]
+- [X] T008 [US1] Register the `context plan-check` subcommand (`--plan`, `--phase`, `--json`, via `_emit_context`) in `src/specops/cli.py` [SC-004] [SC-007]
 
 **Checkpoint**: US1 fully functional and independently testable (MVP).
 
@@ -74,15 +74,15 @@ Single-project layout: engine in `src/specops/`, tests in `tests/unit` + `tests/
 
 ### Tests for User Story 2
 
-- [ ] T009 [P] [US2] Create impact fixtures — dependency-graph, reverse-dependent chain, dependency cycle, catch-all/near-root owner, gates-bearing (`policy`) context, and unowned-path maps — in `tests/fixtures/context_maps/` [SC-002] [SC-003]
-- [ ] T010 [P] [US2] Unit tests for reverse expansion (dedup, codepoint order, edge attribution, cycle-safe), closed-edge-set enforcement (no context without a `via`; no out-of-set `via`), unowned handling, bounded vs `unbounded_expansion`, and determinism in `tests/unit/test_contextmap_consume.py` [SC-002] [SC-003] [SC-001]
-- [ ] T011 [P] [US2] Integration tests for `context impact` — explicit `--path`; Git-default degenerate mapping (clean tree/empty diff → exit 0; not-a-repo/no-baseline → exit 2); `--json` byte-for-byte identical — in `tests/integration/test_context_consume_cli.py` [SC-002] [SC-003] [SC-007] [SC-001]
+- [X] T009 [P] [US2] Create impact fixtures — dependency-graph, reverse-dependent chain, dependency cycle, catch-all/near-root owner, gates-bearing (`policy`) context, and unowned-path maps — in `tests/fixtures/context_maps/` [SC-002] [SC-003]
+- [X] T010 [P] [US2] Unit tests for reverse expansion (dedup, codepoint order, edge attribution, cycle-safe), closed-edge-set enforcement (no context without a `via`; no out-of-set `via`), unowned handling, bounded vs `unbounded_expansion`, and determinism in `tests/unit/test_contextmap_consume.py` [SC-002] [SC-003] [SC-001]
+- [X] T011 [P] [US2] Integration tests for `context impact` — explicit `--path`; Git-default degenerate mapping (clean tree/empty diff → exit 0; not-a-repo/no-baseline → exit 2); `--json` byte-for-byte identical — in `tests/integration/test_context_consume_cli.py` [SC-002] [SC-003] [SC-007] [SC-001]
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Implement the reverse-adjacency index + cycle-safe reverse DFS + closed `{ownership,dependency,policy}` attribution + `unbounded_expansion` guard (catch-all/whole-map-closure) in `src/specops/contextmap.py` [SC-002] [SC-003]
-- [ ] T013 [US2] Implement `contextmap.cmd_impact(root, *, paths)` — explicit paths else Git-derived change set via `gitops.name_only_diff`/`is_git_repo`/ledger baseline; degenerate-case exit mapping; surface `gates`/`risk` metadata; **phase-independent (no `--phase`)** — in `src/specops/contextmap.py` [SC-002] [SC-003] [SC-007]
-- [ ] T014 [US2] Register the `context impact` subcommand (`--path` repeatable, `--json`; no `--phase`) in `src/specops/cli.py` [SC-002] [SC-007]
+- [X] T012 [US2] Implement the reverse-adjacency index + cycle-safe reverse DFS + closed `{ownership,dependency,policy}` attribution + `unbounded_expansion` guard (catch-all/whole-map-closure) in `src/specops/contextmap.py` [SC-002] [SC-003]
+- [X] T013 [US2] Implement `contextmap.cmd_impact(root, *, paths)` — explicit paths else Git-derived change set via `gitops.name_only_diff`/`is_git_repo`/ledger baseline; degenerate-case exit mapping; surface `gates`/`risk` metadata; **phase-independent (no `--phase`)** — in `src/specops/contextmap.py` [SC-002] [SC-003] [SC-007]
+- [X] T014 [US2] Register the `context impact` subcommand (`--path` repeatable, `--json`; no `--phase`) in `src/specops/cli.py` [SC-002] [SC-007]
 
 **Checkpoint**: US2 independently testable; its resolution engine is reused by US3.
 
@@ -98,17 +98,17 @@ Single-project layout: engine in `src/specops/`, tests in `tests/unit` + `tests/
 
 ### Tests for User Story 3
 
-- [ ] T015 [P] [US3] Add v2 (and reuse v1 `make_v1_ledger`) ledger fixtures + map fixtures for provenance/migration in `tests/conftest.py` and `tests/fixtures/context_maps/` [SC-006]
-- [ ] T016 [P] [US3] Unit tests for `map_digest` determinism (canonical, comment/whitespace-invariant) + the three provenance variants + `validate_invariants` tolerance in `tests/unit/test_contextmap_consume.py` and `tests/unit/test_ledger.py` [SC-006] [SC-008] [SC-001]
-- [ ] T017 [P] [US3] Integration tests for v1→v3 and v2→v3 migration (backfill `{map: none}`, read-compat, idempotent) in `tests/integration/test_ledger_migration.py` [SC-006]
-- [ ] T018 [P] [US3] Unit tests for provenance recording at task close and review-cycle record, plus the non-blocking digest-drift warning, in `tests/unit/test_status.py` and `tests/unit/test_review.py` [SC-006] [SC-008]
+- [X] T015 [P] [US3] Add v2 (and reuse v1 `make_v1_ledger`) ledger fixtures + map fixtures for provenance/migration in `tests/conftest.py` and `tests/fixtures/context_maps/` [SC-006]
+- [X] T016 [P] [US3] Unit tests for `map_digest` determinism (canonical, comment/whitespace-invariant) + the three provenance variants + `validate_invariants` tolerance in `tests/unit/test_contextmap_consume.py` and `tests/unit/test_ledger.py` [SC-006] [SC-008] [SC-001]
+- [X] T017 [P] [US3] Integration tests for v1→v3 and v2→v3 migration (backfill `{map: none}`, read-compat, idempotent) in `tests/integration/test_ledger_migration.py` [SC-006]
+- [X] T018 [P] [US3] Unit tests for provenance recording at task close and review-cycle record, plus the non-blocking digest-drift warning, in `tests/unit/test_status.py` and `tests/unit/test_review.py` [SC-006] [SC-008]
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Implement `contextmap.map_digest(root)` — canonical `sha256` over parsed contexts (stdlib `hashlib`), `None` on absent map, marker semantics on invalid — in `src/specops/contextmap.py` [SC-008] [SC-001]
-- [ ] T020 [US3] Bump `CURRENT_SCHEMA` 2→3, extend `migrate_to_current` (backfill `context_provenance: {map: none}` on task + review records), relax `validate_invariants` to accept present/absent provenance, in `src/specops/ledger.py` [SC-006]
-- [ ] T021 [US3] Record `context_provenance` on task close (resolve `context_ids` via the US2 engine + `map_digest`; `{map: none}`/`{map: invalid}` markers) through `ledger.save` in `src/specops/status.py` [SC-006]
-- [ ] T022 [US3] Record provenance on review-cycle record and emit the non-blocking digest-drift warning (plan-time vs current digest) in `src/specops/review.py` [SC-008] [SC-006]
+- [X] T019 [US3] Implement `contextmap.map_digest(root)` — canonical `sha256` over parsed contexts (stdlib `hashlib`), `None` on absent map, marker semantics on invalid — in `src/specops/contextmap.py` [SC-008] [SC-001]
+- [X] T020 [US3] Bump `CURRENT_SCHEMA` 2→3, extend `migrate_to_current` (backfill `context_provenance: {map: none}` on task + review records), relax `validate_invariants` to accept present/absent provenance, in `src/specops/ledger.py` [SC-006]
+- [X] T021 [US3] Record `context_provenance` on task close (resolve `context_ids` via the US2 engine + `map_digest`; `{map: none}`/`{map: invalid}` markers) through `ledger.save` in `src/specops/status.py` [SC-006]
+- [X] T022 [US3] Record provenance on review-cycle record and emit the non-blocking digest-drift warning (plan-time vs current digest) in `src/specops/review.py` [SC-008] [SC-006]
 
 **Checkpoint**: US3 independently testable; provenance auditable and migration-safe.
 
@@ -122,14 +122,14 @@ Single-project layout: engine in `src/specops/`, tests in `tests/unit` + `tests/
 
 ### Tests for User Story 4
 
-- [ ] T023 [P] [US4] Create stale fixtures — sample repos with a moved-file pattern, a removed-file pattern, an all-matching map, and a symlink entry — under `tests/fixtures/context_maps/` (+ conftest helper) [SC-005]
-- [ ] T024 [P] [US4] Unit tests for stale detection (tracked-files-only, symlink-by-path/not-followed, map-patterns-only not plan create-targets, no false positives, determinism/repeatability, map unchanged) in `tests/unit/test_contextmap_consume.py` [SC-005] [SC-001]
-- [ ] T025 [P] [US4] Integration tests for `context stale` (`stale_found`/`stale_ok`/no-map exit 0/not-a-repo exit 2, `--json`, read-only) in `tests/integration/test_context_consume_cli.py` [SC-005] [SC-007]
+- [X] T023 [P] [US4] Create stale fixtures — sample repos with a moved-file pattern, a removed-file pattern, an all-matching map, and a symlink entry — under `tests/fixtures/context_maps/` (+ conftest helper) [SC-005]
+- [X] T024 [P] [US4] Unit tests for stale detection (tracked-files-only, symlink-by-path/not-followed, map-patterns-only not plan create-targets, no false positives, determinism/repeatability, map unchanged) in `tests/unit/test_contextmap_consume.py` [SC-005] [SC-001]
+- [X] T025 [P] [US4] Integration tests for `context stale` (`stale_found`/`stale_ok`/no-map exit 0/not-a-repo exit 2, `--json`, read-only) in `tests/integration/test_context_consume_cli.py` [SC-005] [SC-007]
 
 ### Implementation for User Story 4
 
-- [ ] T026 [US4] Implement `contextmap.cmd_stale(root)` — list Git-tracked files (`repo.git.ls_files()`), report each `match` pattern with zero tracked matches as a stale reference with its owning context, symlink-by-path, codepoint-ordered, fail-closed on bad map — in `src/specops/contextmap.py` [SC-005] [SC-001]
-- [ ] T027 [US4] Register the `context stale` subcommand (`--json`) in `src/specops/cli.py` [SC-005] [SC-007]
+- [X] T026 [US4] Implement `contextmap.cmd_stale(root)` — list Git-tracked files (`repo.git.ls_files()`), report each `match` pattern with zero tracked matches as a stale reference with its owning context, symlink-by-path, codepoint-ordered, fail-closed on bad map — in `src/specops/contextmap.py` [SC-005] [SC-001]
+- [X] T027 [US4] Register the `context stale` subcommand (`--json`) in `src/specops/cli.py` [SC-005] [SC-007]
 
 **Checkpoint**: US4 independently testable.
 
@@ -139,13 +139,13 @@ Single-project layout: engine in `src/specops/`, tests in `tests/unit` + `tests/
 
 **Purpose**: Directive wiring, governance, docs, and quality gates. Directive/constitution tasks are product assets edited here — never executed against this repo.
 
-- [ ] T028 [P] Additive directive wiring: run `context plan-check` and declare context IDs in `src/specops/templates/directives/plan.md` (degrades to no-op when the map is absent) [SC-004]
-- [ ] T029 [P] Additive directive wiring: provenance recorded at task close in `src/specops/templates/directives/implement.md` [SC-006]
-- [ ] T030 [P] Additive directive wiring: scope review by `context impact` + surface the non-blocking digest-drift warning in `src/specops/templates/directives/review.md` [SC-008]
-- [ ] T031 Constitution MINOR amendment 1.4.0→1.5.0 (extend the Empirical Verification + Ledger & Phase Wiring directives; update the Sync Impact Report) in `.specify/memory/constitution.md` — **MUST be committed in the same change set as T028–T030** (Governance: a Principle IV directive change and the amendment travel together) and **requires human approval before merge** [SC-004] [SC-006] [SC-008]
-- [ ] T032 [P] Update `CHANGELOG.md` (new `context plan-check`/`impact`/`stale`; Ledger v3 provenance + migration note) [SC-006]
-- [ ] T033 [P] Update `README.md` and `README.pt-br.md` for the three commands + provenance, keeping the two behaviorally equivalent [SC-002] [SC-005]
-- [ ] T034 Run the repository quality gates — `ruff check .`, `mypy src/specops`, `pytest` (`--cov-fail-under=85`) — and resolve findings [SC-001] [SC-007]
+- [X] T028 [P] Additive directive wiring: run `context plan-check` and declare context IDs in `src/specops/templates/directives/plan.md` (degrades to no-op when the map is absent) [SC-004]
+- [X] T029 [P] Additive directive wiring: provenance recorded at task close in `src/specops/templates/directives/implement.md` [SC-006]
+- [X] T030 [P] Additive directive wiring: scope review by `context impact` + surface the non-blocking digest-drift warning in `src/specops/templates/directives/review.md` [SC-008]
+- [X] T031 Constitution MINOR amendment 1.4.0→1.5.0 (extend the Empirical Verification + Ledger & Phase Wiring directives; update the Sync Impact Report) in `.specify/memory/constitution.md` — **MUST be committed in the same change set as T028–T030** (Governance: a Principle IV directive change and the amendment travel together) and **requires human approval before merge** [SC-004] [SC-006] [SC-008]
+- [X] T032 [P] Update `CHANGELOG.md` (new `context plan-check`/`impact`/`stale`; Ledger v3 provenance + migration note) [SC-006]
+- [X] T033 [P] Update `README.md` and `README.pt-br.md` for the three commands + provenance, keeping the two behaviorally equivalent [SC-002] [SC-005]
+- [X] T034 Run the repository quality gates — `ruff check .`, `mypy src/specops`, `pytest` (`--cov-fail-under=85`) — and resolve findings [SC-001] [SC-007]
 
 ---
 
