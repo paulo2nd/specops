@@ -49,7 +49,7 @@ Roadmap status uses four values:
 | 006 | Ledger v2 Integrity | MERGED | 005 | Foundation |
 | 007 | Native Workflow Orchestration | MERGED | 005, 006 | Foundation |
 | 008 | Context Map Core | MERGED | 005, 006 | Context Intelligence |
-| 009 | Context-Aware Planning and Impact | PLANNED | 008 | Context Intelligence |
+| 009 | Context-Aware Planning and Impact | ACTIVE | 008 | Context Intelligence |
 | 010 | End-to-End Traceability | PLANNED | 006, 009 | Auditability |
 | 011 | Structured Corrective Handoff | PLANNED | 006, 010 | Auditability |
 | 012 | Gate Profiles and Structured Evidence | PLANNED | 006, 008, 010 | Auditability |
