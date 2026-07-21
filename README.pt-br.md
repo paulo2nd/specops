@@ -277,6 +277,35 @@ tag `[SC-xxx]` correspondente, e que toda declaração de caminho em `plan.md`
 carrega um sufixo de ação válido (`(create)`/`(modify)`/`(remove)`). Sai com 1
 em caso de violação.
 
+### `specops context init | validate | resolve | explain`
+
+O **mapa de contexto** (`.specify/specops/context-map.yaml`) é uma descrição
+versionada e agnóstica de stack dos contextos do repositório — quais caminhos
+cada área governa, os arquivos que um agente deve ler por fase do ciclo de vida,
+dependências entre contextos, gates e risco. É interpretado deterministicamente:
+o mesmo mapa e as mesmas entradas sempre produzem o mesmo resultado ordenado.
+
+- `specops context init` — cria um mapa inicial (idempotente; nunca sobrescreve).
+- `specops context validate` — valida o mapa; reporta todos os defeitos numa
+  única passagem (padrão inválido/inseguro, id duplicado, posse ambígua,
+  dependência pendente, ciclo de dependência, versão não suportada). Sai com 1
+  em caso de defeito.
+- `specops context resolve --path <p> | --id <id> [--phase <phase>]` — retorna o
+  contexto governante e seu conjunto de leitura ordenado e específico da fase,
+  com um conjunto expandido (sem ciclos, deduplicado) vindo das dependências.
+- `specops context explain --path <p> | --id <id> [--phase <phase>]` — o rastro
+  de razões ordenado: candidatos considerados, o vencedor e qual dimensão de
+  especificidade decidiu.
+
+Todos os comandos aceitam `--json` para uma superfície de máquina estável e
+versionada. Códigos de saída: `0` sucesso (incluindo os estados suportados "sem
+mapa" e "sem contexto correspondente"), `1` mapa bloqueante/inválido, `2` erro de
+uso. A correspondência de caminhos usa globs estilo gitignore; em sobreposição
+o padrão mais específico vence (prefixo literal mais longo → menos curingas →
+mais segmentos), e um empate genuíno é reportado como posse ambígua. O consumo
+por planejamento e revisão chega em uma feature posterior; esta entrega a base
+determinística.
+
 ### `specops --version`
 
 Imprime a versão e sai. Funciona em qualquer lugar.

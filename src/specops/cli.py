@@ -74,6 +74,13 @@ extension_app = typer.Typer(
 )
 app.add_typer(extension_app, name="extension")
 
+context_app = typer.Typer(
+    name="context",
+    help="Context map: init, validate, resolve, explain (Feature 008).",
+    no_args_is_help=True,
+)
+app.add_typer(context_app, name="context")
+
 # ---------------------------------------------------------------------------
 # Error boundary: single exit-code mapper (contracts/errors.md)
 # ---------------------------------------------------------------------------
@@ -433,6 +440,75 @@ def extension_remove(
     root = Path(".")
     from specops import extension
     typer.echo(f"extension remove: {extension.remove(root, purge=purge)}")
+
+
+# ---------------------------------------------------------------------------
+# context subcommands (Feature 008 — context map core)
+# ---------------------------------------------------------------------------
+
+
+def _emit_context(result: Any, json_out: bool) -> None:
+    """Render a contextmap.CommandResult and exit with its mapped code."""
+    from specops import contextmap, outcome
+    if json_out:
+        typer.echo(outcome.render(
+            result.command, result.cls,
+            status=result.status, output_version=contextmap.OUTPUT_VERSION,
+            **result.extra,
+        ))
+    else:
+        typer.echo(result.human, err=result.cls != outcome.PASS)
+    raise typer.Exit(result.exit_code)
+
+
+@context_app.command("init")
+@_handle_errors
+def context_init(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Create the starter context map when absent (idempotent, atomic)."""
+    from specops import contextmap
+    _emit_context(contextmap.cmd_init(Path(".")), json_out)
+
+
+@context_app.command("validate")
+@_handle_errors
+def context_validate(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Validate the context map; report all defects in one pass."""
+    from specops import contextmap
+    _emit_context(contextmap.cmd_validate(Path(".")), json_out)
+
+
+@context_app.command("resolve")
+@_handle_errors
+def context_resolve(
+    path: str = typer.Option(None, "--path", help="Repository path to resolve."),
+    ctx_id: str = typer.Option(None, "--id", help="Context id to resolve."),
+    phase: str = typer.Option(None, "--phase", help="Lifecycle phase for the read set."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Resolve a path or id to its ordered, phase-specific context package."""
+    from specops import contextmap
+    _emit_context(
+        contextmap.cmd_resolve(Path("."), path=path, ctx_id=ctx_id, phase=phase), json_out
+    )
+
+
+@context_app.command("explain")
+@_handle_errors
+def context_explain(
+    path: str = typer.Option(None, "--path", help="Repository path to explain."),
+    ctx_id: str = typer.Option(None, "--id", help="Context id to explain."),
+    phase: str = typer.Option(None, "--phase", help="Lifecycle phase for the read set."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Explain why a context was resolved (ordered reason trace)."""
+    from specops import contextmap
+    _emit_context(
+        contextmap.cmd_explain(Path("."), path=path, ctx_id=ctx_id, phase=phase), json_out
+    )
 
 
 if __name__ == "__main__":

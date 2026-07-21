@@ -34,8 +34,8 @@ Single project (existing): `src/specops/`, `tests/unit/`, `tests/integration/`, 
 
 **Purpose**: Test scaffolding and the shipped asset that later phases depend on.
 
-- [ ] T001 [P] Add a `context_map_repo` pytest fixture (a `fake_speckit_repo` with a `.specify/specops/` dir and a helper to write a map) in `tests/conftest.py` [SC-004]
-- [ ] T002 [P] Create the shipped starter map template at `src/specops/templates/specops/context-map.yaml` (schema_version 1, one example context with `match`/`reads.base`) [SC-009]
+- [X] T001 [P] Add a `context_map_repo` pytest fixture (a `fake_speckit_repo` with a `.specify/specops/` dir and a helper to write a map) in `tests/conftest.py` [SC-004]
+- [X] T002 [P] Create the shipped starter map template at `src/specops/templates/specops/context-map.yaml` (schema_version 1, one example context with `match`/`reads.base`) [SC-009]
 
 ---
 
@@ -45,11 +45,11 @@ Single project (existing): `src/specops/`, `tests/unit/`, `tests/integration/`, 
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T003 Promote `ledger._atomic_write` to a public `ledger.atomic_write` (keep a private alias for back-compat) in `src/specops/ledger.py` so `context init` reuses one interruption-safe write idiom [SC-009]
-- [ ] T004 Create engine module `src/specops/contextmap.py` with the map-path resolver (`.specify/specops/context-map.yaml`), schema constants (`CURRENT_SCHEMA=1`, `OLDEST_SUPPORTED=1`), `classify()` (current/too_new/unsupported), and a `migrate_to_current()` identity scaffold (with a forward-migration test asserting a v1 map is returned unchanged and an unsupported version is rejected) [SC-010]
-- [ ] T005 Implement the five-state `load()` classification (`no_map_present`, `malformed`, `schema_invalid`, `empty_valid`, `valid`) as a discriminated result in `src/specops/contextmap.py` [SC-005]
-- [ ] T006 Implement the stdlib gitignore-style glob matcher and the total specificity comparator (literal-prefix → wildcard-count → segment-count, codepoint tie-break) in `src/specops/contextmap.py` [SC-007]
-- [ ] T007 Register the `context` Typer sub-app in `src/specops/cli.py` and wire the outcome/status mapping (reuse `outcome.render`/`exit_for`: PASS→0, GATE_REJECTION→1, INFRA_ERROR→2, plus the `status` + `output_version` fields) [SC-013]
+- [X] T003 Promote `ledger._atomic_write` to a public `ledger.atomic_write` (keep a private alias for back-compat) in `src/specops/ledger.py` so `context init` reuses one interruption-safe write idiom [SC-009]
+- [X] T004 Create engine module `src/specops/contextmap.py` with the map-path resolver (`.specify/specops/context-map.yaml`), schema constants (`CURRENT_SCHEMA=1`, `OLDEST_SUPPORTED=1`), `classify()` (current/too_new/unsupported), and a `migrate_to_current()` identity scaffold (with a forward-migration test asserting a v1 map is returned unchanged and an unsupported version is rejected) [SC-010]
+- [X] T005 Implement the five-state `load()` classification (`no_map_present`, `malformed`, `schema_invalid`, `empty_valid`, `valid`) as a discriminated result in `src/specops/contextmap.py` [SC-005]
+- [X] T006 Implement the stdlib gitignore-style glob matcher and the total specificity comparator (literal-prefix → wildcard-count → segment-count, codepoint tie-break) in `src/specops/contextmap.py` [SC-007]
+- [X] T007 Register the `context` Typer sub-app in `src/specops/cli.py` and wire the outcome/status mapping (reuse `outcome.render`/`exit_for`: PASS→0, GATE_REJECTION→1, INFRA_ERROR→2, plus the `status` + `output_version` fields) [SC-013]
 
 **Checkpoint**: Engine load/classification/matching + CLI plumbing ready.
 
@@ -65,15 +65,15 @@ reports success or a precise, one-pass diagnostic per defect class.
 
 ### Tests for User Story 1 (write first)
 
-- [ ] T008 [P] [US1] Create validation fixtures — one per defect class (`invalid_path_pattern`, `unsafe_path_traversal`, `duplicate_context_id`, `ambiguous_ownership`, `dangling_dependency`, `dependency_cycle`, `unsupported_schema_version`) plus `valid` and `empty_valid` — in `tests/fixtures/context_maps/` [SC-002] [SC-005]
-- [ ] T009 [US1] Write unit tests for validation (each defect class → distinct attributed `code`, one-pass aggregation, fail-closed, version diagnostic, empty-valid) in `tests/unit/test_contextmap.py` [SC-002] [SC-003] [SC-010]
-- [ ] T010 [P] [US1] Write integration tests for `context init` (create → status `created`; re-run → `already_exists`, no mutation; no `.specify/` → exit 2) and `context validate` exit/status in `tests/integration/test_context_cli.py` [SC-009] [SC-013]
+- [X] T008 [P] [US1] Create validation fixtures — one per defect class (`invalid_path_pattern`, `unsafe_path_traversal`, `duplicate_context_id`, `ambiguous_ownership`, `dangling_dependency`, `dependency_cycle`, `unsupported_schema_version`) plus `valid` and `empty_valid` — in `tests/fixtures/context_maps/` [SC-002] [SC-005]
+- [X] T009 [US1] Write unit tests for validation (each defect class → distinct attributed `code`, one-pass aggregation, fail-closed, version diagnostic, empty-valid) in `tests/unit/test_contextmap.py` [SC-002] [SC-003] [SC-010]
+- [X] T010 [P] [US1] Write integration tests for `context init` (create → status `created`; re-run → `already_exists`, no mutation; no `.specify/` → exit 2) and `context validate` exit/status in `tests/integration/test_context_cli.py` [SC-009] [SC-013]
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement the validation engine (all seven defect classes, one-pass aggregation, distinct `code`s; gate refs structural-only; dangling-dep distinct from cycle) in `src/specops/contextmap.py` [SC-002] [SC-003]
-- [ ] T012 [US1] Implement `cmd_init` (atomic write via `ledger.atomic_write`, never overwrite, idempotent report) in `src/specops/contextmap.py` [SC-009]
-- [ ] T013 [US1] Implement `cmd_validate` and wire the `context init` / `context validate` CLI subcommands (human + `--json`) in `src/specops/cli.py` [SC-002] [SC-013]
+- [X] T011 [US1] Implement the validation engine (all seven defect classes, one-pass aggregation, distinct `code`s; gate refs structural-only; dangling-dep distinct from cycle) in `src/specops/contextmap.py` [SC-002] [SC-003]
+- [X] T012 [US1] Implement `cmd_init` (atomic write via `ledger.atomic_write`, never overwrite, idempotent report) in `src/specops/contextmap.py` [SC-009]
+- [X] T013 [US1] Implement `cmd_validate` and wire the `context init` / `context validate` CLI subcommands (human + `--json`) in `src/specops/cli.py` [SC-002] [SC-013]
 
 **Checkpoint**: US1 fully functional and independently testable (MVP).
 
@@ -90,15 +90,15 @@ validation; unknown path/ID → no-match (exit 0); both/neither selector → exi
 
 ### Tests for User Story 2 (write first)
 
-- [ ] T014 [P] [US2] Create resolution fixtures (overlapping-rules, equal-specificity tie, dependency-expansion, dependency-cycle, base-fallback, no-base) in `tests/fixtures/context_maps/` [SC-007] [SC-011] [SC-012]
-- [ ] T015 [US2] Write unit tests for resolution — determinism (repeat = identical), specificity winner per deciding dimension + tie→ambiguous, expansion (dedup/order/`via` attribution), cycle (bounded, IDs listed), phase `base` fallback + explicit empty — in `tests/unit/test_contextmap.py` [SC-001] [SC-007] [SC-008] [SC-011] [SC-012]
-- [ ] T016 [P] [US2] Write integration tests for `context resolve` (`--path`/`--id`/`--phase`/`--json`, selector contract both/neither→exit 2, unknown→no-match) and the stable JSON package shape in `tests/integration/test_context_cli.py` [SC-006] [SC-015]
+- [X] T014 [P] [US2] Create resolution fixtures (overlapping-rules, equal-specificity tie, dependency-expansion, dependency-cycle, base-fallback, no-base) in `tests/fixtures/context_maps/` [SC-007] [SC-011] [SC-012]
+- [X] T015 [US2] Write unit tests for resolution — determinism (repeat = identical), specificity winner per deciding dimension + tie→ambiguous, expansion (dedup/order/`via` attribution), cycle (bounded, IDs listed), phase `base` fallback + explicit empty — in `tests/unit/test_contextmap.py` [SC-001] [SC-007] [SC-008] [SC-011] [SC-012]
+- [X] T016 [P] [US2] Write integration tests for `context resolve` (`--path`/`--id`/`--phase`/`--json`, selector contract both/neither→exit 2, unknown→no-match) and the stable JSON package shape in `tests/integration/test_context_cli.py` [SC-006] [SC-015]
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement resolution — candidate matching, most-specific selection, phase read-set with `base`/empty fallback (`read_set_source`), and Resolved Context Package assembly — in `src/specops/contextmap.py` [SC-001] [SC-007] [SC-012]
-- [ ] T018 [US2] Implement cycle-safe transitive dependency expansion (depth-first in declaration order, dedup keeping first occurrence, `via` per-edge attribution) in `src/specops/contextmap.py` [SC-011] [SC-008]
-- [ ] T019 [US2] Implement `cmd_resolve` and wire the `context resolve` CLI with mutually exclusive `--path`/`--id` + optional `--phase` (both/neither → usage error exit 2) in `src/specops/cli.py` [SC-015] [SC-006]
+- [X] T017 [US2] Implement resolution — candidate matching, most-specific selection, phase read-set with `base`/empty fallback (`read_set_source`), and Resolved Context Package assembly — in `src/specops/contextmap.py` [SC-001] [SC-007] [SC-012]
+- [X] T018 [US2] Implement cycle-safe transitive dependency expansion (depth-first in declaration order, dedup keeping first occurrence, `via` per-edge attribution) in `src/specops/contextmap.py` [SC-011] [SC-008]
+- [X] T019 [US2] Implement `cmd_resolve` and wire the `context resolve` CLI with mutually exclusive `--path`/`--id` + optional `--phase` (both/neither → usage error exit 2) in `src/specops/cli.py` [SC-015] [SC-006]
 
 **Checkpoint**: US1 and US2 both independently functional.
 
@@ -115,13 +115,13 @@ order and names which dimension decided; identical across runs.
 
 ### Tests for User Story 3 (write first)
 
-- [ ] T020 [US3] Write unit tests for the reason trace (candidate ordering, `deciding_dimension` per case incl. `only_candidate`, determinism) in `tests/unit/test_contextmap.py` [SC-014] [SC-001]
-- [ ] T021 [P] [US3] Write integration tests for `context explain --json` (trace shape, no-match, invalid-map fail-closed) in `tests/integration/test_context_cli.py` [SC-006] [SC-014]
+- [X] T020 [US3] Write unit tests for the reason trace (candidate ordering, `deciding_dimension` per case incl. `only_candidate`, determinism) in `tests/unit/test_contextmap.py` [SC-014] [SC-001]
+- [X] T021 [P] [US3] Write integration tests for `context explain --json` (trace shape, no-match, invalid-map fail-closed) in `tests/integration/test_context_cli.py` [SC-006] [SC-014]
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Implement the reason-trace builder (candidates, `selected` + `deciding_dimension`, `read_set_source`, `dependency_edges`, `gates`) in `src/specops/contextmap.py` [SC-014]
-- [ ] T023 [US3] Implement `cmd_explain` and wire the `context explain` CLI (same `--path`/`--id`/`--phase` selectors as resolve) in `src/specops/cli.py` [SC-014] [SC-006]
+- [X] T022 [US3] Implement the reason-trace builder (candidates, `selected` + `deciding_dimension`, `read_set_source`, `dependency_edges`, `gates`) in `src/specops/contextmap.py` [SC-014]
+- [X] T023 [US3] Implement `cmd_explain` and wire the `context explain` CLI (same `--path`/`--id`/`--phase` selectors as resolve) in `src/specops/cli.py` [SC-014] [SC-006]
 
 **Checkpoint**: US1–US3 independently functional.
 
@@ -137,12 +137,12 @@ crash, no false success, no writes — and the five map states are each distingu
 
 ### Tests for User Story 4 (write first)
 
-- [ ] T024 [US4] Write unit tests: `load()` on an absent map → `no_map_present`, no filesystem writes on any path (incl. error paths) in `tests/unit/test_contextmap.py` [SC-004]
-- [ ] T025 [P] [US4] Write integration tests: all three read-only commands on an absent map → `no_map_present` exit 0, no file created; five-state distinguishability (absent/malformed/schema-invalid/empty/valid) in `tests/integration/test_context_cli.py` [SC-004] [SC-005]
+- [X] T024 [US4] Write unit tests: `load()` on an absent map → `no_map_present`, no filesystem writes on any path (incl. error paths) in `tests/unit/test_contextmap.py` [SC-004]
+- [X] T025 [P] [US4] Write integration tests: all three read-only commands on an absent map → `no_map_present` exit 0, no file created; five-state distinguishability (absent/malformed/schema-invalid/empty/valid) in `tests/integration/test_context_cli.py` [SC-004] [SC-005]
 
 ### Implementation for User Story 4
 
-- [ ] T026 [US4] Wire the absent-map (`no_map_present`) outcome and the read-only-on-every-path guarantee across `context validate`/`resolve`/`explain` in `src/specops/cli.py` and finalize the absent-map branch in `src/specops/contextmap.py` [SC-004]
+- [X] T026 [US4] Wire the absent-map (`no_map_present`) outcome and the read-only-on-every-path guarantee across `context validate`/`resolve`/`explain` in `src/specops/cli.py` and finalize the absent-map branch in `src/specops/contextmap.py` [SC-004]
 
 **Checkpoint**: All four user stories independently functional.
 
@@ -152,11 +152,11 @@ crash, no false success, no writes — and the five map states are each distingu
 
 **Purpose**: Contract stability, docs, and repository quality gates.
 
-- [ ] T027 [P] Add the exit-code/status matrix test and a stable-JSON-shape snapshot test across all commands in `tests/integration/test_context_cli.py` [SC-006] [SC-013]
-- [ ] T028 [P] Document the `context` command group in `README.md` and `README.pt-br.md` (behaviorally equivalent, EN/PT) [SC-013]
-- [ ] T029 [P] Add a `CHANGELOG.md` entry for the versioned context map and the four `context` commands (note the new `.specify/specops/context-map.yaml` asset) [SC-010]
-- [ ] T030 Execute the `quickstart.md` SC→test validation matrix and confirm every SC-001..SC-015 has passing coverage [SC-001] [SC-002] [SC-003] [SC-004] [SC-005] [SC-006] [SC-007] [SC-008] [SC-009] [SC-010] [SC-011] [SC-012] [SC-013] [SC-014] [SC-015]
-- [ ] T031 Run `ruff check .`, `mypy src/specops`, and `pytest -q`; resolve to repository thresholds [SC-001] [SC-013]
+- [X] T027 [P] Add the exit-code/status matrix test and a stable-JSON-shape snapshot test across all commands in `tests/integration/test_context_cli.py` [SC-006] [SC-013]
+- [X] T028 [P] Document the `context` command group in `README.md` and `README.pt-br.md` (behaviorally equivalent, EN/PT) [SC-013]
+- [X] T029 [P] Add a `CHANGELOG.md` entry for the versioned context map and the four `context` commands (note the new `.specify/specops/context-map.yaml` asset) [SC-010]
+- [X] T030 Execute the `quickstart.md` SC→test validation matrix and confirm every SC-001..SC-015 has passing coverage [SC-001] [SC-002] [SC-003] [SC-004] [SC-005] [SC-006] [SC-007] [SC-008] [SC-009] [SC-010] [SC-011] [SC-012] [SC-013] [SC-014] [SC-015]
+- [X] T031 Run `ruff check .`, `mypy src/specops`, and `pytest -q`; resolve to repository thresholds [SC-001] [SC-013]
 
 ---
 
