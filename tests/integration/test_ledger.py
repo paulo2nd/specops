@@ -319,7 +319,7 @@ class TestRebaselineAndGateConsistency:
         r = _run(repo, "status", "rebaseline")
         assert r.returncode == 0, r.stderr
         data = yaml.safe_load((feature_dir / "status.yaml").read_text())
-        assert data["schema_version"] == 2  # migrated as part of rebaseline
+        assert data["schema_version"] == ledger.CURRENT_SCHEMA  # migrated as part of rebaseline
         assert data["branch"] != "old-name"
 
     def test_rebaseline_refuses_feature_mismatch(self, fake_speckit_repo: Path) -> None:

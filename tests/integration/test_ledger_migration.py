@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from specops import ledger
+
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["specops", *args], cwd=repo, capture_output=True, text=True)
@@ -59,11 +61,14 @@ class TestExplicitMigration:
         assert "migrated" in r.stdout
 
         data = yaml.safe_load((feature_dir / "status.yaml").read_text())
-        assert data["schema_version"] == 2
+        assert data["schema_version"] == ledger.CURRENT_SCHEMA
         assert data["revision"] == 1
         # Losslessness (SC-001): task evidence + review cycle preserved
         assert data["tasks"][0]["evidence"] == "CLI_LOG:done"
         assert data["review_cycles"][0]["result"] == "APPROVED"
+        # Feature 009: pre-v3 records gain the explicit no-map provenance marker
+        assert data["tasks"][0]["context_provenance"] == {"map": "none"}
+        assert data["review_cycles"][0]["context_provenance"] == {"map": "none"}
         # Timezone-aware (SC-007)
         assert data["created_at"].endswith("+00:00")
         # Backup recorded and present (FR-008a)
@@ -98,7 +103,7 @@ class TestAutoMigration:
         assert r.returncode == 0, r.stderr
 
         data = yaml.safe_load((feature_dir / "status.yaml").read_text())
-        assert data["schema_version"] == 2
+        assert data["schema_version"] == ledger.CURRENT_SCHEMA
         assert data["current_phase"] == "PLAN"
         assert data["active_artifact"] == "plan.md"
         assert data["recovery"]["migrated_from_backup"] is not None
@@ -106,12 +111,12 @@ class TestAutoMigration:
 
 class TestWorkflowBlockBackfill:
     """Feature 007: the additive `workflow` block is back-filled on a state change,
-    for both a migrating v1 ledger and a current-schema v2 ledger that predates it."""
+    for both a migrating v1 ledger and a current-schema ledger that predates it."""
 
-    def _write_v2_no_workflow(self, feature_dir: Path, repo: Path) -> None:
+    def _write_current_no_workflow(self, feature_dir: Path, repo: Path) -> None:
         ts = "2026-07-05T00:00:00+00:00"
         data = {
-            "schema_version": 2, "revision": 1,
+            "schema_version": ledger.CURRENT_SCHEMA, "revision": 1,
             "feature": feature_dir.name,
             "branch": _git(repo, "rev-parse", "--abbrev-ref", "HEAD"),
             "baseline": _git(repo, "rev-parse", "HEAD"),
@@ -124,17 +129,20 @@ class TestWorkflowBlockBackfill:
         }
         (feature_dir / "status.yaml").write_text(yaml.dump(data))
 
-    def test_v2_gains_workflow_block_on_state_change(self, fake_speckit_repo: Path) -> None:
+    def test_current_gains_workflow_block_on_state_change(
+        self, fake_speckit_repo: Path
+    ) -> None:
         repo = fake_speckit_repo
         feature_dir = repo / "specs" / "001-demo"
         (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
-        self._write_v2_no_workflow(feature_dir, repo)
+        self._write_current_no_workflow(feature_dir, repo)
 
         r = _run(repo, "status", "transition-phase", "PLAN")
         assert r.returncode == 0, r.stderr
 
         data = yaml.safe_load((feature_dir / "status.yaml").read_text())
-        assert data["schema_version"] == 2  # no re-migration; additive back-fill only
+        # no re-migration (already current); additive back-fill only
+        assert data["schema_version"] == ledger.CURRENT_SCHEMA
         assert data["workflow"] == {"skipped_steps": []}
         assert data["current_phase"] == "PLAN"
 

@@ -13,6 +13,21 @@ Run `specops review`.
 - Exit code ≠ 0 → **REJECTED**. Report the command's output. Stop here. Do not read any code.
 - Exit code 0 → all gates passed (reconcile, lint, test, working tree). If the report shows any gate as `SKIPPED`, remember it for the revision report (Step 4). Continue.
 
+### Step 2a — Context Drift & Impact (Feature 009)
+
+If a context map exists (`.specify/specops/context-map.yaml`):
+
+- The `specops review` output appends a non-blocking `[warning] context-map drift: …`
+  line (after the gate report) when the map digest changed since planning. This never
+  rejects the review on its own — note it in the revision report (Step 4) so the
+  change is visible.
+- Run `specops context impact` to see the contexts affected by the effective diff
+  (directly-owned plus their reverse dependents). Use it to scope the diff review in
+  Step 3: every expanded context is attributable to an `ownership`/`dependency` edge —
+  do not widen the read beyond what the map explains.
+
+When no map is present, skip this step (supported no-op).
+
 ### Step 3 — Surgical Diff Review
 
 Read only the files listed by the working-tree gate in the `specops review` output — that list is the effective diff against the ledger baseline. Do not review anything outside it.
@@ -20,6 +35,7 @@ Read only the files listed by the working-tree gate in the `specops review` outp
 Review against:
 - The spec Success Criteria and acceptance conditions.
 - The plan's declared architecture and path declarations.
+- The contexts reported by `specops context impact` (Step 2a) when a map is present.
 - The Constitution's Core Principles (correctness, not style).
 
 ### Step 4 — Write Revision Report

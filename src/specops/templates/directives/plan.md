@@ -24,6 +24,18 @@
   SpecOps task-generation directive. At the plan stage, only ensure every spec
   Success Criterion is coverable by the planned work.
 
+### Context Topology (Feature 009)
+
+- When a context map exists (`.specify/specops/context-map.yaml`), declare the
+  context(s) this work touches with a single line in `plan.md`:
+  `**SpecOps-Contexts**: <id>, <id>, …`
+- Before handing off the plan, run: `specops context plan-check`
+  - Exit `0` — declared topology is valid (an `unowned` declared path is reported
+    but is non-blocking). The command also displays the minimal phase read set.
+  - Exit `1` — a required declaration is missing, a declared context id is unknown,
+    or a declared path is owned by an undeclared context. Fix it before handing off.
+- When no map is present, this step is a supported no-op (exit `0`) — skip it.
+
 ### Consistency Gate
 
 - Before handing off the plan, run: `specops consistency`

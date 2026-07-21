@@ -13,6 +13,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Context-aware planning and impact (Feature 009).** Consumes the context map
+  inside the planning, implementation, and review phases, adding three read-only
+  commands under `specops context`:
+  - `plan-check` validates a plan's declared context topology against the map:
+    a plan declares the contexts it touches with a `**SpecOps-Contexts**: …`
+    line, and the command blocks (exit `1`) on a missing declaration, an unknown
+    declared context id, or a declared path owned by an undeclared context; an
+    unowned declared path is reported non-blocking. Existence-agnostic (never
+    stats the filesystem) and displays the minimal phase-specific read set.
+  - `impact [--path …]` reports the contexts affected by a change — the directly
+    owning context plus its transitive **reverse** dependents — each attributed
+    to exactly one `ownership`/`dependency`/`policy` edge (the `policy` edge is
+    defined and enforced but unpopulated against the current schema). With no
+    `--path` the change set is derived from Git (baseline → HEAD); a clean tree
+    yields an empty result (exit `0`), while not-a-repo / no-baseline is a usage
+    error (exit `2`).
+  - `stale` reports context-map patterns that match zero **Git-tracked** files
+    (moved/removed), with the owning context, without editing the map;
+    `context validate` stays syntactic-only.
+- **Ledger v3 — context provenance.** Every task and review-cycle record now
+  carries a `context_provenance` object: `{map: present, digest, context_ids,
+  output_version}` when a map is present, or an explicit `{map: none}` /
+  `{map: invalid}` marker otherwise. A new deterministic `v2 → v3` migration
+  back-fills the `{map: none}` marker onto pre-existing records; prior ledgers
+  remain readable. `specops review` prepends a **non-blocking** context-map drift
+  warning when the recorded digest differs from the current one. All new surfaces
+  are deterministic, read-only, and reuse the `0`/`1`/`2` exit-code contract.
+- **Native Spec Kit extension** (`specops extension …`). SpecOps can now register
+  through Spec Kit's own extension mechanism — a SpecOps-owned
+  `.specify/extensions.yml` hook manifest plus per-integration command
+  registration — instead of injecting marker blocks into host-owned prompt files:
+  - `install` registers the lifecycle hooks + `/specops-review` command across
+    every installed integration, touching **zero** host-owned files. Idempotent
+    (semantic equivalence), offline-capable, and fail-closed when the CLI is
+    missing/incompatible or the directory is not a Spec Kit repository.
+  - `migrate` converts a legacy marker-injected installation to native, stripping
+    the SpecOps marker blocks with an automatic pre-edit backup that restores all
+    touched host files to exact bytes on failure, and preserving `specops.json`
+    and every feature ledger.
+  - `disable` / `enable` unregister from / re-register to the host surface while
+    retaining configuration and ledgers; `remove [--purge]` removes the
+    installation (leaving no host-owned file modified) and, with `--purge`, also
+    deletes configuration and ledgers; `update` re-applies the current templates;
+    `status` reports the detected state (`absent | native | legacy |
+    native+legacy`) and CLI compatibility.
+- `specops.json` gains `min_cli_version` (default `0.3.0`) recording the CLI
+  floor the native extension requires.
+
+### Changed
+
+- The execution ledger schema advances **v2 → v3**. New ledgers are written at
+  v3; v1/v2 ledgers migrate automatically on the next state change (backed up
+  first) and gain the no-map provenance marker. No manual action is required.
+
 - **Context map core.** A new versioned, stack-neutral repository context map at
   `.specify/specops/context-map.yaml`, with four commands under `specops context`:
   - `init` scaffolds a schema-valid starter map (idempotent, atomic; never
@@ -89,6 +143,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Read-only commands (`status show`, `reconcile`) never mutate and stay
     available on legacy, too-new, unsupported, or malformed ledgers, reporting a
     best-effort diagnostic.
+- Constitution amended to v1.4.0 (native extension as primary integration path,
+  marker-delimited injection retained as legacy) and to v1.5.0 (Principle IV
+  directives extended for context-aware planning/impact — the Feature 009
+  behavior above).
 
 ### Fixed
 
@@ -98,42 +156,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scope, per-user-story commit semantics, and manual marker-block removal.
 - The project link now points to the canonical GitHub Spec Kit repository.
 
-## [0.3.0] - 2026-07-19
-
-### Added
-
-- **Native Spec Kit extension** (`specops extension …`). SpecOps can now register
-  through Spec Kit's own extension mechanism — a SpecOps-owned
-  `.specify/extensions.yml` hook manifest plus per-integration command
-  registration — instead of injecting marker blocks into host-owned prompt files:
-  - `install` registers the lifecycle hooks + `/specops-review` command across
-    every installed integration, touching **zero** host-owned files. Idempotent
-    (semantic equivalence), offline-capable, and fail-closed when the CLI is
-    missing/incompatible or the directory is not a Spec Kit repository.
-  - `migrate` converts a legacy marker-injected installation to native, stripping
-    the SpecOps marker blocks with an automatic pre-edit backup that restores all
-    touched host files to exact bytes on failure, and preserving `specops.json`
-    and every feature ledger.
-  - `disable` / `enable` unregister from / re-register to the host surface while
-    retaining configuration and ledgers; `remove [--purge]` removes the
-    installation (leaving no host-owned file modified) and, with `--purge`, also
-    deletes configuration and ledgers; `update` re-applies the current templates;
-    `status` reports the detected state (`absent | native | legacy |
-    native+legacy`) and CLI compatibility.
-- `specops.json` gains `min_cli_version` (default `0.3.0`) recording the CLI
-  floor the native extension requires.
-
-### Changed
-
-- Constitution amended to v1.4.0: Principles I and IV now name the native
-  extension mechanism as the primary integration path, with marker-delimited
-  injection retained as the supported legacy path.
-
 ### Notes
 
 - The legacy `specops init` marker-injection path remains fully supported and
   unchanged. Migration is opt-in via `specops extension migrate`.
-- Requires the `specops` CLI `>= 0.3.0`.
+- These unreleased changes require the `specops` CLI `>= 0.3.0` (the native
+  extension's `min_cli_version` floor). All work since `v0.2.1` (Features 005–009)
+  is accumulating here and will be cut as a single dated release + tag at the end
+  of the roadmap.
 
 ## [0.2.1] - 2026-07-14
 

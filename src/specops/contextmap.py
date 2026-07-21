@@ -14,14 +14,17 @@ timestamps; every ordering is Unicode-codepoint based (locale-independent).
 """
 from __future__ import annotations
 
+import hashlib
+import json as _json
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from specops import ledger, outcome
+from specops import ledger, outcome, speckit
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -60,6 +63,16 @@ S_CREATED = "created"
 S_ALREADY_EXISTS = "already_exists"
 S_USAGE_ERROR = "usage_error"
 
+# Feature 009 — consumption statuses (plan-check / impact / stale).
+S_PLAN_CHECK_OK = "plan_check_ok"
+S_MISSING_DECLARATION = "missing_declaration"
+S_UNKNOWN_DECLARED_CONTEXT = "unknown_declared_context"
+S_UNDECLARED_OWNER = "undeclared_owner"
+S_IMPACT_OK = "impact_ok"
+S_UNBOUNDED_EXPANSION = "unbounded_expansion"
+S_STALE_OK = "stale_ok"
+S_STALE_FOUND = "stale_found"
+
 # outcome class per status → drives the exit code (0/1/2).
 _CLASS_FOR_STATUS = {
     S_NO_MAP: outcome.PASS,
@@ -69,10 +82,18 @@ _CLASS_FOR_STATUS = {
     S_NO_MATCH: outcome.PASS,
     S_CREATED: outcome.PASS,
     S_ALREADY_EXISTS: outcome.PASS,
+    S_PLAN_CHECK_OK: outcome.PASS,
+    S_IMPACT_OK: outcome.PASS,
+    S_STALE_OK: outcome.PASS,
     S_MALFORMED: outcome.GATE_REJECTION,
     S_SCHEMA_INVALID: outcome.GATE_REJECTION,
     S_UNSUPPORTED_VERSION: outcome.GATE_REJECTION,
     S_AMBIGUOUS: outcome.GATE_REJECTION,
+    S_MISSING_DECLARATION: outcome.GATE_REJECTION,
+    S_UNKNOWN_DECLARED_CONTEXT: outcome.GATE_REJECTION,
+    S_UNDECLARED_OWNER: outcome.GATE_REJECTION,
+    S_UNBOUNDED_EXPANSION: outcome.GATE_REJECTION,
+    S_STALE_FOUND: outcome.GATE_REJECTION,
     S_USAGE_ERROR: outcome.INFRA_ERROR,
 }
 
@@ -188,8 +209,14 @@ def _classify_pattern(pat: Any) -> str | None:
     return None
 
 
+@lru_cache(maxsize=4096)
 def _translate_glob(pattern: str) -> re.Pattern[str]:
-    """Translate a gitignore-style glob into an anchored regex over a posix path."""
+    """Translate a gitignore-style glob into an anchored regex over a posix path.
+
+    Cached: the same pattern is compiled once and reused across every path it is
+    tested against (so e.g. `context stale` is O(patterns + patterns*files) match
+    work, not O(patterns*files) regex compilations).
+    """
     i, n = 0, len(pattern)
     out: list[str] = []
     while i < n:
@@ -726,3 +753,281 @@ def cmd_explain(root: Path, *, path: str | None, ctx_id: str | None,
 
 def _input_of(path: str | None, ctx_id: str | None) -> dict[str, str]:
     return {"path": path} if path is not None else {"id": ctx_id or ""}
+
+
+# ---------------------------------------------------------------------------
+# Feature 009 — Context-Aware Planning and Impact (consumption layer)
+# ---------------------------------------------------------------------------
+
+
+def _digest_contexts(contexts: list[Context]) -> str:
+    """Deterministic sha256 over the canonicalized parsed map (R1).
+
+    Invariant to comment/whitespace/key-order in the source file: only the map's
+    *meaning* (ids, patterns, read sets, edges, gates, risk) changes the digest.
+    """
+    canon = [
+        {
+            "id": c.id,
+            "match": sorted(c.match),
+            "reads": {k: sorted(v) for k, v in sorted(c.reads.items())},
+            "dependencies": sorted(c.dependencies),
+            "gates": sorted(c.gates),
+            "risk": {k: c.risk[k] for k in sorted(c.risk)},
+        }
+        for c in sorted(contexts, key=lambda c: c.id)
+    ]
+    blob = _json.dumps(canon, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def map_digest(root: Path) -> str | None:
+    """Return the deterministic digest of a resolvable map, else None (R1).
+
+    None means the map is absent OR unresolvable (malformed/invalid/unsupported);
+    callers that must distinguish those use :func:`validate` or
+    :func:`provenance_for`.
+    """
+    vr = validate(root)
+    if vr.status not in _RESOLVABLE:
+        return None
+    return _digest_contexts(vr.contexts or [])
+
+
+def _reverse_adjacency(contexts: list[Context]) -> dict[str, list[str]]:
+    """Map each context id → the ids that declare a dependency *on* it (R2)."""
+    dependents: dict[str, list[str]] = {}
+    for ctx in contexts:
+        for dep in ctx.dependencies:
+            dependents.setdefault(dep, []).append(ctx.id)
+    return dependents
+
+
+def _is_catch_all(pattern: str) -> bool:
+    """True only for a whole-tree wildcard (every segment is ``*`` or ``**``) (R3).
+
+    A pattern with any literal segment — e.g. ``**/config.yaml`` or ``**/*.py`` —
+    is a specific selector, not a catch-all, and must not trigger the
+    unbounded-expansion guard.
+    """
+    segs = [s for s in pattern.split("/") if s]
+    return bool(segs) and all(s in ("*", "**") for s in segs)
+
+
+def _owner_of(contexts: list[Context], path: str) -> tuple[Context | None, str | None]:
+    """Return (owner, pattern) for *path*'s most-specific **unambiguous** owner.
+
+    Returns (None, None) when *path* matches no context, or when the top two
+    candidates tie on specificity (a residual ambiguity `validate`'s witness
+    probe may miss) — impact/provenance never silently guess an owner, matching
+    the fail-safe stance of `_resolve`/`cmd_plan_check`.
+    """
+    cands = _candidates_for_path(contexts, path)
+    if not cands:
+        return None, None
+    if len(cands) >= 2 and cands[0][2] == cands[1][2]:
+        return None, None
+    return cands[0][0], cands[0][1]
+
+
+def _owning_context_ids(contexts: list[Context], changed_paths: list[str]) -> list[str]:
+    """Return the sorted ids of the contexts that directly **own** *changed_paths*.
+
+    This is what a task/review record's provenance captures — the contexts the
+    diff actually touches — NOT the reverse-dependent expansion `cmd_impact`
+    surfaces for review scoping (which would over-report contexts the change did
+    not modify).
+    """
+    ids: set[str] = set()
+    for path in set(changed_paths):
+        owner, _pat = _owner_of(contexts, path)
+        if owner is not None:
+            ids.add(owner.id)
+    return sorted(ids)
+
+
+def _affected(contexts: list[Context], changed_paths: list[str]) -> dict[str, Any]:
+    """Reverse-edge impact core, cycle-safe (R2/R3).
+
+    Returns {"affected": {id: {"via", "reason"}}, "unowned": [...],
+    "unbounded": path|None}. Every affected context is attributed to exactly one
+    closed-set edge (`ownership`/`dependency`); `policy` is enforced-but-empty
+    against the current schema.
+    """
+    affected: dict[str, dict[str, str]] = {}
+    unowned: list[str] = []
+    for path in sorted(set(changed_paths)):
+        owner, pat = _owner_of(contexts, path)
+        if owner is None:
+            unowned.append(path)
+            continue
+        if pat is not None and _is_catch_all(pat):
+            return {"affected": {}, "unowned": unowned, "unbounded": path}
+        affected.setdefault(owner.id, {"via": "ownership", "reason": f"owns {path}"})
+
+    dependents = _reverse_adjacency(contexts)
+    seen: set[str] = set()
+    for start in list(affected):
+        stack = [start]
+        while stack:
+            cid = stack.pop()
+            if cid in seen:
+                continue
+            seen.add(cid)
+            for dependent in sorted(dependents.get(cid, [])):
+                if dependent not in affected:
+                    affected[dependent] = {"via": "dependency",
+                                           "reason": f"dependency: {dependent} -> {cid}"}
+                stack.append(dependent)
+    return {"affected": affected, "unowned": unowned, "unbounded": None}
+
+
+def cmd_impact(root: Path, *, paths: list[str]) -> CommandResult:
+    """Report contexts affected by *paths*, expanded over reverse edges (FR-006)."""
+    vr = validate(root)
+    if vr.status == S_NO_MAP:
+        return CommandResult("impact", S_NO_MAP, "context impact: no map present",
+                             {"impact": {"changed_paths": sorted(set(paths)),
+                                         "unowned_paths": [], "affected": [], "bounded": True}})
+    if vr.status not in _RESOLVABLE:
+        return _invalid_map_result("impact", vr)
+    contexts = vr.contexts or []
+    by_id = {c.id: c for c in contexts}
+    result = _affected(contexts, paths)
+    if result["unbounded"] is not None:
+        pth = result["unbounded"]
+        return CommandResult("impact", S_UNBOUNDED_EXPANSION,
+                             f"impact: path {pth!r} resolves to a catch-all owner; "
+                             "expansion would be unbounded", {"unbounded_path": pth})
+    affected = [
+        {"context_id": cid, "via": info["via"], "reason": info["reason"],
+         "gates": list(by_id[cid].gates), "risk": dict(by_id[cid].risk)}
+        for cid, info in sorted(result["affected"].items())
+    ]
+    impact = {
+        "changed_paths": sorted(set(paths)),
+        "unowned_paths": sorted(result["unowned"]),
+        "affected": affected,
+        "bounded": True,
+    }
+    return CommandResult("impact", S_IMPACT_OK,
+                         f"impact: {len(affected)} affected context(s)", {"impact": impact})
+
+
+def provenance_for(root: Path, changed_paths: list[str]) -> dict[str, Any]:
+    """Compute the ledger context-provenance record for *changed_paths* (R6).
+
+    `{map: none}` (absent), `{map: invalid}` (present but unresolvable), or
+    `{map: present, digest, context_ids, output_version}` (resolvable). Never
+    raises — recording provenance must not fail the underlying ledger op.
+    """
+    vr = validate(root)
+    if vr.status == S_NO_MAP:
+        return {"map": "none"}
+    if vr.status not in _RESOLVABLE:
+        return {"map": "invalid"}
+    contexts = vr.contexts or []
+    return {
+        "map": "present",
+        "digest": _digest_contexts(contexts),
+        "context_ids": _owning_context_ids(contexts, changed_paths),
+        "output_version": OUTPUT_VERSION,
+    }
+
+
+def cmd_stale(root: Path, tracked_files: list[str]) -> CommandResult:
+    """Report context-map patterns matching zero *tracked_files* (FR-011).
+
+    *tracked_files* is the Git-tracked path list (index/worktree); symlinks are
+    listed by their own path (not followed) so results are deterministic.
+    """
+    vr = validate(root)
+    if vr.status == S_NO_MAP:
+        return CommandResult("stale", S_NO_MAP, "context stale: no map present", {"stale": []})
+    if vr.status not in _RESOLVABLE:
+        return _invalid_map_result("stale", vr)
+    contexts = vr.contexts or []
+    tracked = set(tracked_files)
+    stale: list[dict[str, str]] = []
+    for ctx in contexts:
+        for pat in ctx.match:
+            if not any(_matches(pat, f) for f in tracked):
+                stale.append({"context_id": ctx.id, "pattern": pat})
+    stale.sort(key=lambda s: (s["context_id"], s["pattern"]))
+    if stale:
+        human = f"stale: {len(stale)} stale reference(s)\n" + "\n".join(
+            f"  - {s['context_id']}: {s['pattern']}" for s in stale
+        )
+        return CommandResult("stale", S_STALE_FOUND, human, {"stale": stale})
+    return CommandResult("stale", S_STALE_OK, "stale: no stale references", {"stale": []})
+
+
+def cmd_plan_check(root: Path, *, plan_text: str, phase: str | None = None) -> CommandResult:
+    """Validate a plan's declared context topology against the map (FR-002/003/004).
+
+    Existence-agnostic: never inspects the filesystem for declared paths.
+    """
+    phase = phase or "plan"
+    if phase not in PHASES:
+        return CommandResult("plan-check", S_USAGE_ERROR,
+                             f"context plan-check: unknown phase {phase!r} "
+                             f"(valid: {', '.join(PHASES)})")
+    vr = validate(root)
+    if vr.status == S_NO_MAP:
+        return CommandResult("plan-check", S_NO_MAP,
+                             "context plan-check: no map present (no declaration required)")
+    if vr.status not in _RESOLVABLE:
+        return _invalid_map_result("plan-check", vr)
+    contexts = vr.contexts or []
+    by_id = {c.id: c for c in contexts}
+
+    declared_ids = speckit.parse_plan_context_ids(plan_text)
+    if not declared_ids:
+        return CommandResult("plan-check", S_MISSING_DECLARATION,
+                             "context plan-check: a map is present but the plan declares no "
+                             "context IDs (add a '**SpecOps-Contexts**: ...' line)")
+    unknown = [cid for cid in declared_ids if cid not in by_id]
+    if unknown:
+        return CommandResult("plan-check", S_UNKNOWN_DECLARED_CONTEXT,
+                             f"context plan-check: unknown declared context(s): "
+                             f"{', '.join(unknown)}", {"unknown_context_ids": unknown})
+
+    declared_set = set(declared_ids)
+    declared_paths = [
+        pa[0] for line in plan_text.splitlines()
+        if (pa := speckit.parse_plan_path_action(line)) is not None
+    ]
+    unowned: list[str] = []
+    undeclared: list[dict[str, str]] = []
+    for path in declared_paths:
+        cands = _candidates_for_path(contexts, path)
+        if not cands:
+            unowned.append(path)
+            continue
+        if len(cands) >= 2 and cands[0][2] == cands[1][2]:
+            return CommandResult("plan-check", S_AMBIGUOUS,
+                                 f"context plan-check: ambiguous ownership for declared "
+                                 f"path {path!r}")
+        owner = cands[0][0].id
+        if owner not in declared_set:
+            undeclared.append({"path": path, "context_id": owner})
+    if undeclared:
+        msg = "; ".join(f"{u['path']} owned by undeclared context {u['context_id']}"
+                        for u in undeclared)
+        return CommandResult("plan-check", S_UNDECLARED_OWNER,
+                             f"context plan-check: {msg}",
+                             {"undeclared_owners": undeclared, "unowned_paths": sorted(unowned)})
+
+    read_sets = {}
+    for cid in declared_ids:
+        rs, src = _read_set_for(by_id[cid], phase)
+        read_sets[cid] = {"read_set": rs, "read_set_source": src}
+    extra = {
+        "declared_context_ids": list(declared_ids),
+        "unowned_paths": sorted(unowned),
+        "phase": phase,
+        "read_sets": read_sets,
+    }
+    return CommandResult("plan-check", S_PLAN_CHECK_OK,
+                         f"plan-check: ok ({len(declared_ids)} declared context(s), phase {phase})",
+                         extra)

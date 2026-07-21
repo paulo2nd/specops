@@ -123,6 +123,33 @@ def parse_plan_path_action(line: str) -> tuple[str, str] | None:
     return (raw_path, action)
 
 
+_CONTEXT_DECL_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?\*{0,2}SpecOps-Contexts\*{0,2}\s*:\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_CTX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+
+
+def parse_plan_context_ids(plan_text: str) -> list[str]:
+    """Return the context IDs declared in a plan's ``**SpecOps-Contexts**:`` line.
+
+    Recognizes an optional list-bullet and optional bold markers, e.g.
+    ``**SpecOps-Contexts**: api, api-auth, config``. IDs are comma-separated,
+    trimmed, validated against the context-id grammar, and de-duplicated
+    preserving first-seen order. Returns [] when no declaration line is present
+    (Feature 009, FR-002/FR-003).
+    """
+    ids: list[str] = []
+    seen: set[str] = set()
+    for m in _CONTEXT_DECL_RE.finditer(plan_text):
+        for raw in m.group(1).split(","):
+            cid = raw.strip().strip("`")
+            if cid and _CTX_ID_RE.match(cid) and cid not in seen:
+                seen.add(cid)
+                ids.append(cid)
+    return ids
+
+
 # ---------------------------------------------------------------------------
 # Manifest-driven prompt-target resolution (R2)
 # ---------------------------------------------------------------------------

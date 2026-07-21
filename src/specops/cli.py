@@ -511,5 +511,74 @@ def context_explain(
     )
 
 
+@context_app.command("plan-check")
+@_handle_errors
+def context_plan_check(
+    plan: str = typer.Option(None, "--plan", help="Path to plan.md (default: active feature)."),
+    phase: str = typer.Option(None, "--phase", help="Lifecycle phase for the read set."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Validate the plan's declared context topology against the map (Feature 009)."""
+    from specops import contextmap, speckit
+    root = Path(".")
+    if plan is not None:
+        plan_path = Path(plan)
+    else:
+        feature_dir = speckit.resolve_feature_dir(root)
+        plan_path = (feature_dir / "plan.md") if feature_dir is not None else Path("plan.md")
+    plan_text = plan_path.read_text(encoding="utf-8") if plan_path.is_file() else ""
+    _emit_context(
+        contextmap.cmd_plan_check(root, plan_text=plan_text, phase=phase), json_out
+    )
+
+
+@context_app.command("impact")
+@_handle_errors
+def context_impact(
+    path: list[str] = typer.Option(None, "--path", help="Changed path (repeatable); else Git."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Report contexts affected by a change, over reverse dependency edges (Feature 009)."""
+    from specops import contextmap, gitops, status
+    root = Path(".")
+    if path:
+        paths: list[str] = list(path)
+    else:
+        repo = gitops.find_repo(root)
+        if repo is None:
+            _emit_context(contextmap.CommandResult(
+                "impact", contextmap.S_USAGE_ERROR,
+                "context impact: not a Git repository and no --path given"), json_out)
+            return
+        try:
+            baseline = status.read_baseline(root)
+        except Exception:
+            baseline = ""
+        if not baseline or not gitops.commit_exists(repo, baseline):
+            _emit_context(contextmap.CommandResult(
+                "impact", contextmap.S_USAGE_ERROR,
+                "context impact: no resolvable ledger baseline; pass --path explicitly"), json_out)
+            return
+        paths = gitops.name_only_diff(repo, baseline, "HEAD")
+    _emit_context(contextmap.cmd_impact(root, paths=paths), json_out)
+
+
+@context_app.command("stale")
+@_handle_errors
+def context_stale(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Report context-map patterns that match zero Git-tracked files (Feature 009)."""
+    from specops import contextmap, gitops
+    root = Path(".")
+    repo = gitops.find_repo(root)
+    if repo is None:
+        _emit_context(contextmap.CommandResult(
+            "stale", contextmap.S_USAGE_ERROR, "context stale: not a Git repository"), json_out)
+        return
+    tracked = [f for f in repo.git.ls_files().splitlines() if f]
+    _emit_context(contextmap.cmd_stale(root, tracked), json_out)
+
+
 if __name__ == "__main__":
     app()

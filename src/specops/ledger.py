@@ -29,8 +29,13 @@ from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 LEDGER_FILENAME = "status.yaml"
 
-CURRENT_SCHEMA = 2
+CURRENT_SCHEMA = 3
 OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
+
+# Feature 009 — the no-map context-provenance marker backfilled onto records
+# that predate the map-provenance schema (v3). See contextmap.provenance_for.
+NO_MAP_PROVENANCE = {"map": "none"}
+_PROVENANCE_MAP_STATES = ("none", "invalid", "present")
 DEFAULT_WORKFLOW_LANE = "full"
 
 PHASES = ["SPECIFY", "PLAN", "TASKS", "IMPLEMENT", "REVIEW", "DONE"]
@@ -128,8 +133,8 @@ def diagnostic_line(cls: str) -> str | None:
         return "unsupported ledger schema."
     if cls == MIGRATABLE:
         return (
-            "legacy pre-v2 ledger; it will migrate on the next state change "
-            "or via 'specops status migrate'."
+            f"older ledger schema (below v{CURRENT_SCHEMA}); it will migrate on the "
+            "next state change or via 'specops status migrate'."
         )
     return None
 
@@ -193,7 +198,24 @@ def migrate_to_current(data: dict) -> dict:
     rec["last_consistent_at"] = out["updated_at"]
     rec.setdefault("migrated_from_backup", None)
     ensure_workflow_block(out)
+    backfill_context_provenance(out)
     return out
+
+
+def backfill_context_provenance(data: dict) -> None:
+    """Back-fill the explicit no-map provenance marker onto records lacking it.
+
+    Feature 009 (v3): every task and review-cycle record carries a
+    ``context_provenance`` object. Records written before v3 gain the explicit
+    ``{"map": "none"}`` marker (never an omitted field, per FR-009/FR-018) so a
+    pre-feature ledger stays readable and unambiguous. Idempotent.
+    """
+    for task in data.get("tasks") or []:
+        if isinstance(task, dict):
+            task.setdefault("context_provenance", dict(NO_MAP_PROVENANCE))
+    for cycle in data.get("review_cycles") or []:
+        if isinstance(cycle, dict):
+            cycle.setdefault("context_provenance", dict(NO_MAP_PROVENANCE))
 
 
 def ensure_workflow_block(data: dict) -> None:
@@ -261,10 +283,36 @@ def validate_invariants(data: dict) -> list[str]:
             prev = rnd
         if cycle.get("result") is None:
             open_cycles += 1
+        violations.extend(_provenance_violations(cycle, f"review cycle {cycle.get('round')}"))
     if open_cycles > 1:
         violations.append("more than one open review cycle")
 
+    for task in data.get("tasks") or []:
+        if task.get("orphaned"):
+            continue
+        violations.extend(_provenance_violations(task, f"task '{task.get('id')}'"))
+
     return violations
+
+
+def _provenance_violations(record: dict, label: str) -> list[str]:
+    """Validate a record's optional ``context_provenance`` shape (Feature 009).
+
+    Absent is allowed (a pre-v3 record). When present it MUST be a mapping whose
+    ``map`` is one of ``none``/``invalid``/``present``; a ``present`` record MUST
+    carry a ``digest`` and a ``context_ids`` list.
+    """
+    prov = record.get("context_provenance")
+    if prov is None:
+        return []
+    if not isinstance(prov, dict) or prov.get("map") not in _PROVENANCE_MAP_STATES:
+        return [f"{label} has malformed context_provenance"]
+    if prov["map"] == "present" and (
+        not isinstance(prov.get("digest"), str)
+        or not isinstance(prov.get("context_ids"), list)
+    ):
+        return [f"{label} present-provenance missing digest/context_ids"]
+    return []
 
 
 # ---------------------------------------------------------------------------
