@@ -366,8 +366,13 @@ def _dump(data: dict) -> str:
     return yaml.dump(data, default_flow_style=False, allow_unicode=True)
 
 
-def _atomic_write(path: Path, content: str) -> None:
-    """Write *content* to *path* atomically: tmp -> fsync -> os.replace -> dir fsync."""
+def atomic_write(path: Path, content: str) -> None:
+    """Write *content* to *path* atomically: tmp -> fsync -> os.replace -> dir fsync.
+
+    Shared interruption-safe write idiom reused by the context map (Feature 008)
+    so the ledger and the map use one durable-write path. An interrupted write
+    leaves the previous file (if any) intact and never promotes a partial `.tmp`.
+    """
     tmp_path = path.parent / (path.name + ".tmp")
     tmp_path.write_text(content, encoding="utf-8")
     with open(tmp_path, "rb") as fh:
@@ -383,6 +388,10 @@ def _atomic_write(path: Path, content: str) -> None:
             os.close(dir_fd)
     except OSError:
         pass  # directory fsync is best-effort (not supported on all platforms)
+
+
+# Back-compat private alias (retained so existing call sites need no change).
+_atomic_write = atomic_write
 
 
 class _LedgerLock:

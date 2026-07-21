@@ -131,6 +131,37 @@ def read_ledger(feature_dir: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Context Map (Feature 008) fixtures
+# ---------------------------------------------------------------------------
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures" / "context_maps"
+
+
+@pytest.fixture()
+def context_map_repo(tmp_git_repo: Path) -> Path:
+    """A git repo with a `.specify/` (+ specops/) layout but no map yet."""
+    (tmp_git_repo / ".specify" / "templates").mkdir(parents=True)
+    (tmp_git_repo / ".specify" / "specops").mkdir(parents=True)
+    return tmp_git_repo
+
+
+def write_map(root: Path, data: object) -> Path:
+    """Write a context map (dict → YAML, or a raw string) to its canonical path."""
+    from specops import contextmap
+
+    p = contextmap.map_path(root)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    text = data if isinstance(data, str) else yaml.dump(data)
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def load_map_fixture(name: str) -> str:
+    """Return the text of a named fixture under tests/fixtures/context_maps/."""
+    return (FIXTURES_DIR / name).read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # Ledger v2 (Feature 006) synthetic ledger factories
 # ---------------------------------------------------------------------------
 

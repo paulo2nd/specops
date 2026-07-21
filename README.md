@@ -259,6 +259,33 @@ Read-only gate. Verifies every `SC-\d+` in the spec has ≥ 1 task with a matchi
 `[SC-xxx]` tag, and every `plan.md` path declaration carries a valid action
 suffix (`(create)`/`(modify)`/`(remove)`). Exit 1 on violation.
 
+### `specops context init | validate | resolve | explain`
+
+The **context map** (`.specify/specops/context-map.yaml`) is a versioned,
+stack-neutral description of your repository's contexts — which paths each area
+governs, the files an agent should read per lifecycle phase, inter-context
+dependencies, gates, and risk. It is read deterministically; the same map and
+inputs always produce the same ordered result.
+
+- `specops context init` — scaffold a starter map (idempotent; never overwrites).
+- `specops context validate` — check the map; reports every defect in one pass
+  (invalid/unsafe pattern, duplicate id, ambiguous ownership, dangling
+  dependency, dependency cycle, unsupported version). Exit 1 on any defect.
+- `specops context resolve --path <p> | --id <id> [--phase <phase>]` — return the
+  governing context and its ordered, phase-specific read set, with a cycle-safe,
+  deduplicated expanded read set drawn from dependencies.
+- `specops context explain --path <p> | --id <id> [--phase <phase>]` — the ordered
+  reason trace: candidates considered, the winner, and which specificity
+  dimension decided it.
+
+All commands accept `--json` for a stable, versioned machine surface. Exit codes:
+`0` success (including the supported "no map present" and "no matching context"
+states), `1` a blocking/unsound map, `2` a usage error. Path matching is
+gitignore-style globbing; on overlap the most specific pattern wins (longer
+literal prefix → fewer wildcards → more segments), and a genuine tie is reported
+as ambiguous ownership. Consumption by planning and review arrives in a later
+feature; this ships the deterministic foundation.
+
 ### `specops --version`
 
 Prints the version and exits. Works anywhere.

@@ -1,0 +1,34 @@
+# SpecOps context map (schema v1).
+#
+# Describes repository "contexts" — named regions — so SpecOps can resolve, for a
+# path or context id, the ordered files an agent should read at each lifecycle
+# phase, plus declared dependencies, gates, and risk. Interpreted deterministically
+# by `specops context resolve` / `explain`. Edit this file to describe your repo,
+# then run `specops context validate`.
+#
+# Matching: `match` entries are gitignore-style glob patterns relative to the repo
+# root. On overlap the most specific pattern wins (longer literal prefix, then
+# fewer wildcards, then more path segments). A genuine equal-specificity tie is a
+# validation error (ambiguous ownership).
+schema_version: 1
+contexts:
+  - id: example
+    # Glob patterns (relative to repo root) this context governs.
+    match:
+      - "src/**"
+    # Files to read, keyed by phase; `base` is the phase-agnostic fallback.
+    reads:
+      base:
+        - "src/**"
+      plan:
+        - "docs/**"
+        - "src/**"
+    # Descriptive topology metadata (NOT a write-permission boundary).
+    ownership: "unassigned"
+    # Other context ids this context depends on (must exist in this map).
+    dependencies: []
+    # Gate identifiers (well-formed strings; not resolved until Feature 012).
+    gates: []
+    # Free-form risk metadata (string-keyed).
+    risk:
+      tier: "normal"

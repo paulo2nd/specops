@@ -1,0 +1,31 @@
+schema_version: 1
+contexts:
+  - id: api
+    match:
+      - "src/api/**"
+    reads:
+      base:
+        - "src/api/**"
+      plan:
+        - "docs/api.md"
+        - "src/api/**"
+    dependencies:
+      - config
+    gates:
+      - lint-strict
+    risk:
+      tier: high
+  - id: api-auth
+    match:
+      - "src/api/auth/**"
+    reads:
+      base:
+        - "src/api/auth/**"
+    dependencies:
+      - config
+  - id: config
+    match:
+      - "src/config/**"
+    reads:
+      base:
+        - "src/config/**"

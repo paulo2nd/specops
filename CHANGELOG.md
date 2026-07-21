@@ -13,6 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Context map core.** A new versioned, stack-neutral repository context map at
+  `.specify/specops/context-map.yaml`, with four commands under `specops context`:
+  - `init` scaffolds a schema-valid starter map (idempotent, atomic; never
+    overwrites an existing map).
+  - `validate` checks the map and reports every defect in a single pass — invalid
+    path pattern, unsafe path traversal, duplicate context id, ambiguous
+    ownership, dangling dependency, dependency cycle, and unsupported schema
+    version — each with a distinct diagnostic.
+  - `resolve --path|--id [--phase]` returns the governing context and its ordered,
+    phase-specific read set (with a `base` fallback) plus a cycle-safe,
+    deduplicated, per-edge-attributed expanded read set drawn from dependencies.
+  - `explain --path|--id [--phase]` emits an ordered reason trace naming the
+    candidates and the deciding specificity dimension.
+
+  Path matching is gitignore-style globbing implemented in the standard library
+  (no new dependency); on overlap the most specific pattern wins (literal prefix
+  → wildcard count → segment count), and a genuine tie is reported as ambiguous
+  ownership. Every command offers a stable, versioned `--json` surface and uses
+  the exit-code contract `0`/`1`/`2` (supported "no map present" and "no matching
+  context" states stay `0`). Resolution is fully deterministic. Consumption by
+  planning and review is deferred to a later feature.
 - **Native workflow orchestration.** SpecOps ships an installable, SpecOps-owned
   `specops` workflow that composes Spec Kit's own native workflow engine to run
   the augmented lifecycle — SpecOps builds no engine, resume, gate, or loop:
