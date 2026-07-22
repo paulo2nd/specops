@@ -387,7 +387,11 @@ def build_graph(root: Path) -> dict[str, Any]:
     tasks_text = _read(fd / "tasks.md")
 
     coverage = _coverage(spec_text, tasks_text)
-    tasks_by_id = {t.get("id"): t for t in data.get("tasks") or [] if isinstance(t, dict)}
+    tasks_by_id: dict[str, dict] = {
+        t["id"]: t
+        for t in data.get("tasks") or []
+        if isinstance(t, dict) and isinstance(t.get("id"), str)
+    }
 
     sc_nodes = []
     for sc in sorted(coverage):
@@ -449,7 +453,11 @@ def validate_trace(root: Path, *, ctx: _Ctx | None = None) -> list[dict[str, str
     tasks_text = _read(fd / "tasks.md")
 
     coverage = _coverage(spec_text, tasks_text)
-    tasks_by_id = {t.get("id"): t for t in data.get("tasks") or [] if isinstance(t, dict)}
+    tasks_by_id: dict[str, dict] = {
+        t["id"]: t
+        for t in data.get("tasks") or []
+        if isinstance(t, dict) and isinstance(t.get("id"), str)
+    }
     story_of = _story_of_task(tasks_text)
     defects: list[dict[str, str]] = []
 
