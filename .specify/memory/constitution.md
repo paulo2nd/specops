@@ -1,6 +1,30 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.5.0 → 1.6.0
+Rationale (1.6.0, 2026-07-21): Amended during /speckit-implement of
+specs/010-end-to-end-traceability (End-to-End Traceability). Feature 010 makes
+review block **unexplained** effective-diff drift and lets implementation
+acknowledge genuine discoveries, both governed by the Principle IV injected
+directives. Two existing directives are broadened (no principle removed or
+redefined): Token-Optimized Review now also runs a deterministic `drift` gate
+inside `specops review` (the review agent rejects when any effective-diff path is
+neither planned nor `discovered-and-acknowledged`; SpecOps/Speckit-managed
+artifacts under `specs/**`, `.specify/**`, `specops.json` are excluded as
+methodology state); Stop-and-Ask / Ledger & Phase Wiring now notes that a genuine
+discovered path is cleared once with `specops trace acknowledge <path> --task …
+--reason …`. Map-*digest* drift stays a non-blocking warning (010 enforces *path*
+drift only). The delivered CLI (`trace classify`/`validate`/`report`/`acknowledge`)
+and the Ledger v3→v4 acknowledgement migration are covered by the feature's own
+tests, never run against this repository (No Self-Application). MINOR bump:
+additive guidance on non-removed principles; the additive/never-destructive intent
+is preserved. Templates updated in the same change set:
+src/specops/templates/directives/implement.md (discovered-path acknowledgement),
+src/specops/templates/review.md (drift gate in the deterministic gates). The
+generic plan/spec/tasks templates under .specify/templates/ remain compatible and
+need no change.
+
+Previous report (1.5.0):
 Version change: 1.4.0 → 1.5.0
 Rationale (1.5.0, 2026-07-21): Amended during /speckit-implement of
 specs/009-context-aware-planning (Context-Aware Planning and Impact). Feature 009
@@ -248,7 +272,13 @@ sourced identically from the SpecOps templates. The directives are:
   reconcile` and aborts immediately on failure, rejects changes outside
   `plan.md` via `git status --porcelain` without reading any code, and emits
   non-conformities to `revisions/revision-X.md` in the short format
-  `[File]:[Line] - [rule violated and short action]`.
+  `[File]:[Line] - [rule violated and short action]`. `specops review` also
+  runs a deterministic **drift gate** (Feature 010): it rejects when any
+  effective-diff path is `unexplained` — neither declared in `plan.md` nor
+  recorded via `specops trace acknowledge` — while planned and
+  `discovered-and-acknowledged` paths pass, and SpecOps/Speckit-managed
+  artifacts (`specs/**`, `.specify/**`, `specops.json`) are excluded as
+  methodology state. Map-*digest* drift remains a non-blocking warning.
 - **Stop-and-Ask Gates (§8.2)**: agents halt and ask the human on persisted
   schema changes (migrations), secrets, public contract breaks, or technical
   ambiguities.
@@ -359,4 +389,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.5.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-21
+**Version**: 1.6.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-21

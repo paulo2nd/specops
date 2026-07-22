@@ -11,7 +11,13 @@ Check `skills_dir` (from `specops.json`). If the directory contains skill files,
 Run `specops review`.
 
 - Exit code ≠ 0 → **REJECTED**. Report the command's output. Stop here. Do not read any code.
-- Exit code 0 → all gates passed (reconcile, lint, test, working tree). If the report shows any gate as `SKIPPED`, remember it for the revision report (Step 4). Continue.
+- Exit code 0 → all gates passed (reconcile, lint, test, working tree, drift). If the report shows any gate as `SKIPPED`, remember it for the revision report (Step 4). Continue.
+
+The **drift gate** (Feature 010) blocks the review when the effective diff contains any
+`unexplained` path — one that is neither declared in `plan.md` nor recorded as a
+`discovered-and-acknowledged` path (`specops trace acknowledge`). Paths that are planned
+or acknowledged pass. SpecOps/Speckit-managed artifacts (`specs/**`, `.specify/**`,
+`specops.json`) are excluded — they are methodology state, not product drift.
 
 ### Step 2a — Context Drift & Impact (Feature 009)
 

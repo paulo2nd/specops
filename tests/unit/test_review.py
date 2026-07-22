@@ -59,7 +59,14 @@ def _branch(root: Path) -> str:
 
 
 def _all_pass_setup(root: Path, lint: str = "", test: str = "") -> None:
-    """Config + ledger (baseline = pre-setup HEAD) committed → clean tree, effective diff."""
+    """Config + ledger (baseline = pre-setup HEAD) committed → clean tree, effective diff.
+
+    Scaffolding is committed *before* the baseline (as a real feature branches
+    from a point that already contains it), so the post-baseline effective diff is
+    only SpecOps-managed state (specops.json, status.yaml), which the Feature 010
+    drift gate excludes — leaving zero unexplained paths.
+    """
+    _commit_all(root, "scaffolding")
     baseline = _head(root)
     _write_config(root, lint=lint, test=test)
     _write_ledger(root, baseline, branch=_branch(root))
@@ -86,7 +93,9 @@ def test_lint_and_test_pass_with_real_commands(fake_speckit_repo: Path) -> None:
     ok_cmd = f'"{sys.executable}" -c "print(1)"'
     _all_pass_setup(fake_speckit_repo, lint=ok_cmd, test=ok_cmd)
     out = review.run_gates(fake_speckit_repo)
-    assert "SKIPPED" not in out
+    # lint and test ran (not skipped); the drift gate legitimately SKIPs here —
+    # this minimal fixture declares no plan paths/contexts/acknowledgements.
+    assert "SKIPPED (lint" not in out and "SKIPPED (test" not in out
     for name in review.GATE_ORDER:
         assert f"[gate] {name}" in out
 
@@ -122,6 +131,7 @@ def test_reconcile_violation_stops_before_lint(
 
 def test_reconcile_warning_echoed_and_gate_passes(fake_speckit_repo: Path) -> None:
     root = fake_speckit_repo
+    _commit_all(root, "scaffolding")  # scaffolding precedes the baseline (see _all_pass_setup)
     baseline = _head(root)
     _write_config(root)
     _write_ledger(root, baseline, branch="branch-that-does-not-match")
@@ -390,3 +400,59 @@ def test_drift_warning_not_masked_by_review_cycle_digest(fake_speckit_repo: Path
     (feature_dir / "status.yaml").write_text(yaml.dump(data))
     warning = review.digest_drift_warning(fake_speckit_repo)
     assert warning is not None and "planning0dig" in warning
+
+
+# ---------------------------------------------------------------------------
+# Feature 010 (T007) — the drift gate blocks only unexplained paths
+# ---------------------------------------------------------------------------
+
+
+def test_drift_gate_is_terminal_in_gate_order() -> None:
+    assert review.GATE_ORDER[-1] == "drift"
+
+
+def test_drift_gate_fails_on_unexplained_path(trace_repo) -> None:
+    root = trace_repo(plan_paths=["src/planned.py"],
+                      changed={"src/planned.py": "x\n", "src/surprise.py": "y\n"})
+    result = review._drift_gate(root)
+    assert result.status == "FAIL"
+    assert any("src/surprise.py" in d for d in result.detail)
+    assert not any("src/planned.py" in d for d in result.detail)
+
+
+def test_drift_gate_passes_when_all_planned(trace_repo) -> None:
+    root = trace_repo(plan_paths=["src/planned.py"], changed={"src/planned.py": "x\n"})
+    assert review._drift_gate(root).status == "PASS"
+
+
+def test_drift_gate_passes_on_acknowledged_path(trace_repo) -> None:
+    from tests.conftest import make_task
+    root = trace_repo(
+        plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")],
+        acks=[{"path": "src/disc.py", "task": "T001", "reason": "r",
+               "map_digest": None, "at": "t"}],
+        changed={"src/disc.py": "x\n"},
+    )
+    assert review._drift_gate(root).status == "PASS"
+
+
+def test_review_evaluate_blocks_on_drift(trace_repo) -> None:
+    # A declared plan path gives the gate a classification basis; the undeclared
+    # src/surprise.py is then genuinely unexplained.
+    root = trace_repo(plan_paths=["src/planned.py"],
+                      changed={"src/planned.py": "x\n", "src/surprise.py": "y\n"})
+    (root / "specops.json").write_text('{"test_command": "", "lint_command": ""}')
+    import subprocess
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "cfg"], cwd=root, check=True, capture_output=True)
+    report = review.evaluate(root)
+    drift = next(r for r in report.results if r.name == "drift")
+    assert drift.status == "FAIL"
+    assert not report.passed
+
+
+def test_drift_gate_skipped_without_basis(trace_repo) -> None:
+    # No plan path declarations, no map, no acknowledgements → the gate degrades
+    # to SKIPPED instead of retroactively rejecting (Feature 010, Finding 6).
+    root = trace_repo(plan_paths=[], changed={"src/surprise.py": "y\n"})
+    assert review._drift_gate(root).status == "SKIPPED"

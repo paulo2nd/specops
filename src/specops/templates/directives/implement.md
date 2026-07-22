@@ -38,6 +38,17 @@ The ledger is the authority; the agent is the executor.
   `{map: none}`/`{map: invalid}` marker). This is mechanical — no agent action is
   required and nothing to record by hand.
 
+### Discovered Paths (Feature 010)
+
+- If implementing a task legitimately requires changing a file that was **not**
+  declared in `plan.md` (a genuine discovery), acknowledge it once so review does
+  not block it as unexplained drift:
+  `specops trace acknowledge <path> --task <task-id> --reason "<concise reason>"`
+- Acknowledge only real, in-scope discoveries — not scope creep. A conflicting or
+  unknown-task acknowledgement fails closed and records nothing.
+- This is a delivered capability; where SpecOps is not initialized the step is a
+  no-op and implementation proceeds normally.
+
 ### Skills
 
 Before starting the first task, check `skills_dir` (from `specops.json`). Load any skill files present. If the directory is empty or missing, proceed — skills are optional, not a gate.

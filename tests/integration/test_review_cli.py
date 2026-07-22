@@ -49,6 +49,12 @@ def _write_ledger(root: Path, baseline: str, phase: str = "IMPLEMENT") -> Path:
 
 
 def _all_pass_setup(root: Path, phase: str = "IMPLEMENT") -> Path:
+    # Commit the Speckit scaffolding *before* the baseline (as a real feature
+    # branches from a point that already contains it), so the post-baseline
+    # effective diff is only SpecOps-managed state, which the Feature 010 drift
+    # gate excludes — leaving zero unexplained paths.
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "scaffolding")
     baseline = _git(root, "rev-parse", "HEAD")
     _write_config(root)
     ledger = _write_ledger(root, baseline, phase=phase)

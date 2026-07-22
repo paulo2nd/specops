@@ -81,6 +81,13 @@ context_app = typer.Typer(
 )
 app.add_typer(context_app, name="context")
 
+trace_app = typer.Typer(
+    name="trace",
+    help="End-to-end traceability: classify, validate, report, acknowledge (Feature 010).",
+    no_args_is_help=True,
+)
+app.add_typer(trace_app, name="trace")
+
 # ---------------------------------------------------------------------------
 # Error boundary: single exit-code mapper (contracts/errors.md)
 # ---------------------------------------------------------------------------
@@ -578,6 +585,71 @@ def context_stale(
         return
     tracked = [f for f in repo.git.ls_files().splitlines() if f]
     _emit_context(contextmap.cmd_stale(root, tracked), json_out)
+
+
+# ---------------------------------------------------------------------------
+# trace subcommands (Feature 010 — end-to-end traceability)
+# ---------------------------------------------------------------------------
+
+
+def _emit_trace(result: Any, json_out: bool) -> None:
+    """Render a trace.TraceResult and exit with its mapped code."""
+    from specops import outcome, trace
+    if json_out:
+        typer.echo(outcome.render(
+            result.command, result.cls,
+            status=result.status, output_version=trace.OUTPUT_VERSION,
+            **result.extra,
+        ))
+    else:
+        typer.echo(result.human, err=result.cls != outcome.PASS)
+    raise typer.Exit(result.exit_code)
+
+
+@trace_app.command("classify")
+@_handle_errors
+def trace_classify(
+    path: list[str] = typer.Option(None, "--path", help="Changed path (repeatable); else Git."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Classify every effective-diff path (planned / discovered / unexplained)."""
+    from specops import trace
+    _emit_trace(
+        trace.cmd_classify(Path("."), explicit_paths=list(path) if path else None), json_out
+    )
+
+
+@trace_app.command("validate")
+@_handle_errors
+def trace_validate(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Fail closed on any trace defect or unexplained effective-diff path."""
+    from specops import trace
+    _emit_trace(trace.cmd_validate(Path(".")), json_out)
+
+
+@trace_app.command("report")
+@_handle_errors
+def trace_report(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Render the full trace: success criteria → tasks → commits → evidence → findings."""
+    from specops import trace
+    _emit_trace(trace.cmd_report(Path(".")), json_out)
+
+
+@trace_app.command("acknowledge")
+@_handle_errors
+def trace_acknowledge(
+    path: str = typer.Argument(..., help="Repo-relative path to acknowledge."),
+    task: str = typer.Option(..., "--task", help="Task id the discovery belongs to."),
+    reason: str = typer.Option(..., "--reason", help="Concise reason for the discovery."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Record a one-time path-level acknowledgement of a discovered path."""
+    from specops import trace
+    _emit_trace(trace.cmd_acknowledge(Path("."), path, task=task, reason=reason), json_out)
 
 
 if __name__ == "__main__":

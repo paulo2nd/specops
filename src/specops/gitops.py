@@ -77,3 +77,37 @@ def name_only_diff(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> lis
         return [f for f in diffs.splitlines() if f]
     except GitCommandError:
         return []
+
+
+def effective_diff_status(
+    repo: git.Repo, start_sha: str, end_sha: str = "HEAD"
+) -> list[tuple[str, str]]:
+    """Return `(status, path)` pairs between *start_sha* and *end_sha* (Feature 010, R1).
+
+    Single source of the SpecOps effective-diff invocation. Disables rename
+    detection (``--no-renames``) so a rename is **decomposed** into a removed old
+    path plus an added new path, each reported independently (no similarity
+    threshold). Mode-only changes are still listed; symlinks appear by their own
+    path entry and are not followed (``git diff`` never dereferences them).
+    ``status`` is Git's single-letter code (``A``/``M``/``D``/…).
+    """
+    try:
+        raw = repo.git.diff("--name-status", "--no-renames", start_sha, end_sha)
+    except GitCommandError:
+        return []
+    out: list[tuple[str, str]] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        out.append((parts[0][:1], parts[-1]))
+    return out
+
+
+def effective_diff(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> list[str]:
+    """Return the deterministic, codepoint-sorted effective-diff paths (name-only).
+
+    A thin projection of :func:`effective_diff_status` so the diff invocation lives
+    in exactly one place.
+    """
+    return sorted({p for _status, p in effective_diff_status(repo, start_sha, end_sha)})

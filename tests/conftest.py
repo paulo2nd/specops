@@ -162,6 +162,106 @@ def load_map_fixture(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# End-to-End Traceability (Feature 010) builders
+# ---------------------------------------------------------------------------
+
+
+def _git(root: Path, *args: str) -> str:
+    out = subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True
+    )
+    return out.stdout.strip()
+
+
+def make_trace_ledger(
+    *, feature: str, branch: str, baseline: str,
+    tasks: list | None = None, review_cycles: list | None = None,
+    acknowledgements: list | None = None, phase: str = "REVIEW",
+) -> dict:
+    """Build a v4 ledger dict for trace fixtures (deterministic, no I/O)."""
+    return {
+        "schema_version": 4,
+        "revision": 1,
+        "feature": feature,
+        "branch": branch,
+        "baseline": baseline,
+        "workflow_lane": "full",
+        "created_at": "2026-07-21T00:00:00+00:00",
+        "updated_at": "2026-07-21T00:00:00+00:00",
+        "current_phase": phase,
+        "recovery": {
+            "active_task": None, "last_commit": None, "blockers": [],
+            "last_consistent_revision": 1, "last_consistent_at": "2026-07-21T00:00:00+00:00",
+            "migrated_from_backup": None,
+        },
+        "tasks": tasks or [],
+        "review_cycles": review_cycles or [],
+        "acknowledgements": acknowledgements or [],
+        "workflow": {"skipped_steps": []},
+    }
+
+
+def make_task(tid: str, *, status: str = "DONE", evidence: str | None = "CLI_LOG:ok",
+              commits: list | None = None, context_ids: list | None = None,
+              digest: str | None = None) -> dict:
+    """Build a v4 task record."""
+    prov = (
+        {"map": "present", "digest": digest or "d", "context_ids": context_ids, "output_version": 1}
+        if context_ids is not None else {"map": "none"}
+    )
+    return {
+        "id": tid, "status": status, "started_commit": "0" * 40,
+        "commits": commits or [], "evidence": evidence, "completed_at": None,
+        "context_provenance": prov,
+    }
+
+
+@pytest.fixture()
+def trace_repo(tmp_git_repo: Path):
+    """A git feature repo with a v4 ledger whose baseline is the scaffolding commit.
+
+    Returns a builder callable: ``build(plan_paths=..., tasks=..., acks=...,
+    changed={path: 'content'}, spec_scs=..., tasks_md=...)`` → the repo root, with
+    the changed files committed and the ledger baseline anchored so the effective
+    diff is exactly the ``changed`` set.
+    """
+    root = tmp_git_repo
+    (root / ".specify" / "templates").mkdir(parents=True)
+    (root / ".specify" / "feature.json").write_text(
+        json.dumps({"feature_directory": "specs/001-demo"})
+    )
+    feature_dir = root / "specs" / "001-demo"
+    feature_dir.mkdir(parents=True)
+
+    def build(*, plan_paths=(), spec_scs=("SC-001",), tasks_md_tasks=(),
+              tasks=None, review_cycles=None, acks=None, changed=None):
+        spec = "\n".join(f"- **{sc}**: measurable outcome." for sc in spec_scs)
+        (feature_dir / "spec.md").write_text("# Spec\n\n## Success Criteria\n\n" + spec + "\n")
+        plan_lines = "\n".join(f"- `{p}` (create)" for p in plan_paths)
+        (feature_dir / "plan.md").write_text("# Plan\n\n" + plan_lines + "\n")
+        (feature_dir / "tasks.md").write_text("# Tasks\n\n" + "\n".join(tasks_md_tasks) + "\n")
+        _git(root, "add", "-A")
+        _git(root, "commit", "-m", "scaffolding")
+        baseline = _git(root, "rev-parse", "HEAD")
+        ledger = make_trace_ledger(
+            feature="001-demo", branch=_git(root, "rev-parse", "--abbrev-ref", "HEAD"),
+            baseline=baseline, tasks=tasks, review_cycles=review_cycles,
+            acknowledgements=acks,
+        )
+        (feature_dir / "status.yaml").write_text(yaml.dump(ledger))
+        for path, content in (changed or {}).items():
+            fp = root / path
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(content)
+        if changed:
+            _git(root, "add", "-A")
+            _git(root, "commit", "-m", "work")
+        return root
+
+    return build
+
+
+# ---------------------------------------------------------------------------
 # Ledger v2 (Feature 006) synthetic ledger factories
 # ---------------------------------------------------------------------------
 

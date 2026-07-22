@@ -1,0 +1,16 @@
+schema_version: 1
+contexts:
+  - id: api
+    match:
+      - "src/api/**"
+    reads:
+      base:
+        - "src/api/**"
+    risk:
+      tier: high
+  - id: core
+    match:
+      - "src/core/**"
+    reads:
+      base:
+        - "src/core/**"

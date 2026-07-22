@@ -13,11 +13,11 @@ from pathlib import Path
 
 import git
 
-from specops import config, contextmap, gitops, ledger, shell, speckit, status
+from specops import config, contextmap, gitops, ledger, shell, speckit, status, trace
 from specops import reconcile as reconcile_mod
 from specops.errors import SpecopsError
 
-GATE_ORDER = ["reconcile", "lint", "test", "working-tree"]
+GATE_ORDER = ["reconcile", "lint", "test", "working-tree", "drift"]
 TAIL_LINES = 50
 _LINE_WIDTH = 24  # dot-padded label width: "[gate] working-tree ...."
 
@@ -114,6 +114,36 @@ def _working_tree_gate(repo: git.Repo, dirty: list[str], baseline: str) -> GateR
     return GateResult("working-tree", "PASS", [header, *changed])
 
 
+def _drift_gate(root: Path) -> GateResult:
+    """Block only unexplained effective-diff paths (Feature 010, FR-004).
+
+    Reuses the deterministic classifier: `planned` and
+    `discovered-and-acknowledged` paths PASS; any `unexplained` path FAILs the
+    gate (review REJECTED). Runs last, so it only evaluates an otherwise-clean,
+    diffable tree (the working-tree gate has already passed).
+
+    Fails closed if the effective diff cannot be derived (Principle VI), and
+    degrades to SKIPPED when the feature declares no classification basis (no plan
+    path declarations, contexts, map, or acknowledgements) — so upgrading a repo
+    whose plan predates the declaration convention is not retroactively rejected.
+    """
+    result = trace.classify(root)
+    if isinstance(result, trace.TraceResult):  # usage error → fail closed, never open
+        return GateResult("drift", "FAIL", [f"cannot determine effective diff: {result.human}"])
+    if not result.basis:
+        return GateResult(
+            "drift", "SKIPPED",
+            ["no plan path declarations, context map, or acknowledgements to classify against"],
+        )
+    unexplained = [r["path"] for r in result.paths if r["class"] == trace.UNEXPLAINED]
+    if unexplained:
+        return GateResult(
+            "drift", "FAIL",
+            [f"{len(unexplained)} unexplained path(s) — acknowledge or plan them:", *unexplained],
+        )
+    return GateResult("drift", "PASS")
+
+
 def evaluate(root: Path) -> GateReport:
     """Evaluate all gates cheapest-first with early stop; return the report.
 
@@ -139,6 +169,8 @@ def evaluate(root: Path) -> GateReport:
             result = _command_gate("lint", str(cfg.get("lint_command") or ""), root)
         elif name == "test":
             result = _command_gate("test", str(cfg.get("test_command") or ""), root)
+        elif name == "drift":
+            result = _drift_gate(root)
         else:
             result = _working_tree_gate(repo, dirty_at_start, baseline_at_start)
         report.results.append(result)
@@ -152,9 +184,10 @@ def digest_drift_warning(root: Path) -> str | None:
 
     Compares the most recent context-map digest recorded in the ledger's
     provenance (the plan/implement-time digest) with the current map digest. A
-    difference is surfaced as a warning only — it never blocks review in this
-    feature (enforcement is deferred to Feature 010). Returns None when there is
-    no map, no recorded digest, or the digests match.
+    difference is surfaced as a warning only — it never blocks review. Feature 010
+    enforces unexplained *path* drift via the `drift` gate, but map-*digest* drift
+    stays advisory (spec SC-008). Returns None when there is no map, no recorded
+    digest, or the digests match.
     """
     current = contextmap.map_digest(root)
     if current is None:

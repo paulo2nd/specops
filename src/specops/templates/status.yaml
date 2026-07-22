@@ -1,4 +1,4 @@
-schema_version: 3
+schema_version: 4
 revision: 1
 feature: "{{feature-name}}"
 branch: "{{branch}}"
@@ -21,6 +21,8 @@ recovery:
 tasks: []
 
 review_cycles: []
+
+acknowledgements: []
 
 workflow:
   skipped_steps: []
