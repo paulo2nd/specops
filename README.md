@@ -223,13 +223,19 @@ specops reconcile || exit 1   # preflight before review
 ### `specops review`
 
 Read-only gate. Runs the deterministic review gates cheapest-first with early
-stop: **reconcile → lint → test → working tree/effective diff**. The first
+stop: **reconcile → lint → test → working tree/effective diff → drift**. The first
 failing gate stops the run and prints its evidence to stderr (exit 1); a full
 pass prints a per-gate report to stdout (exit 0) that lists the effective-diff
 files — the exact scope the review agent then reads. Ledger parse errors keep
 exit 2. Runs from any directory inside the repo, never writes to the ledger or
 any repository file, needs no specific ledger phase, and never prompts — safe
 as a CI step.
+
+The terminal **drift gate** (Feature 010) rejects the review when any
+effective-diff path is `unexplained` — neither declared in `plan.md` nor recorded
+via `specops trace acknowledge`. Planned and `discovered-and-acknowledged` paths
+pass, and SpecOps/Speckit-managed artifacts (`specs/**`, `.specify/**`,
+`specops.json`) are excluded as methodology state. See `specops trace` below.
 
 ```bash
 specops review                # local: gate-check the current change
@@ -304,6 +310,34 @@ gitignore-style globbing; on overlap the most specific pattern wins (longer
 literal prefix → fewer wildcards → more segments), and a genuine tie is reported
 as ambiguous ownership. Consumption by planning and review arrives in a later
 feature; this ships the deterministic foundation.
+
+### `specops trace classify | validate | report | acknowledge`
+
+**End-to-end traceability** (Feature 010) connects each spec Success Criterion
+forward through its tasks, contexts/paths, commits, evidence, and review findings,
+and classifies every **effective-diff** path (feature branch vs the ledger
+baseline, renames decomposed) into one closed set — so review blocks *unexplained*
+drift without rejecting legitimate discoveries.
+
+- `specops trace classify [--path <p> …]` — label each effective-diff path
+  `planned` (declared in `plan.md`, or owned by a plan-declared context),
+  `discovered-and-acknowledged` (recorded via `acknowledge`), or `unexplained`.
+  Omit `--path` to derive the change set from Git (clean tree → empty, exit `0`;
+  not-a-repo / no-baseline → exit `2`). Read-only.
+- `specops trace validate` — fail closed (exit `1`) on any `unexplained` path or
+  trace defect: an uncovered Success Criterion, a completed task without evidence
+  (or a user-story-final task without a commit), a dangling reference, or
+  contradictory ownership. Commit existence is deferred to `specops reconcile`.
+- `specops trace report` — render the full chain (Success Criteria → tasks →
+  commits → evidence → findings), with discoveries listed distinctly.
+- `specops trace acknowledge <path> --task <id> --reason "<why>"` — record a
+  one-time, path-level acknowledgement of a genuine discovery so it stops being
+  `unexplained`. Idempotent for an identical record; fails closed (exit `2`) on a
+  conflicting or unknown-task acknowledgement; a no-op for an already-planned path.
+
+Acknowledgements live in the ledger (schema **v4**, migrated forward
+automatically). All commands accept `--json` for a stable, versioned surface, and
+map onto the `0`/`1`/`2` exit-code taxonomy with a `status` field.
 
 ### `specops --version`
 

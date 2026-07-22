@@ -322,3 +322,86 @@ def test_write_new_creates_ledger(tmp_path: Path) -> None:
     (tmp_path / "status.yaml").unlink()
     ledger.write_new(tmp_path, data)
     assert ledger.load_raw(tmp_path)["schema_version"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Ledger v4 — acknowledgements (Feature 010, T004)
+# ---------------------------------------------------------------------------
+
+
+def test_current_schema_is_v4() -> None:
+    assert ledger.CURRENT_SCHEMA == 4
+
+
+def test_backfill_acknowledgements_adds_empty_list() -> None:
+    data = {"tasks": []}
+    ledger.backfill_acknowledgements(data)
+    assert data["acknowledgements"] == []
+
+
+def test_backfill_acknowledgements_idempotent() -> None:
+    data = {"acknowledgements": [{"path": "a", "task": "T001", "reason": "r"}]}
+    ledger.backfill_acknowledgements(data)
+    assert data["acknowledgements"] == [{"path": "a", "task": "T001", "reason": "r"}]
+
+
+def test_migrate_v3_to_v4_backfills_acknowledgements() -> None:
+    v3 = {
+        "schema_version": 3, "revision": 2, "feature": "f", "branch": "main",
+        "baseline": "abc", "workflow_lane": "full", "active_artifact": "spec.md",
+        "created_at": "2026-07-05T00:00:00+00:00", "updated_at": "2026-07-05T00:00:00+00:00",
+        "current_phase": "IMPLEMENT",
+        "recovery": {"active_task": None, "last_commit": None, "blockers": [],
+                     "last_consistent_revision": 2,
+                     "last_consistent_at": "2026-07-05T00:00:00+00:00",
+                     "migrated_from_backup": None},
+        "tasks": [{"id": "T001", "status": "DONE", "evidence": "CLI_LOG:x",
+                   "context_provenance": {"map": "none"}}],
+        "review_cycles": [], "workflow": {"skipped_steps": []},
+    }
+    assert ledger.classify(v3) == ledger.MIGRATABLE
+    out = ledger.migrate_to_current(v3)
+    assert out["schema_version"] == 4
+    assert out["acknowledgements"] == []
+    # existing task + provenance preserved byte-for-byte
+    assert out["tasks"][0]["evidence"] == "CLI_LOG:x"
+    assert out["tasks"][0]["context_provenance"] == {"map": "none"}
+
+
+def test_pre_v4_ledger_reads_without_acknowledgements(fake_speckit_repo: Path) -> None:
+    # A v3 record with no acknowledgements key is a supported prior shape (read-compat).
+    data = {"schema_version": 3, "tasks": [], "review_cycles": [], "current_phase": "SPECIFY"}
+    assert ledger.validate_invariants(data) == []  # absent list is valid
+
+
+def test_invariant_flags_malformed_acknowledgement() -> None:
+    data = {"current_phase": "IMPLEMENT", "tasks": [{"id": "T001", "status": "DONE",
+            "evidence": "x"}], "review_cycles": [],
+            "acknowledgements": [{"path": "", "task": "T001", "reason": "r"}]}
+    violations = ledger.validate_invariants(data)
+    assert any("malformed" in v for v in violations)
+
+
+def test_invariant_flags_unknown_task_acknowledgement() -> None:
+    data = {"current_phase": "IMPLEMENT", "tasks": [{"id": "T001", "status": "DONE",
+            "evidence": "x"}], "review_cycles": [],
+            "acknowledgements": [{"path": "a", "task": "T999", "reason": "r"}]}
+    violations = ledger.validate_invariants(data)
+    assert any("unknown task 'T999'" in v for v in violations)
+
+
+def test_invariant_accepts_valid_acknowledgement() -> None:
+    data = {"current_phase": "IMPLEMENT", "tasks": [{"id": "T001", "status": "DONE",
+            "evidence": "x"}], "review_cycles": [],
+            "acknowledgements": [{"path": "a", "task": "T001", "reason": "r"}]}
+    assert ledger.validate_invariants(data) == []
+
+
+def test_invariant_accepts_acknowledgement_for_orphaned_task() -> None:
+    # A task removed from tasks.md becomes orphaned but its ledger record remains,
+    # so an acknowledgement referencing it is NOT dangling (Feature 010, Finding 5).
+    data = {"current_phase": "IMPLEMENT",
+            "tasks": [{"id": "T001", "status": "DONE", "evidence": "x", "orphaned": True}],
+            "review_cycles": [],
+            "acknowledgements": [{"path": "a", "task": "T001", "reason": "r"}]}
+    assert ledger.validate_invariants(data) == []

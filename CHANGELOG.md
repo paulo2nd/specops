@@ -11,6 +11,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **End-to-end traceability (Feature 010).** Materializes a deterministic trace —
+  success criterion → task → contexts/paths → commits → evidence → review findings
+  → corrections — from the ledger and context provenance, and classifies every
+  effective-diff path, adding four commands under `specops trace`:
+  - `classify [--path …]` labels each effective-diff path (feature branch vs the
+    ledger baseline, renames decomposed) as `planned` (declared in `plan.md`, or
+    owned by a plan-declared context), `discovered-and-acknowledged`, or
+    `unexplained`. SpecOps/Speckit-managed artifacts (`specs/**`, `.specify/**`,
+    `specops.json`) are excluded as methodology state. Read-only, stable JSON with
+    `output_version`.
+  - `validate` fails closed (exit `1`) on any `unexplained` diff path or trace
+    defect — uncovered success criterion, missing evidence / user-story-final
+    commit, dangling reference, or contradictory ownership (commit existence is
+    deferred to `specops reconcile`).
+  - `report` renders the full chain (human + JSON), surfacing discovered paths
+    distinctly with their reason and task.
+  - `acknowledge <path> --task <id> --reason <text>` records a one-time,
+    path-level acknowledgement so a genuine discovery is not blocked as drift.
+    Idempotent for an identical record; fails closed (exit `2`) on a conflicting
+    or unknown-task acknowledgement; a no-op for an already-planned path.
+- **Review drift gate.** `specops review` now runs a terminal `drift` gate that
+  rejects (exit `1`) only when an `unexplained` effective-diff path exists; planned
+  and acknowledged paths pass. Map-*digest* drift remains a non-blocking warning.
+
+### Changed
+
+- **Ledger schema v3 → v4.** Adds the top-level `acknowledgements` list. Prior
+  ledgers migrate forward automatically (the list is back-filled to `[]`) and
+  remain readable; the migration is covered by forward-migration tests.
+
 ## [0.3.0] - 2026-07-21
 
 ### Added

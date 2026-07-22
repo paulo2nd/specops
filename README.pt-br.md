@@ -240,13 +240,20 @@ specops reconcile || exit 1   # preflight antes da revisão
 
 Gate somente leitura. Executa os gates determinísticos de revisão do-mais-barato-
 primeiro com parada antecipada: **reconcile → lint → test → working
-tree/diff efetivo**. O primeiro gate que falha interrompe a execução e imprime
+tree/diff efetivo → drift**. O primeiro gate que falha interrompe a execução e imprime
 sua evidência no stderr (saída 1); passando tudo, imprime um relatório por gate
 no stdout (saída 0) que lista os arquivos do diff efetivo — exatamente o escopo
 que o agente de revisão lê em seguida. Erros de parse do ledger mantêm a saída 2.
 Roda de qualquer diretório dentro do repo, nunca escreve no ledger nem em
 qualquer arquivo do repositório, não exige fase específica e nunca pergunta
 nada — seguro como step de CI.
+
+O **gate de drift** terminal (Feature 010) rejeita a revisão quando qualquer
+caminho do diff efetivo é `unexplained` — nem declarado no `plan.md` nem
+registrado via `specops trace acknowledge`. Caminhos `planned` e
+`discovered-and-acknowledged` passam, e os artefatos gerenciados pelo
+SpecOps/Speckit (`specs/**`, `.specify/**`, `specops.json`) são excluídos por
+serem estado da metodologia. Veja `specops trace` abaixo.
 
 ```bash
 specops review                # local: valida os gates da mudança atual
@@ -328,6 +335,37 @@ o padrão mais específico vence (prefixo literal mais longo → menos curingas 
 mais segmentos), e um empate genuíno é reportado como posse ambígua. O consumo
 por planejamento e revisão chega em uma feature posterior; esta entrega a base
 determinística.
+
+### `specops trace classify | validate | report | acknowledge`
+
+**Rastreabilidade ponta a ponta** (Feature 010) conecta cada Critério de Sucesso
+do spec, avançando por suas tarefas, contextos/caminhos, commits, evidências e
+achados de revisão, e classifica cada caminho do **diff efetivo** (branch da
+feature vs. o baseline do ledger, com renames decompostos) em um conjunto fechado
+— para que a revisão bloqueie o drift *inexplicado* sem rejeitar descobertas
+legítimas.
+
+- `specops trace classify [--path <p> …]` — rotula cada caminho do diff efetivo
+  como `planned` (declarado no `plan.md`, ou pertencente a um contexto declarado),
+  `discovered-and-acknowledged` (registrado via `acknowledge`) ou `unexplained`.
+  Omita `--path` para derivar o conjunto de mudanças do Git (árvore limpa → vazio,
+  saída `0`; sem repo / sem baseline → saída `2`). Somente leitura.
+- `specops trace validate` — falha fechado (saída `1`) em qualquer caminho
+  `unexplained` ou defeito de trace: um Critério de Sucesso sem tarefa, uma tarefa
+  concluída sem evidência (ou a tarefa final da user story sem commit), uma
+  referência pendente, ou propriedade contraditória. A existência de commits é
+  delegada ao `specops reconcile`.
+- `specops trace report` — renderiza a cadeia completa (Critérios de Sucesso →
+  tarefas → commits → evidências → achados), com descobertas listadas à parte.
+- `specops trace acknowledge <path> --task <id> --reason "<motivo>"` — registra um
+  reconhecimento único, no nível do caminho, de uma descoberta genuína para que
+  ela deixe de ser `unexplained`. Idempotente para um registro idêntico; falha
+  fechado (saída `2`) em reconhecimento conflitante ou de tarefa inexistente;
+  no-op para um caminho já planejado.
+
+Os reconhecimentos ficam no ledger (schema **v4**, migrado adiante
+automaticamente). Todos os comandos aceitam `--json` para uma superfície estável e
+versionada, e mapeiam na taxonomia de saída `0`/`1`/`2` com um campo `status`.
 
 ### `specops --version`
 

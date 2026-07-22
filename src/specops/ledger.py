@@ -29,7 +29,7 @@ from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 LEDGER_FILENAME = "status.yaml"
 
-CURRENT_SCHEMA = 3
+CURRENT_SCHEMA = 4
 OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
 
 # Feature 009 — the no-map context-provenance marker backfilled onto records
@@ -37,6 +37,10 @@ OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
 NO_MAP_PROVENANCE = {"map": "none"}
 _PROVENANCE_MAP_STATES = ("none", "invalid", "present")
 DEFAULT_WORKFLOW_LANE = "full"
+
+# Feature 010 (v4) — the top-level acknowledgements list. Each record marks a
+# discovered (unplanned) effective-diff path as legitimate; see specops.trace.
+ACK_FIELDS = ("path", "task", "reason")
 
 PHASES = ["SPECIFY", "PLAN", "TASKS", "IMPLEMENT", "REVIEW", "DONE"]
 TASK_STATUSES = ["PENDING", "IN_PROGRESS", "DONE"]
@@ -199,6 +203,7 @@ def migrate_to_current(data: dict) -> dict:
     rec.setdefault("migrated_from_backup", None)
     ensure_workflow_block(out)
     backfill_context_provenance(out)
+    backfill_acknowledgements(out)
     return out
 
 
@@ -216,6 +221,18 @@ def backfill_context_provenance(data: dict) -> None:
     for cycle in data.get("review_cycles") or []:
         if isinstance(cycle, dict):
             cycle.setdefault("context_provenance", dict(NO_MAP_PROVENANCE))
+
+
+def backfill_acknowledgements(data: dict) -> None:
+    """Back-fill the top-level ``acknowledgements`` list (Feature 010, v4). Idempotent.
+
+    A ledger written before v4 has no acknowledgements; it gains an explicit empty
+    list rather than an omitted key so a pre-feature ledger stays readable and a
+    discovered path is simply ``unexplained`` until acknowledged (FR-016).
+    """
+    acks = data.get("acknowledgements")
+    if not isinstance(acks, list):
+        data["acknowledgements"] = []
 
 
 def ensure_workflow_block(data: dict) -> None:
@@ -292,7 +309,44 @@ def validate_invariants(data: dict) -> list[str]:
             continue
         violations.extend(_provenance_violations(task, f"task '{task.get('id')}'"))
 
+    violations.extend(_acknowledgement_violations(data))
+
     return violations
+
+
+def _acknowledgement_violations(data: dict) -> list[str]:
+    """Validate the optional ``acknowledgements`` list (Feature 010, v4).
+
+    Absent is allowed (a pre-v4 ledger). When present each record MUST be a
+    mapping carrying non-empty ``path``/``task``/``reason`` whose ``task`` matches
+    a known non-orphaned task id (no dangling task reference, FR-007).
+    """
+    acks = data.get("acknowledgements")
+    if acks is None:
+        return []
+    if not isinstance(acks, list):
+        return ["acknowledgements is not a list"]
+    # Include orphaned tasks: a task removed from tasks.md still has a ledger
+    # record, so an acknowledgement referencing it is not dangling. Excluding
+    # orphaned ids would turn a previously-valid ledger invalid the moment its
+    # task orphans, bricking every subsequent mutating command.
+    known = {
+        t.get("id")
+        for t in data.get("tasks") or []
+        if isinstance(t, dict)
+    }
+    out: list[str] = []
+    for i, rec in enumerate(acks):
+        if not isinstance(rec, dict) or any(
+            not isinstance(rec.get(f), str) or not rec.get(f) for f in ACK_FIELDS
+        ):
+            out.append(f"acknowledgement {i} is malformed (path/task/reason required)")
+            continue
+        if rec["task"] not in known:
+            out.append(
+                f"acknowledgement {i} references unknown task '{rec['task']}'"
+            )
+    return out
 
 
 def _provenance_violations(record: dict, label: str) -> list[str]:
