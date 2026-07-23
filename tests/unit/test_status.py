@@ -235,6 +235,63 @@ def test_phase_review_to_implement_without_rejected_fails(tmp_path: Path) -> Non
         s.cmd_transition_phase(root, "IMPLEMENT", result=None)
 
 
+def _review_with_handoff(feature_dir: Path, findings: list) -> None:
+    """Set the open review cycle to carry a v5 handoff with *findings*."""
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    data["schema_version"] = 5
+    data["review_cycles"] = [{
+        "round": 1, "started_at": "2026-07-22T00:00:00+00:00", "completed_at": None,
+        "result": None, "context_provenance": {"map": "none"},
+        "handoff": {"authorized_paths": [], "closed_at": None, "findings": findings},
+    }]
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+
+
+def _finding(fid: str, *, severity: str = "blocking", state: str = "OPEN") -> dict:
+    return {
+        "id": fid, "severity": severity, "rule": "R", "file": "a.py", "line": 1,
+        "action": "do", "expected_evidence": "e", "closure_criteria": "c",
+        "state": state, "task": "T001" if state != "OPEN" else None,
+        "commits": ["abc"] if state != "OPEN" else [],
+        "evidence": "CLI_LOG:x" if state == "VERIFIED" else None,
+        "fixed_at": None, "verified_at": None,
+    }
+
+
+def test_approval_blocked_by_unverified_blocking_finding(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "REVIEW")
+    _review_with_handoff(feature_dir, [_finding("R1-F01", state="OPEN")])
+    with pytest.raises(SpecopsError, match="unverified blocking findings remain"):
+        s.cmd_transition_phase(root, "DONE", result="APPROVED")
+
+
+def test_approval_permitted_when_all_blocking_verified(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "REVIEW")
+    _review_with_handoff(feature_dir, [_finding("R1-F01", state="VERIFIED")])
+    msg = s.cmd_transition_phase(root, "DONE", result="APPROVED")
+    assert "DONE" in msg
+
+
+def test_advisory_findings_never_block_approval(tmp_path: Path) -> None:
+    root, feature_dir = _setup_feature(tmp_path, "REVIEW")
+    _review_with_handoff(feature_dir, [_finding("R1-F01", severity="advisory", state="OPEN")])
+    msg = s.cmd_transition_phase(root, "DONE", result="APPROVED")
+    assert "DONE" in msg
+
+
+def test_approval_degrades_without_handoffs(tmp_path: Path) -> None:
+    # A legacy-shaped review cycle (no handoff) is governed only by the Feature 006
+    # cycle-result gate — the invariant imposes nothing (roadmap Rule 5).
+    root, feature_dir = _setup_feature(tmp_path, "REVIEW")
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    data["review_cycles"] = [
+        {"round": 1, "started_at": "2026-07-05", "completed_at": None, "result": None}
+    ]
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+    msg = s.cmd_transition_phase(root, "DONE", result="APPROVED")
+    assert "DONE" in msg
+
+
 def test_phase_done_requires_approved(tmp_path: Path) -> None:
     root, feature_dir = _setup_feature(tmp_path, "REVIEW")
     data = yaml.safe_load((feature_dir / "status.yaml").read_text())

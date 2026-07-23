@@ -58,7 +58,9 @@ _CLASS_FOR_STATUS = {
     ACK_UNKNOWN_TASK: outcome.INFRA_ERROR,
 }
 
-_FINDING_RE = re.compile(r"^(?P<file>[^:\s]+):(?P<line>\d+)\s*-\s*(?P<text>.+)$")
+# The line number is optional so a line-less finding (`<file> - <action>`) round-
+# trips through render → import faithfully; `<file>:<line> - <action>` still matches.
+_FINDING_RE = re.compile(r"^(?P<file>[^:\s]+)(?::(?P<line>\d+))?\s*-\s*(?P<text>.+)$")
 
 # SpecOps/Speckit-managed artifact paths are methodology state, not product drift.
 # They are excluded from effective-diff classification so the drift gate never
@@ -358,8 +360,36 @@ def _story_of_task(tasks_text: str) -> dict[str, str]:
     return out
 
 
-def _findings(feature_dir: Path) -> list[dict[str, Any]]:
-    """Parse `revisions/revision-*.md` findings, linked to their round (R7)."""
+def _structured_rounds(data: dict) -> set[int]:
+    """Rounds whose cycle owns a structured handoff (Feature 011)."""
+    return {
+        cycle.get("round") or 0
+        for cycle in data.get("review_cycles") or []
+        if isinstance(cycle, dict) and isinstance(cycle.get("handoff"), dict)
+    }
+
+
+def _structured_findings(data: dict) -> list[dict[str, Any]]:
+    """Findings sourced from the v5 handoff state, carrying stable ids (Feature 011)."""
+    out: list[dict[str, Any]] = []
+    for cycle in data.get("review_cycles") or []:
+        if not isinstance(cycle, dict):
+            continue
+        handoff = cycle.get("handoff")
+        if not isinstance(handoff, dict):
+            continue
+        rnd = cycle.get("round") or 0
+        for f in handoff.get("findings") or []:
+            if isinstance(f, dict):
+                out.append({
+                    "id": f.get("id"), "file": f.get("file"), "line": f.get("line"),
+                    "text": f.get("action"), "round": rnd,
+                })
+    return out
+
+
+def _legacy_findings(feature_dir: Path, skip_rounds: set[int]) -> list[dict[str, Any]]:
+    """Parse `revisions/revision-*.md` for rounds not covered by a structured handoff."""
     rev_dir = feature_dir / "revisions"
     if not rev_dir.is_dir():
         return []
@@ -367,14 +397,33 @@ def _findings(feature_dir: Path) -> list[dict[str, Any]]:
     for rev in sorted(rev_dir.glob("revision-*.md")):
         m = re.search(r"revision-(\d+)\.md$", rev.name)
         rnd = int(m.group(1)) if m else 0
+        if rnd in skip_rounds:
+            continue
         for line in rev.read_text(encoding="utf-8").splitlines():
             fm = _FINDING_RE.match(line.strip())
             if fm:
                 out.append({
-                    "file": fm.group("file"), "line": int(fm.group("line")),
+                    "file": fm.group("file"),
+                    "line": int(fm.group("line")) if fm.group("line") else None,
                     "text": fm.group("text").strip(), "round": rnd,
                 })
-    return sorted(out, key=lambda f: (f["round"], f["file"], f["line"]))
+    return out
+
+
+def _findings(feature_dir: Path, data: dict | None = None) -> list[dict[str, Any]]:
+    """Findings for the trace. Uses the v5 structured handoff findings (with stable
+    ids) for rounds that have a handoff, and falls back to parsing
+    `revisions/revision-*.md` for **rounds that do not** — so a feature that mixes
+    early legacy rounds with later structured rounds reports both, and pre-feature
+    ledgers still trace (FR-015)."""
+    data = data or {}
+    findings = _structured_findings(data) + _legacy_findings(
+        feature_dir, skip_rounds=_structured_rounds(data)
+    )
+    return sorted(findings, key=lambda f: (
+        f["round"], f.get("file") or "",
+        f["line"] if isinstance(f.get("line"), int) else -1, f.get("id") or "",
+    ))
 
 
 def build_graph(root: Path) -> dict[str, Any]:
@@ -430,7 +479,7 @@ def build_graph(root: Path) -> dict[str, Any]:
         "success_criteria": sc_nodes,
         "tasks": task_nodes,
         "review_cycles": cycles,
-        "findings": _findings(fd),
+        "findings": _findings(fd, data),
         "acknowledgements": [
             {"path": a.get("path"), "task": a.get("task"), "reason": a.get("reason")}
             for a in data.get("acknowledgements") or [] if isinstance(a, dict)

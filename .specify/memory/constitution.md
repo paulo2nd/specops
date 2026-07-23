@@ -1,6 +1,32 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.6.0 → 1.7.0
+Rationale (1.7.0, 2026-07-23): Amended during /speckit-implement of
+specs/011-structured-corrective-handoff (Structured Corrective Handoff). Feature
+011 promotes review findings and correction authorization from free-form
+`revisions/revision-X.md` prose to first-class, versioned ledger state (Ledger
+v4→v5): structured findings with stable `R<round>-F<NN>` ids, blocking/advisory
+severity, per-finding expected evidence + closure criteria, and an
+`OPEN→FIXED→VERIFIED` lifecycle, plus a feature-global blocking-approval invariant
+(approval is impossible while any blocking finding is unverified). Two existing
+Principle IV directives are broadened (no principle removed or redefined):
+Token-Optimized Review now authors structured findings via `specops handoff
+finding add`, verifies/closes them (`handoff finding verify`/`handoff close`), and
+`revisions/revision-X.md` becomes a rendered projection (`handoff render`) in the
+compatible `[File]:[Line] - [action]` format; Ledger & Phase Wiring notes that a
+corrective round marks a finding `FIXED` via `specops handoff finding fix`. The
+delivered CLI (`handoff finding add/fix/verify`, `authorize`, `close`, `validate`,
+`report`, `import`, `render`) and the Ledger v4→v5 migration are covered by the
+feature's own tests, never run against this repository (No Self-Application). MINOR
+bump: additive guidance on non-removed principles; the additive/never-destructive
+intent is preserved. Templates updated in the same change set:
+src/specops/templates/review.md (structured findings + verify/close/render),
+src/specops/templates/directives/implement.md (mark a resolved finding FIXED). The
+generic plan/spec/tasks templates under .specify/templates/ remain compatible and
+need no change.
+
+Previous report (1.6.0):
 Version change: 1.5.0 → 1.6.0
 Rationale (1.6.0, 2026-07-21): Amended during /speckit-implement of
 specs/010-end-to-end-traceability (End-to-End Traceability). Feature 010 makes
@@ -271,18 +297,29 @@ sourced identically from the SpecOps templates. The directives are:
   required Skills from the client's skills directory, runs `specops
   reconcile` and aborts immediately on failure, rejects changes outside
   `plan.md` via `git status --porcelain` without reading any code, and emits
-  non-conformities to `revisions/revision-X.md` in the short format
-  `[File]:[Line] - [rule violated and short action]`. `specops review` also
-  runs a deterministic **drift gate** (Feature 010): it rejects when any
-  effective-diff path is `unexplained` — neither declared in `plan.md` nor
-  recorded via `specops trace acknowledge` — while planned and
-  `discovered-and-acknowledged` paths pass, and SpecOps/Speckit-managed
+  non-conformities as **structured findings** in the ledger via `specops handoff
+  finding add` (Feature 011) — each carrying a stable `R<round>-F<NN>` id,
+  `blocking`/`advisory` severity, the rule, the `file[:line]` location, a concise
+  action, and per-finding expected evidence + closure criteria; `revisions/
+  revision-X.md` is then a **rendered projection** of that authoritative state
+  (`specops handoff render`), in the compatible `[File]:[Line] - [action]` format,
+  never hand-authored. The review agent verifies a corrected finding with `specops
+  handoff finding verify` and closes the round with `specops handoff close`;
+  approval (`status transition-phase DONE`) is impossible while any **blocking**
+  finding is unverified. `specops review` also runs a deterministic **drift gate**
+  (Feature 010): it rejects when any effective-diff path is `unexplained` — neither
+  declared in `plan.md` nor recorded via `specops trace acknowledge` — while
+  planned and `discovered-and-acknowledged` paths pass, and SpecOps/Speckit-managed
   artifacts (`specs/**`, `.specify/**`, `specops.json`) are excluded as
   methodology state. Map-*digest* drift remains a non-blocking warning.
 - **Stop-and-Ask Gates (§8.2)**: agents halt and ask the human on persisted
   schema changes (migrations), secrets, public contract breaks, or technical
   ambiguities.
-- **Ledger & Phase Wiring**: SpecOps injects directives into every phase-bearing
+- **Ledger & Phase Wiring**: during a corrective round the implement agent marks a
+  resolved finding `FIXED` with `specops handoff finding fix <id> --task … --commit
+  … (--evidence … | --auto)` (Feature 011), linking the correction to its task,
+  commit(s), and evidence before review re-verifies it. SpecOps injects directives
+  into every phase-bearing
   Speckit stage (specify, plan, tasks, implement) — not only plan and implement —
   so the execution ledger is created and the phase state machine
   (SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE) is advanced exclusively
@@ -389,4 +426,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.6.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-21
+**Version**: 1.7.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-23

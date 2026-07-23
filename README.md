@@ -339,6 +339,42 @@ Acknowledgements live in the ledger (schema **v4**, migrated forward
 automatically). All commands accept `--json` for a stable, versioned surface, and
 map onto the `0`/`1`/`2` exit-code taxonomy with a `status` field.
 
+### `specops handoff finding … | authorize | close | validate | report | import | render`
+
+**Structured corrective handoffs** (Feature 011) make review findings and
+correction authorization first-class, versioned ledger state — so a rejected
+review can be resumed from repository state alone and approval is impossible while
+any **blocking** finding is unverified.
+
+- `specops handoff finding add --severity <blocking|advisory> --rule "…" --file <p>
+  [--line <n>] --action "…" [--expected-evidence "…" --closure "…"]` — record a
+  finding with a stable `R<round>-F<NN>` id in the current review round. Blocking
+  findings require expected evidence + closure criteria.
+- `specops handoff finding fix <id> --task <id> --commit <sha> …
+  (--evidence <CLASS>:<summary> | --auto)` — `OPEN → FIXED`, linking the correction.
+- `specops handoff finding verify <id>` — `FIXED → VERIFIED` (mechanical
+  precondition: evidence present + links resolve; no auto-verify). Illegal
+  transitions fail closed (exit `2`).
+- `specops handoff finding dismiss <id> --reason "…"` — withdraw a false-positive
+  or superseded finding to a terminal `DISMISSED` state (audited reason) so it no
+  longer gates approval, without fabricating a fix.
+- `specops handoff authorize --path <p> …` — record the round's authorized
+  corrective paths (a change outside them surfaces as `unexplained` via `trace`).
+- `specops handoff close` — close the handoff once every blocking finding is
+  `VERIFIED` (idempotent; exit `1` while any remain).
+- `specops handoff validate` — fail closed (exit `1`) on a dangling reference, a
+  blocking finding missing closure criteria, a contradictory state, or a duplicate
+  id. `specops handoff report` — render every finding and the remaining blocking
+  set. Both read-only.
+- `specops handoff import [--round <n>]` — import legacy revision prose into
+  advisory findings. `specops handoff render --round <n>` — project the structured
+  findings to a compatible `revisions/revision-X.md`.
+
+Findings live in the ledger (schema **v5**, migrated forward automatically); the
+Markdown revision report is a rendered projection of that authoritative state.
+`specops status transition-phase DONE` fails closed while any blocking finding is
+unverified; a repository with no structured findings degrades to the prior gate.
+
 ### `specops --version`
 
 Prints the version and exits. Works anywhere.

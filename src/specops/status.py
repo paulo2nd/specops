@@ -569,6 +569,21 @@ def cmd_transition_phase(
             "result": None,
         })
 
+    # Feature 011: block approval while any blocking finding is unverified
+    # (feature-global, across every round's handoff). An empty result — including
+    # a ledger with no handoffs at all — degrades to the existing Feature 006
+    # cycle-result gate below (never retroactively blocks; roadmap Rule 5). Guards
+    # every DONE entry point (REVIEW->DONE, the APPROVED record, and a plain DONE).
+    if target == "DONE":
+        from specops import handoff
+        unverified = handoff.blocking_approval_check(data)
+        if unverified:
+            raise SpecopsError(
+                "Cannot enter DONE: unverified blocking findings remain: "
+                + ", ".join(unverified)
+                + ". Verify them ('specops handoff finding verify') first."
+            )
+
     # R1: For DONE transitions, apply the result to the open cycle BEFORE the gate check
     if current == "REVIEW" and target == "DONE":
         cycles = data.get("review_cycles", [])

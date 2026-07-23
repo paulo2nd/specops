@@ -13,6 +13,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Structured corrective handoffs (Feature 011).** Promotes review findings and
+  correction authorization from free-form `revisions/revision-X.md` prose to
+  first-class, versioned ledger state, adding the `specops handoff` command group:
+  - `finding add --severity <blocking|advisory> --rule … --file … [--line …]
+    --action … [--expected-evidence … --closure …]` records a structured finding
+    with a stable `R<round>-F<NN>` id in the current review round's handoff.
+  - `finding fix <id> --task … --commit … (--evidence <CLASS>:<summary> | --auto)`
+    moves a finding `OPEN → FIXED`, linking the resolving task, commit(s), and
+    evidence; `finding verify <id>` moves it `FIXED → VERIFIED` (mechanical
+    precondition; no auto-verify). `finding dismiss <id> --reason "…"` withdraws a
+    false-positive or superseded finding to a terminal `DISMISSED` state so it no
+    longer gates approval. Illegal transitions fail closed (exit `2`).
+  - `authorize --path …` records the round's authorized corrective paths; `close`
+    closes the handoff once every blocking finding is `VERIFIED` (idempotent;
+    exit `1` while any remain).
+  - `validate` fails closed (exit `1`) on a dangling reference, a blocking finding
+    missing closure criteria, a contradictory state, or a duplicate id (commit
+    existence is deferred to `specops reconcile`). `report` renders every finding
+    and the remaining unverified blocking set (human + JSON, `output_version`).
+  - `import [--round …]` imports legacy revision prose into advisory findings;
+    `render --round …` projects the structured state to a compatible
+    `revisions/revision-X.md`.
+- **Blocking-approval invariant.** `specops status transition-phase DONE` now fails
+  closed while any **blocking** finding is unverified, naming them. A repository
+  with no structured findings degrades to the prior cycle-result gate.
+
 - **End-to-end traceability (Feature 010).** Materializes a deterministic trace —
   success criterion → task → contexts/paths → commits → evidence → review findings
   → corrections — from the ledger and context provenance, and classifies every
@@ -39,6 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Ledger schema v4 → v5.** Adds a nested `handoff` object (authorized paths,
+  closure timestamp, structured findings) to review-cycle records. The change is
+  additive — a round with no findings has no `handoff` key — and prior ledgers
+  migrate forward automatically and remain readable; the migration is covered by
+  forward-migration tests. `revisions/revision-X.md` becomes a rendered projection
+  of the structured findings (`specops handoff render`), keeping the compatible
+  `[File]:[Line] - [action]` line format.
 - **Ledger schema v3 → v4.** Adds the top-level `acknowledgements` list. Prior
   ledgers migrate forward automatically (the list is back-filled to `[]`) and
   remain readable; the migration is covered by forward-migration tests.

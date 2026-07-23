@@ -88,6 +88,20 @@ trace_app = typer.Typer(
 )
 app.add_typer(trace_app, name="trace")
 
+handoff_app = typer.Typer(
+    name="handoff",
+    help="Structured corrective handoffs: findings, close, validate, report (Feature 011).",
+    no_args_is_help=True,
+)
+app.add_typer(handoff_app, name="handoff")
+
+finding_app = typer.Typer(
+    name="finding",
+    help="Finding lifecycle: add, fix, verify.",
+    no_args_is_help=True,
+)
+handoff_app.add_typer(finding_app, name="finding")
+
 # ---------------------------------------------------------------------------
 # Error boundary: single exit-code mapper (contracts/errors.md)
 # ---------------------------------------------------------------------------
@@ -650,6 +664,150 @@ def trace_acknowledge(
     """Record a one-time path-level acknowledgement of a discovered path."""
     from specops import trace
     _emit_trace(trace.cmd_acknowledge(Path("."), path, task=task, reason=reason), json_out)
+
+
+# ---------------------------------------------------------------------------
+# handoff — structured corrective handoffs (Feature 011)
+# ---------------------------------------------------------------------------
+
+
+def _emit_handoff(result: Any, json_out: bool) -> None:
+    """Render a handoff.HandoffResult and exit with its mapped code."""
+    from specops import handoff, outcome
+    if json_out:
+        typer.echo(outcome.render(
+            result.command, result.cls,
+            status=result.status, output_version=handoff.OUTPUT_VERSION,
+            **result.extra,
+        ))
+    else:
+        typer.echo(result.human, err=result.cls != outcome.PASS)
+    raise typer.Exit(result.exit_code)
+
+
+@finding_app.command("add")
+@_handle_errors
+def handoff_finding_add(
+    severity: str = typer.Option(..., "--severity", help="blocking | advisory."),
+    rule: str = typer.Option(..., "--rule", help="The rule/principle violated."),
+    file: str = typer.Option(..., "--file", help="Repo-relative path of the finding."),
+    action: str = typer.Option(..., "--action", help="Concise corrective action."),
+    line: int = typer.Option(None, "--line", help="Line number (optional)."),
+    expected_evidence: str = typer.Option(
+        None, "--expected-evidence", help="Declared evidence that will close it (blocking)."),
+    closure: str = typer.Option(None, "--closure", help="Closure criteria (blocking)."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Record a structured finding in the current review round's handoff."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_finding_add(
+        Path("."), severity=severity, rule=rule, file=file, line=line, action=action,
+        expected_evidence=expected_evidence, closure=closure,
+    ), json_out)
+
+
+@finding_app.command("fix")
+@_handle_errors
+def handoff_finding_fix(
+    finding_id: str = typer.Argument(..., help="Finding id (e.g. R2-F01)."),
+    task: str = typer.Option(..., "--task", help="Resolving task id."),
+    commit: list[str] = typer.Option(None, "--commit", help="Corrective commit sha (repeatable)."),
+    evidence: str = typer.Option(None, "--evidence", help="Actual <CLASS>:<summary> evidence."),
+    auto: bool = typer.Option(False, "--auto", help="Collect commits/evidence from the task."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """OPEN -> FIXED: link the resolving task, commit(s), and evidence."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_finding_fix(
+        Path("."), finding_id, task=task, commits=list(commit) if commit else [],
+        evidence=evidence, auto=auto,
+    ), json_out)
+
+
+@finding_app.command("verify")
+@_handle_errors
+def handoff_finding_verify(
+    finding_id: str = typer.Argument(..., help="Finding id (e.g. R2-F01)."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """FIXED -> VERIFIED: mechanical precondition guard; the reviewer's closure judgment."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_finding_verify(Path("."), finding_id), json_out)
+
+
+@finding_app.command("dismiss")
+@_handle_errors
+def handoff_finding_dismiss(
+    finding_id: str = typer.Argument(..., help="Finding id (e.g. R2-F01)."),
+    reason: str = typer.Option(..., "--reason", help="Why the finding is withdrawn."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Withdraw a false-positive or superseded finding to the terminal DISMISSED state."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_finding_dismiss(Path("."), finding_id, reason=reason), json_out)
+
+
+@handoff_app.command("authorize")
+@_handle_errors
+def handoff_authorize(
+    path: list[str] = typer.Option(..., "--path", help="Authorized corrective path (repeatable)."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Set/extend the current round handoff's authorized corrective paths."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_authorize(Path("."), list(path)), json_out)
+
+
+@handoff_app.command("close")
+@_handle_errors
+def handoff_close(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Close the current round's handoff (all blocking findings VERIFIED); idempotent."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_close(Path(".")), json_out)
+
+
+@handoff_app.command("validate")
+@_handle_errors
+def handoff_validate(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Fail closed on any handoff defect (dangling ref, missing closure, contradictory)."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_validate(Path(".")), json_out)
+
+
+@handoff_app.command("report")
+@_handle_errors
+def handoff_report(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Render every handoff finding and the remaining unverified blocking set."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_report(Path(".")), json_out)
+
+
+@handoff_app.command("import")
+@_handle_errors
+def handoff_import(
+    round: int = typer.Option(None, "--round", help="Review round to import (default: current)."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Import legacy revision-X.md prose into structured advisory findings."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_import(Path("."), round), json_out)
+
+
+@handoff_app.command("render")
+@_handle_errors
+def handoff_render(
+    round: int = typer.Option(..., "--round", help="Review round to render."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Project the round's handoff to revisions/revision-<round>.md (structured -> Markdown)."""
+    from specops import handoff
+    _emit_handoff(handoff.render_revision(Path("."), round), json_out)
 
 
 if __name__ == "__main__":

@@ -262,6 +262,95 @@ def trace_repo(tmp_git_repo: Path):
 
 
 # ---------------------------------------------------------------------------
+# Structured Corrective Handoff (Feature 011) builders
+# ---------------------------------------------------------------------------
+
+
+def make_finding(
+    fid: str, *, severity: str = "blocking", state: str = "OPEN", rule: str = "R1",
+    file: str = "src/a.py", line: int | None = 1, action: str = "do the thing",
+    expected_evidence: str = "a unit test", closure: str = "the test passes",
+    task: str | None = None, commits: list | None = None, evidence: str | None = None,
+) -> dict:
+    """Build a v5 finding record (nested under a review cycle's handoff)."""
+    return {
+        "id": fid, "severity": severity, "rule": rule, "file": file, "line": line,
+        "action": action, "expected_evidence": expected_evidence,
+        "closure_criteria": closure, "state": state,
+        "task": task, "commits": commits or [], "evidence": evidence,
+        "fixed_at": None, "verified_at": None,
+    }
+
+
+def make_cycle(
+    *, round: int = 1, result: str | None = None, authorized_paths: list | None = None,
+    findings: list | None = None, closed_at: str | None = None,
+    started_at: str | None = "2026-07-22T00:00:00+00:00",
+) -> dict:
+    """Build a review-cycle record, optionally carrying a v5 handoff.
+
+    A handoff is attached only when ``findings`` or ``authorized_paths`` is given
+    (mirrors production: absence of a handoff == zero structured findings).
+    """
+    cycle: dict = {
+        "round": round, "started_at": started_at, "completed_at": None,
+        "result": result, "context_provenance": {"map": "none"},
+    }
+    if findings is not None or authorized_paths is not None:
+        cycle["handoff"] = {
+            "authorized_paths": authorized_paths or [],
+            "closed_at": closed_at,
+            "findings": findings or [],
+        }
+    return cycle
+
+
+@pytest.fixture()
+def handoff_repo(tmp_git_repo: Path):
+    """A git feature repo with a v5 ledger at REVIEW carrying review cycles.
+
+    Returns ``build(*, tasks=..., review_cycles=..., phase="REVIEW")`` → repo root,
+    with the baseline anchored to the scaffolding commit (identity check passes)
+    and the ledger at schema v5.
+    """
+    root = tmp_git_repo
+    (root / ".specify" / "templates").mkdir(parents=True)
+    (root / ".specify" / "feature.json").write_text(
+        json.dumps({"feature_directory": "specs/001-demo"})
+    )
+    feature_dir = root / "specs" / "001-demo"
+    feature_dir.mkdir(parents=True)
+
+    def build(*, tasks=None, review_cycles=None, phase="REVIEW",
+              spec_scs=("SC-001",), tasks_md_tasks=()):
+        (feature_dir / "spec.md").write_text(
+            "# Spec\n\n## Success Criteria\n\n"
+            + "\n".join(f"- **{sc}**: measurable." for sc in spec_scs) + "\n")
+        (feature_dir / "plan.md").write_text("# Plan\n")
+        (feature_dir / "tasks.md").write_text("# Tasks\n\n" + "\n".join(tasks_md_tasks) + "\n")
+        _git(root, "add", "-A")
+        _git(root, "commit", "-m", "scaffolding")
+        baseline = _git(root, "rev-parse", "HEAD")
+        led = make_trace_ledger(
+            feature="001-demo",
+            branch=_git(root, "rev-parse", "--abbrev-ref", "HEAD"),
+            baseline=baseline, tasks=tasks,
+            review_cycles=review_cycles if review_cycles is not None else [make_cycle()],
+            phase=phase,
+        )
+        led["schema_version"] = 5
+        (feature_dir / "status.yaml").write_text(yaml.dump(led))
+        return root
+
+    return build
+
+
+def head_commit(root: Path) -> str:
+    """Return the current HEAD sha of the repo at *root* (for finding-fix links)."""
+    return _git(root, "rev-parse", "HEAD")
+
+
+# ---------------------------------------------------------------------------
 # Ledger v2 (Feature 006) synthetic ledger factories
 # ---------------------------------------------------------------------------
 
