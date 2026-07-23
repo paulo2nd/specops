@@ -375,6 +375,71 @@ Markdown revision report is a rendered projection of that authoritative state.
 `specops status transition-phase DONE` fails closed while any blocking finding is
 unverified; a repository with no structured findings degrades to the prior gate.
 
+## How SpecOps behaves: a paved road you can leave — on the record
+
+SpecOps is neither a rigid gate that blocks you nor a suggestion you can ignore.
+It presents a **correct path** and lets you **deviate — as long as the deviation is
+recorded**. What it blocks is *silent* deviation, not deviation itself:
+
+- A path you changed that the plan didn't predict isn't rejected — you
+  **acknowledge** it with a reason (`specops trace acknowledge`).
+- A review finding that turns out to be a false positive isn't a dead-end — you
+  **dismiss** it with a reason (`specops handoff finding dismiss`).
+- A gate that was skipped is **recorded** as a finding, never silently passed.
+
+SpecOps **records** the deviation and its reason; it does **not** judge whether the
+reason is good — that is the team's call, not the tool's. (A small core of
+safety-critical gates — persisted-schema changes, secrets, public-contract breaks,
+destructive actions — is *not* pierceable; there SpecOps halts and asks a human.)
+
+## Review workflow: where agent and tool findings fit
+
+Two audiences use the CLI. **Workflows/agents** drive the *state* transitions
+(`handoff finding add|fix|verify|close`, `status transition-phase`, …); **humans**
+read the *visibility* surfaces (`handoff report`, `trace report`, `status show`, …)
+and make the decisions (approve/reject, escalate/dismiss). You rarely type the
+state commands by hand — the injected directives do, on your behalf.
+
+Know which command reviews and which enforces:
+
+- **`specops review`** (the deterministic gate; to be renamed **`specops
+  preflight`** — see roadmap Feature 017) runs reconcile/lint/test/drift and
+  returns a verdict. It is a **mechanical gate**, not a code review — it does not
+  read your code for bugs.
+- **`/specops-review`** (the injected review directive) is where a real code review
+  happens: it orchestrates the **agent's own** review — a disciplined, scoped read
+  of the diff against the spec's Success Criteria, the plan, and the Constitution —
+  and records the non-conformities as structured findings. This is the always-on
+  baseline reviewer.
+- **`specops handoff …`** records and **enforces** those findings: approval is
+  impossible while any blocking finding is unverified.
+
+A stronger or specialized reviewer — a multi-agent bug hunt (e.g. an LLM code
+review), a static analyzer, or a human — is a **source of findings**, not the gate.
+During the `REVIEW` phase the `/specops-review` directive orchestrates the flow
+below (you can also run it by hand when not using the workflow):
+
+1. `specops review` — the deterministic gate suite. Reject early; do not read code
+   until it passes.
+2. Review the diff — the built-in `/specops-review` agent read, and/or a stronger
+   external reviewer.
+3. Record each non-conformity as a structured finding (`specops handoff finding
+   add …`). Findings from an **automated** reviewer are best recorded as `advisory`
+   and **escalated to `blocking` by a human** — an LLM's confidence is not a merge
+   gate. (Roadmap Feature 015 adds a bulk `import-json`/SARIF ingestion so any
+   tool's findings feed the handoff directly, invoked by the directive.)
+4. Triage: `dismiss` false positives (with a reason); fix the real ones, then
+   `finding fix` → `finding verify` → `handoff close`.
+5. `specops status transition-phase DONE -r APPROVED`.
+
+**When the full flow is worth it — and when it is overhead.** The handoff's value
+is proportional to **stakes, hands, and sessions**, not to code quality: it pays
+off when a review spans multiple people/agents or sessions, when a less-experienced
+team is learning the shape of the process, or when someone will later audit *why* a
+change was approved. For a small, reversible, single-session change it is mostly
+ceremony — a lighter proportional lane is planned (roadmap Feature 013). Use the
+full flow deliberately, not reflexively.
+
 ### `specops --version`
 
 Prints the version and exits. Works anywhere.
