@@ -102,6 +102,13 @@ finding_app = typer.Typer(
 )
 handoff_app.add_typer(finding_app, name="finding")
 
+gate_app = typer.Typer(
+    name="gate",
+    help="Gate profiles: list, validate (read-only inspection) (Feature 012).",
+    no_args_is_help=True,
+)
+app.add_typer(gate_app, name="gate")
+
 # ---------------------------------------------------------------------------
 # Error boundary: single exit-code mapper (contracts/errors.md)
 # ---------------------------------------------------------------------------
@@ -808,6 +815,63 @@ def handoff_render(
     """Project the round's handoff to revisions/revision-<round>.md (structured -> Markdown)."""
     from specops import handoff
     _emit_handoff(handoff.render_revision(Path("."), round), json_out)
+
+
+# ---------------------------------------------------------------------------
+# gate subcommands (Feature 012 — read-only inspection; profiles run in review)
+# ---------------------------------------------------------------------------
+
+
+def _emit_gate(result: Any, json_out: bool) -> None:
+    """Render a gateprofiles.GateCommandResult and exit with its mapped code."""
+    from specops import gateprofiles, outcome
+    if json_out:
+        typer.echo(outcome.render(
+            result.command, result.cls,
+            status=result.status, output_version=gateprofiles.OUTPUT_VERSION,
+            **result.extra,
+        ))
+    else:
+        typer.echo(result.human, err=result.cls != outcome.PASS)
+    raise typer.Exit(result.exit_code)
+
+
+def _effective_diff_paths(root: Path) -> list[str]:
+    """Best-effort effective-diff paths for selection; [] when undeterminable."""
+    from specops import gitops, status
+    repo = gitops.find_repo(root)
+    if repo is None:
+        return []
+    try:
+        baseline = status.read_baseline(root)
+    except Exception:
+        baseline = ""
+    if not baseline or not gitops.commit_exists(repo, baseline):
+        return []
+    return gitops.name_only_diff(repo, baseline, "HEAD")
+
+
+@gate_app.command("list")
+@_handle_errors
+def gate_list(
+    path: list[str] = typer.Option(None, "--path", help="Changed path (repeatable); else Git."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Resolve and display the selected gate suite for the effective diff (read-only)."""
+    from specops import gateprofiles
+    root = Path(".")
+    changed = list(path) if path else _effective_diff_paths(root)
+    _emit_gate(gateprofiles.cmd_list(root, changed), json_out)
+
+
+@gate_app.command("validate")
+@_handle_errors
+def gate_validate(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Validate the gate-profile config; report every defect in one pass (FR-014)."""
+    from specops import gateprofiles
+    _emit_gate(gateprofiles.validate(Path(".")), json_out)
 
 
 if __name__ == "__main__":
