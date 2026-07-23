@@ -13,6 +13,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Gate profiles and structured evidence (Feature 012).** Replaces the single global
+  `lint_command`/`test_command` pair with an ordered, context-aware **gate profile**
+  suite, and the flat `<CLASS>:<summary>` evidence string with versioned, id-addressable
+  **structured evidence records**:
+  - A new versioned config `.specify/specops/gate-profiles.yaml` declares an ordered
+    set of gates, each with a command, a single applicability predicate (`always` /
+    context ids / changed-path globs / named-key `risk` — matching Feature 008's
+    free-form risk mapping), a `timeout` (seconds; default `600`), a `required` flag
+    (default `true`), and failure semantics. Absent — or an empty `profiles` list —
+    synthesizes the default `lint`/`test` profile from `specops.json` (never zero
+    gates), so an upgraded repository behaves exactly as before until a profile is
+    authored.
+  - `specops gate list [--json]` shows the deterministically selected suite with a
+    machine-readable reason per gate; `specops gate validate [--json]` fails closed
+    (exit `1`) with one distinct diagnostic per config defect; `specops gate report
+    [--json]` reports the verdict provenance and the ledger's evidence records
+    (read-only). No standalone runner — the suite executes inside `specops review`.
+  - `specops review` now runs the selected profile suite in place of the fixed
+    `lint`/`test` gates (`reconcile → [suite] → working-tree → drift`). Every gate
+    carries an outcome-taxonomy disposition (`required` | `optional` | `skipped` |
+    `cached` | `failed` | `unavailable`), a per-gate `timeout`, and — in `--json` —
+    its disposition, reason, covered commit range/paths, and supporting `evidence_id`.
+    A required failure/unavailability blocks; an optional one never does. `review`
+    remains byte-for-byte **read-only** on the ledger.
+  - Structured evidence records carry a cache-key-derived id (`EV-<hex12>` over
+    producer/command/commit-range/paths/context-map-digest), exit code, timezone-aware
+    timestamp, commit range, affected paths, summary, and an optional local-artifact
+    `sha256` digest (no remote storage). `complete-task` and `handoff finding fix` now
+    record a structured evidence record (and a task `evidence_refs` / finding
+    `evidence_id`) alongside the retained legacy string.
+  - Opt-in `--sarif` on `specops review` and `specops gate report` emits a SARIF 2.1.0
+    projection of the review findings (blocking → error, advisory → warning); absent by
+    default.
+
+  **Migration**: the ledger schema advances **v5 → v6** automatically on the next
+  state-changing command. Legacy `<CLASS>:<summary>` evidence strings are back-filled
+  into structured records without loss (a malformed string is preserved verbatim); the
+  legacy string field is retained. The migration is idempotent and leaves the prior
+  valid ledger readable on failure. Pre-v6 ledgers remain readable.
+
 - **Structured corrective handoffs (Feature 011).** Promotes review findings and
   correction authorization from free-form `revisions/revision-X.md` prose to
   first-class, versioned ledger state, adding the `specops handoff` command group:

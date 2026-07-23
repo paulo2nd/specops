@@ -239,8 +239,13 @@ specops reconcile || exit 1   # preflight antes da revisão
 ### `specops review`
 
 Gate somente leitura. Executa os gates determinísticos de revisão do-mais-barato-
-primeiro com parada antecipada: **reconcile → lint → test → working
-tree/diff efetivo → drift**. O primeiro gate que falha interrompe a execução e imprime
+primeiro com parada antecipada: **reconcile → a suíte de perfis de gate selecionada →
+working tree/diff efetivo → drift**. Desde a Feature 012 a suíte de perfis substitui
+os gates fixos lint/test (sem configuração, é o perfil padrão `lint`/`test` — veja
+`specops gate` abaixo); cada gate de perfil carrega uma disposição de resultado
+(`required`/`optional`/`skipped`/`cached`/`failed`/`unavailable`), um timeout por gate
+e — no `--json` — sua disposição, motivo, entradas cobertas e id da evidência de apoio.
+Uma falha/indisponibilidade `required` bloqueia; uma `optional` não. O primeiro gate que falha interrompe a execução e imprime
 sua evidência no stderr (saída 1); passando tudo, imprime um relatório por gate
 no stdout (saída 0) que lista os arquivos do diff efetivo — exatamente o escopo
 que o agente de revisão lê em seguida. Erros de parse do ledger mantêm a saída 2.
@@ -366,6 +371,55 @@ legítimas.
 Os reconhecimentos ficam no ledger (schema **v4**, migrado adiante
 automaticamente). Todos os comandos aceitam `--json` para uma superfície estável e
 versionada, e mapeiam na taxonomia de saída `0`/`1`/`2` com um campo `status`.
+
+### `specops gate list | validate | report` (Feature 012)
+
+Inspeção somente leitura da **suíte de perfis de gate** e da **evidência estruturada**.
+Os perfis de gate ficam em um `.specify/specops/gate-profiles.yaml` versionado (irmão do
+mapa de contexto): uma lista ordenada de gates, cada um com um `command`, um único
+predicado de aplicabilidade (`always` / `contexts` / globs `paths` / `risk` por chave
+nomeada, casando com o mapeamento de risco livre do mapa de contexto), um `timeout`
+(segundos; padrão `600`), um flag `required` (padrão `true`) e semântica de falha.
+Quando o arquivo está ausente — ou sua lista `profiles` está vazia — o SpecOps sintetiza
+o perfil padrão `lint`/`test` a partir do `specops.json`, então um repositório atualizado
+se comporta exatamente como antes até um perfil ser criado (nunca zero gates).
+
+```yaml
+# .specify/specops/gate-profiles.yaml
+output_version: 1
+profiles:
+  - name: unit-tests
+    command: "pytest -q"
+    applies: { always: true }
+    timeout: 600
+    required: true
+  - name: schema-guard
+    command: "scripts/check-migrations.sh"
+    applies: { paths: ["migrations/**"], risk: { persisted: true } }
+    timeout: 120
+```
+
+- `specops gate list [--json]` — a suíte selecionada deterministicamente para o diff
+  efetivo atual, com um motivo legível por máquina para cada gate.
+- `specops gate validate [--json]` — falha fechada (saída `1`) com um diagnóstico
+  distinto por defeito de configuração (nome duplicado, comando vazio, timeout inválido,
+  predicado não-parseável, referência pendente, versão não suportada).
+- `specops gate report [--json] [--sarif]` — a proveniência do veredito (disposição/
+  motivo/entradas/id de evidência de cada gate) mais os registros de evidência
+  estruturada do ledger.
+
+A suíte roda dentro do `specops review` (não há executor autônomo). Cada execução de gate
+e cada vínculo de evidência de tarefa/finding é registrado como um **registro de evidência
+estruturada** — um id derivado da chave de cache (`EV-<hex12>`), produtor, comando, código
+de saída, timestamp, faixa de commits, caminhos afetados, resumo e um digest `sha256` local
+opcional — armazenado no ledger `status.yaml` (schema **v6**), ao lado da string legada
+`<CLASS>:<summary>` retida. Um gate cuja chave de cache completa ainda casa com um registro
+anterior é `cached` (não re-executado). O `--sarif` opcional em `review`/`gate report` emite
+uma projeção SARIF 2.1.0 dos findings da revisão.
+
+O ledger migra **v5 → v6** automaticamente no próximo comando que altera estado: strings de
+evidência legadas são convertidas em registros estruturados sem perda (idempotente; ledger
+válido anterior preservado em caso de falha).
 
 ### `specops handoff finding … | authorize | close | validate | report | import | render`
 

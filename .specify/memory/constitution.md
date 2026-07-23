@@ -1,6 +1,31 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.7.0 → 1.8.0
+Rationale (1.8.0, 2026-07-23): Amended during /speckit-implement of
+specs/012-gate-profiles-evidence (Gate Profiles and Structured Evidence). Feature
+012 replaces the single global lint/test commands with an ordered, context-aware
+gate-profile suite executed inside `specops review` (reconcile → [suite] →
+working-tree → drift), and the flat `<CLASS>:<summary>` evidence string with
+versioned, id-addressable structured evidence records (Ledger v5→v6). Two existing
+Principle III/IV directives are broadened (no principle removed or redefined):
+Automated Evidence Collection now also records a structured evidence record (a
+cache-key-derived id + producer/command/exit-code/timestamp/commit-range/paths/
+summary/optional-local-digest) alongside the retained `<CLASS>:<summary>` string;
+Token-Optimized Review now runs the selected gate-profile suite (in place of the
+fixed lint/test gates), each gate carrying an outcome-taxonomy disposition
+(required|optional|skipped|cached|failed|unavailable) and — in `--json` — its
+disposition, reason, covered inputs, and supporting evidence id, with the read-only
+`specops gate list/validate/report` inspection surface. `specops review` stays
+byte-for-byte read-only. MINOR bump: additive guidance on non-removed principles;
+the additive/never-destructive intent is preserved. Templates updated in the same
+change set: src/specops/templates/directives/implement.md (structured evidence on
+complete-task / finding fix), src/specops/templates/review.md (profile suite +
+verdict provenance). The delivered CLI (`gate list/validate/report`, `review`
+profile suite + `--sarif`) and the Ledger v5→v6 evidence migration are covered by
+the feature's own tests, never run against this repository (No Self-Application).
+
+Previous report (1.7.0):
 Version change: 1.6.0 → 1.7.0
 Rationale (1.7.0, 2026-07-23): Amended during /speckit-implement of
 specs/011-structured-corrective-handoff (Structured Corrective Handoff). Feature
@@ -260,9 +285,13 @@ Closing a task MUST NOT depend on agent narration. `specops status
 complete-task --auto` MUST orchestrate the collection of technical evidence
 mechanically: run the client's `test_command`, harvest commit hashes and the
 `CODE_DIFF` via Git, and record the evidence string in `status.yaml` in the
-`<CLASS>:<summary>` format (including the `TEST_REPORT`). Evidence is
-machine-collected at close time so that review can consume it without
-re-deriving context. The preferred commit granularity is one commit per user
+`<CLASS>:<summary>` format (including the `TEST_REPORT`). Since Feature 012
+(Ledger v6) SpecOps ALSO records a **structured evidence record** alongside that
+string — a cache-key-derived id plus producer, command, exit code, timezone-aware
+timestamp, commit range, affected paths, summary, and an optional local-artifact
+digest — so evidence is machine-checkable and id-addressable; the legacy string is
+retained for compatibility. Evidence is machine-collected at close time so that
+review can consume it without re-deriving context. The preferred commit granularity is one commit per user
 story (not per task); intermediate tasks within a user story are closed with
 `--evidence` (without a commit), and the user story's final task is closed
 with `--auto` after a single user-story-level commit.
@@ -311,7 +340,16 @@ sourced identically from the SpecOps templates. The directives are:
   declared in `plan.md` nor recorded via `specops trace acknowledge` — while
   planned and `discovered-and-acknowledged` paths pass, and SpecOps/Speckit-managed
   artifacts (`specs/**`, `.specify/**`, `specops.json`) are excluded as
-  methodology state. Map-*digest* drift remains a non-blocking warning.
+  methodology state. Map-*digest* drift remains a non-blocking warning. Since
+  Feature 012 the mechanical verification step of `specops review` runs the selected
+  **gate-profile suite** (`.specify/specops/gate-profiles.yaml`, or the synthesized
+  default `lint`/`test` profile) in place of the fixed lint/test gates — each gate
+  carrying an outcome-taxonomy disposition (`required`|`optional`|`skipped`|`cached`|
+  `failed`|`unavailable`) and, in `--json`, its disposition, reason, covered inputs,
+  and supporting evidence id; a required failure/unavailability blocks, an optional
+  one does not. `specops review` stays byte-for-byte read-only; the read-only
+  `specops gate list`/`validate`/`report` surfaces inspect the profiles, selection,
+  and evidence.
 - **Stop-and-Ask Gates (§8.2)**: agents halt and ask the human on persisted
   schema changes (migrations), secrets, public contract breaks, or technical
   ambiguities.
@@ -426,4 +464,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.7.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-23
+**Version**: 1.8.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-23

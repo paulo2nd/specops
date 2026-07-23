@@ -188,15 +188,15 @@ preserving rule/location/severity (`blocking→error`, `advisory→warning`); wi
 
 **Purpose**: Constitution/template propagation, docs, and the Global Definition of Done.
 
-- [ ] T036 Amend `.specify/memory/constitution.md` (MINOR bump): additive Principle III/IV guidance for structured evidence + the `specops gate` inspection surface, with an updated Sync Impact Report [SC-004]
-- [ ] T037 [P] Update injected directive templates in the same change set — `src/specops/templates/directives/implement.md` (structured-evidence note for `--auto` and finding `fix`) and `src/specops/templates/review.md` (profile-suite + verdict-provenance note) [SC-004]
-- [ ] T038 [P] Update English docs (`README.md`) for gate profiles, structured evidence, caching, the `gate` surface, and the v6 migration [SC-008]
-- [ ] T039 [P] Update Portuguese docs (`README.pt-br.md`) behaviorally-equivalent to the English changes (FR-022) [SC-008]
-- [ ] T040 [P] Record user-visible behavior + the v5→v6 migration requirement in `CHANGELOG.md` under `[Unreleased]` [SC-007]
-- [ ] T041 [P] Add a stack-neutrality unit test asserting a gate result derives only from command + exit code + captured summary + local digest (no framework parsing, no remote store) in `tests/unit/test_gate_stack_neutral.py` [SC-010]
-- [ ] T042 Add a cross-command read-only/determinism sweep test (`gate list/validate/report`, `review` evaluation leave ledger+config byte-unchanged; byte-identical output) in `tests/integration/test_gate_readonly_determinism.py` [SC-008]
-- [ ] T043 Run the repository quality gates under `conda run -n specops`: `ruff check .`, `mypy src/specops`, full `pytest` at ≥85% coverage; fix any gaps [SC-008]
-- [ ] T044 Execute the `quickstart.md` validation scenarios (1–8) against fixtures and confirm each maps to its SC [SC-001] [SC-002] [SC-003] [SC-004] [SC-005] [SC-006] [SC-007] [SC-008] [SC-009] [SC-010]
+- [X] T036 Amend `.specify/memory/constitution.md` (MINOR bump): additive Principle III/IV guidance for structured evidence + the `specops gate` inspection surface, with an updated Sync Impact Report [SC-004]
+- [X] T037 [P] Update injected directive templates in the same change set — `src/specops/templates/directives/implement.md` (structured-evidence note for `--auto` and finding `fix`) and `src/specops/templates/review.md` (profile-suite + verdict-provenance note) [SC-004]
+- [X] T038 [P] Update English docs (`README.md`) for gate profiles, structured evidence, caching, the `gate` surface, and the v6 migration [SC-008]
+- [X] T039 [P] Update Portuguese docs (`README.pt-br.md`) behaviorally-equivalent to the English changes (FR-022) [SC-008]
+- [X] T040 [P] Record user-visible behavior + the v5→v6 migration requirement in `CHANGELOG.md` under `[Unreleased]` [SC-007]
+- [X] T041 [P] Add a stack-neutrality unit test asserting a gate result derives only from command + exit code + captured summary + local digest (no framework parsing, no remote store) in `tests/unit/test_gate_stack_neutral.py` [SC-010]
+- [X] T042 Add a cross-command read-only/determinism sweep test (`gate list/validate/report`, `review` evaluation leave ledger+config byte-unchanged; byte-identical output) in `tests/integration/test_gate_readonly_determinism.py` [SC-008]
+- [X] T043 Run the repository quality gates under `conda run -n specops`: `ruff check .`, `mypy src/specops`, full `pytest` at ≥85% coverage; fix any gaps [SC-008]
+- [X] T044 Execute the `quickstart.md` validation scenarios (1–8) against fixtures and confirm each maps to its SC [SC-001] [SC-002] [SC-003] [SC-004] [SC-005] [SC-006] [SC-007] [SC-008] [SC-009] [SC-010]
 
 ---
 
