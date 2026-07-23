@@ -21,7 +21,7 @@ from typing import Any
 
 __all__ = [
     "ID_PREFIX", "EVIDENCE_CLASSES", "cache_key", "derive_id", "build_record",
-    "digest_artifact", "parse_legacy_string", "append_record",
+    "digest_artifact", "parse_legacy_string", "append_record", "canonical_sort",
 ]
 
 ID_PREFIX = "EV-"
@@ -122,6 +122,17 @@ def parse_legacy_string(
             affected_paths=[], summary=summary, subject=part_subject,
         ))
     return recs
+
+
+def canonical_sort(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return *records* in the FR-021 canonical order (producer, timestamp, commit
+    range) so any evidence listing is reproducible independent of insertion order."""
+    return sorted(records, key=lambda r: (
+        str(r.get("producer") or ""),
+        str(r.get("timestamp") or ""),
+        str(r.get("commit_range") or ""),
+        str(r.get("id") or ""),
+    ))
 
 
 def append_record(

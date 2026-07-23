@@ -84,6 +84,18 @@ def test_append_record_idempotent() -> None:
     assert len(ev) == 1
 
 
+def test_canonical_sort_orders_by_producer_then_timestamp_then_range() -> None:
+    a = _rec(producer="gate:test@1", timestamp="2026-01-02T00:00:00+00:00")
+    b = _rec(producer="gate:lint@1", timestamp="2026-01-01T00:00:00+00:00")
+    c = _rec(producer="gate:test@1", timestamp="2026-01-01T00:00:00+00:00")
+    ordered = evidence.canonical_sort([a, b, c])
+    # gate:lint before gate:test; within gate:test, earlier timestamp first (FR-021)
+    assert [r["producer"] for r in ordered] == ["gate:lint@1", "gate:test@1", "gate:test@1"]
+    assert ordered[1]["timestamp"] <= ordered[2]["timestamp"]
+    # deterministic + independent of insertion order
+    assert evidence.canonical_sort([c, a, b]) == ordered
+
+
 def test_append_record_supersede() -> None:
     ev: list = []
     old = _rec(commit_range="a..b")

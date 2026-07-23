@@ -188,6 +188,31 @@ only `always` + `paths` predicates can match; the reason states the degrade.
 **Rationale**: One selection language (clarify decision), reusing the shipped
 `cmd_impact` output verbatim; deterministic and fully explainable.
 
+## R9a — Read-only review vs. evidence persistence (implementation addendum, 2026-07-23)
+
+**Decision**: `specops review` stays **byte-for-byte read-only** (Feature 004's FR-007
+contract; `TestReviewReadOnly` asserts the ledger is unchanged). Review therefore
+evaluates the profile suite, reads existing ledger evidence for the **cache decision**,
+and surfaces in-memory provenance (disposition + evidence id) — but does **not persist**
+gate-run evidence. The cache-key/id/supersession machinery (R4/FR-009) ships and is
+verified at the evidence layer; a gate is `cached` when a matching non-superseded record
+already exists (recorded by `complete-task` / `handoff finding fix`).
+
+**Consequence (surfaced by the post-implementation `/speckit-analyze`)**: because no
+production path persists a `gate:<name>@<ver>` producer record, a gate's *own* prior run
+never cache-hits end-to-end, and `append_record(supersede=True)` is latent (available but
+unused). FR-009/SC-003 and an Assumptions bullet were reworded to state this honestly, and
+**persisting gate-run evidence from review is deferred to a later feature** (a fit for the
+Feature 013/014 lane/diagnostics work), where the Feature 004 read-only contract would be
+narrowed to "read-only except append-only evidence."
+
+**Rationale**: preserves the established read-only-review contract and every existing
+review test; resolves the internal spec tension (FR-015 "gate execution recording … change
+state" vs. read-only review) in favor of read-only for this feature, without over-reaching
+into a contract change during a milestone-closing feature. FR-021 evidence ordering is
+applied in `gate report` via `evidence.canonical_sort` (producer → timestamp → commit
+range) so the listing is reproducible independent of insertion order.
+
 ## R10 — Determinism over recorded state (not re-execution)
 
 **Decision**: FR-017/FR-018 byte-for-byte guarantees apply to output rendered from

@@ -937,8 +937,9 @@ def gate_report(
     except (LedgerParseError, SpecopsError) as exc:
         typer.echo(f"gate-report: cannot evaluate: {exc.message}", err=True)
         raise typer.Exit(2) from None
+    from specops import evidence as evidence_mod
     gates = [_gate_json(r) for r in report.results]
-    ev = review._existing_evidence(root)
+    ev = evidence_mod.canonical_sort(review._existing_evidence(root))  # FR-021 ordering
     if json_out:
         import json as _json
         typer.echo(_json.dumps({

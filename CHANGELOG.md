@@ -42,7 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     timestamp, commit range, affected paths, summary, and an optional local-artifact
     `sha256` digest (no remote storage). `complete-task` and `handoff finding fix` now
     record a structured evidence record (and a task `evidence_refs` / finding
-    `evidence_id`) alongside the retained legacy string.
+    `evidence_id`) alongside the retained legacy string. A gate is reported `cached`
+    when a matching non-superseded record already exists in the ledger; because
+    `specops review` stays read-only and does not itself persist gate-run evidence,
+    gate self-caching end-to-end is deferred to a later feature (the cache-key +
+    supersession mechanism ships now).
   - Opt-in `--sarif` on `specops review` and `specops gate report` emits a SARIF 2.1.0
     projection of the review findings (blocking → error, advisory → warning); absent by
     default.
