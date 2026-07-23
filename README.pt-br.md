@@ -435,7 +435,7 @@ digita os comandos de estado na mão — os diretivos injetados o fazem por voc�
 Saiba qual comando revisa e qual faz cumprir:
 
 - **`specops review`** (o gate determinístico; a ser renomeado para **`specops
-  preflight`** — veja a Feature 015 do roadmap) roda reconcile/lint/test/drift e
+  preflight`** — veja a Feature 017 do roadmap) roda reconcile/lint/test/drift e
   retorna um veredito. É um **gate mecânico**, não um code review — ele não lê seu
   código atrás de bugs.
 - **`/specops-review`** (o diretivo de revisão injetado) é onde um code review real

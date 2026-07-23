@@ -85,6 +85,7 @@ Roadmap status uses four values:
 | 014 | Diagnostics and Machine Reports | PLANNED | 005–013 | Adoption |
 | 015 | External Review Ingestion | PLANNED | 011, 012 | Adoption |
 | 016 | Review Composition in the Workflow | PLANNED | 007, 011 | Adoption |
+| 017 | Gate Rename & Vocabulary Pass | PLANNED | — | Adoption |
 
 ## Standard Spec Kit Execution Protocol
 
@@ -593,8 +594,7 @@ Let review findings from **any** external reviewer — an LLM code review, a sta
 analyzer, or a human — enter the structured corrective handoff (Feature 011)
 through a stable, versioned, stack-neutral input contract, so the bug-finding
 *judgment* SpecOps deliberately does not perform becomes enforceable, auditable
-handoff state. Correct the review/enforce vocabulary in the same change so the
-deterministic gate is no longer misnamed "review".
+handoff state.
 
 This closes the boundary the roadmap draws on purpose: `/specops-review` (the
 Principle IV directive) orchestrates the **agent's own** review — a disciplined,
@@ -631,20 +631,6 @@ review comment) and gates on that snapshot deterministically (Principle II/VI).
 - Preserve every read-only/idempotency/exit-code guarantee of the Feature 011
   surface; a re-import of the same findings is idempotent.
 
-### Gate rename (`specops review` → `specops preflight`)
-
-- Rename the deterministic gate suite (reconcile/lint/test/drift) from `specops
-  review` to **`specops preflight`**, so the name matches what it is — a mechanical
-  verification gate, not a code review. "Review" is reserved for the phase
-  (`REVIEW`), the `/specops-review` directive (which genuinely orchestrates the
-  agent's review), and the cycle verdict (`APPROVED`/`REJECTED`).
-- Retain `specops review` as a **deprecated alias**: identical behavior, plus a
-  one-line deprecation notice on stderr, for a defined window. Remove no earlier
-  than the next MINOR release, and never inside a patch.
-- Update the directive templates, constitution, and documentation in the same
-  change set. This outcome does **not** depend on the ingestion work and MAY be
-  pulled forward as a standalone pre-1.0 vocabulary change if desired.
-
 ### Explicit non-goals
 
 - SpecOps does not run, bundle, or require any specific reviewer (tool-agnostic).
@@ -658,9 +644,8 @@ review comment) and gates on that snapshot deterministically (Principle II/VI).
 Findings from at least two distinct producers (a JSON contract sample and a SARIF
 sample) import deterministically into the handoff as `advisory` findings carrying
 their producer and diff digest; a finding whose reviewed range has moved is flagged
-`stale`; `specops preflight` runs the gate suite while `specops review` still works
-as a deprecated alias with a notice; and approval remains impossible until an
-imported finding that a human escalated to `blocking` is verified.
+`stale`; and approval remains impossible until an imported finding that a human
+escalated to `blocking` is verified.
 
 ### `/speckit.specify` brief
 
@@ -668,9 +653,7 @@ imported finding that a human escalated to `blocking` is verified.
 > that ingests external review findings into the structured corrective handoff as
 > advisory findings carrying producer and effective-diff-digest provenance and
 > staleness detection, keeping bug-finding judgment with the producer and
-> enforcement with SpecOps. Rename the deterministic review gate `specops review →
-> specops preflight`, retaining `specops review` as a deprecated alias, and reserve
-> "review" for the phase, the `/specops-review` directive, and the verdict.
+> enforcement with SpecOps.
 
 ## Feature 016 — Review Composition in the Workflow
 
@@ -747,6 +730,64 @@ the deterministic gates; a feature with no findings still completes (degrade).
 > deterministic gate kept as the fail-closed precondition and safe degradation when
 > no findings are produced.
 
+## Feature 017 — Gate Rename & Vocabulary Pass
+
+### Objective
+
+Correct the review/enforce vocabulary before 1.0 so the deterministic gate is no
+longer misnamed "review". Rename the gate suite `specops review → specops preflight`
+and reserve "review" for the things that genuinely review. This is standalone
+naming hygiene — it depends on no other feature and is buildable immediately;
+extracted from Feature 015 because it is orthogonal to the ingestion work and must
+not be coupled to that feature's dependency on Feature 012.
+
+**Why it matters even though the CLI is workflow-driven.** The audience for the
+command name is the **workflow/directive author** who composes with these
+primitives, not the daily human. A primitive named `review` that only *gates* risks
+**miscomposed workflows** — an author writes "run `specops review`" believing the
+review happens there and omits the actual review step (exactly the Feature 016 gap).
+Honest primitive names are how correct workflows get composed.
+
+### Required outcomes
+
+- Rename the deterministic gate suite (reconcile/lint/test/drift) from `specops
+  review` to **`specops preflight`**, so the name matches what it is — a mechanical
+  verification gate, not a code review. "Review" is reserved for the phase
+  (`REVIEW`), the `/specops-review` directive (which genuinely orchestrates the
+  agent's review), and the cycle verdict (`APPROVED`/`REJECTED`).
+- Retain `specops review` as a **deprecated alias**: identical behavior plus a
+  one-line deprecation notice on stderr, for a defined window. Remove no earlier than
+  the next MINOR release, and never inside a patch.
+- Update the directive templates (including the Feature 007 `workflow.yml` steps),
+  the constitution, and the EN/PT documentation in the same change set, keeping them
+  behaviorally equivalent.
+- Sweep for other overloaded terms while here (a deliberate pre-1.0 vocabulary pass)
+  and rename or document any that mislead the composing author, applying the same
+  alias/deprecation discipline to any additional user-facing rename.
+
+### Explicit non-goals
+
+- No behavior change to the gate itself — this is naming, not logic.
+- No breaking removal in this feature; the alias must ship and stay for its window.
+- No rename of stable persisted fields or JSON keys that downstream features
+  (011–016) already bind to, unless an alias preserves the old key.
+
+### Acceptance gate
+
+`specops preflight` runs the gate suite and `specops review` still works as a
+deprecated alias emitting a one-line notice; the shipped `workflow.yml`, directives,
+constitution, and docs use `preflight`; and no consumer (workflow step, JSON
+contract, test) breaks on the rename.
+
+### `/speckit.specify` brief
+
+> Rename the deterministic review gate `specops review → specops preflight`,
+> retaining `specops review` as a deprecated alias with a stderr notice for a defined
+> window, and reserve "review" for the phase, the `/specops-review` directive, and
+> the verdict. Update the workflow definition, directives, constitution, and EN/PT
+> docs, and sweep for other overloaded terms as a pre-1.0 vocabulary pass — behavior
+> unchanged, no breaking removal in this feature.
+
 ## Dependency and Replanning Policy
 
 - A feature may be split when `/speckit.clarify` or `/speckit.plan` proves that
@@ -780,9 +821,9 @@ corrections form a verifiable trace backed by context-aware gate profiles.
 
 ### Adoption complete
 
-Features 013–016 are merged. Small changes have a proportional safe lane, a single
+Features 013–017 are merged. Small changes have a proportional safe lane, a single
 diagnostic interface explains project health and next actions, the shipped workflow
 actually performs and enforces the semantic review (not just the deterministic
-gates), and any external reviewer's findings — LLM, static analyzer, or human —
-feed the structured handoff through a stable input contract while the deterministic
-gate is honestly named.
+gates), any external reviewer's findings — LLM, static analyzer, or human — feed the
+structured handoff through a stable input contract, and the deterministic gate is
+honestly named (`preflight`).

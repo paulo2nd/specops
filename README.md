@@ -403,7 +403,7 @@ state commands by hand — the injected directives do, on your behalf.
 Know which command reviews and which enforces:
 
 - **`specops review`** (the deterministic gate; to be renamed **`specops
-  preflight`** — see roadmap Feature 015) runs reconcile/lint/test/drift and
+  preflight`** — see roadmap Feature 017) runs reconcile/lint/test/drift and
   returns a verdict. It is a **mechanical gate**, not a code review — it does not
   read your code for bugs.
 - **`/specops-review`** (the injected review directive) is where a real code review
