@@ -167,9 +167,9 @@ def test_failing_lint_stops_before_test(
     real_run = review.shell.run_client_command
     calls: list[str] = []
 
-    def _spy(cmd, cwd):
+    def _spy(cmd, cwd, timeout=None):
         calls.append(cmd)
-        return real_run(cmd, cwd)
+        return real_run(cmd, cwd, timeout)
 
     monkeypatch.setattr(review.shell, "run_client_command", _spy)
     with pytest.raises(SpecopsError) as exc:

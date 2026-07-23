@@ -264,7 +264,7 @@ def review(
         except (LedgerParseError, SpecopsError) as exc:
             typer.echo(outcome.render("review", outcome.INFRA_ERROR, detail=exc.message))
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
-        gates = [{"name": r.name, "status": r.status} for r in report.results]
+        gates = [_gate_json(r) for r in report.results]
         if report.passed:
             typer.echo(outcome.render("review", outcome.PASS, verdict="APPROVED", gates=gates))
             return
@@ -822,6 +822,18 @@ def handoff_render(
 # ---------------------------------------------------------------------------
 
 
+def _gate_json(r: Any) -> dict[str, Any]:
+    """Provenance object for one gate in a verdict (Feature 012, FR-011/FR-012)."""
+    obj: dict[str, Any] = {"name": r.name, "status": r.status}
+    for field_name in ("disposition", "reason", "evidence_id", "commit_range"):
+        value = getattr(r, field_name, None)
+        if value is not None:
+            obj[field_name] = value
+    if getattr(r, "affected_paths", None):
+        obj["affected_paths"] = r.affected_paths
+    return obj
+
+
 def _emit_gate(result: Any, json_out: bool) -> None:
     """Render a gateprofiles.GateCommandResult and exit with its mapped code."""
     from specops import gateprofiles, outcome
@@ -872,6 +884,39 @@ def gate_validate(
     """Validate the gate-profile config; report every defect in one pass (FR-014)."""
     from specops import gateprofiles
     _emit_gate(gateprofiles.validate(Path(".")), json_out)
+
+
+@gate_app.command("report")
+@_handle_errors
+def gate_report(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Report the verdict's provenance: each gate's disposition/reason/inputs/evidence
+    plus the ledger's structured evidence records (read-only, FR-011/FR-012)."""
+    from specops import gateprofiles, review
+    root = Path(".")
+    repo = _require_git(root)
+    if repo.working_tree_dir is None:
+        typer.echo("Not a work tree (bare repository).", err=True)
+        raise typer.Exit(1)
+    root = Path(repo.working_tree_dir)
+    try:
+        report = review.evaluate(root)
+    except (LedgerParseError, SpecopsError) as exc:
+        typer.echo(f"gate-report: cannot evaluate: {exc.message}", err=True)
+        raise typer.Exit(2) from None
+    gates = [_gate_json(r) for r in report.results]
+    ev = review._existing_evidence(root)
+    if json_out:
+        import json as _json
+        typer.echo(_json.dumps({
+            "command": "gate-report", "output_version": gateprofiles.OUTPUT_VERSION,
+            "verdict": "APPROVED" if report.passed else "REJECTED",
+            "gates": gates, "evidence": ev,
+        }))
+    else:
+        typer.echo(report.render())
+        typer.echo(f"[evidence] {len(ev)} structured record(s) in the ledger.")
 
 
 if __name__ == "__main__":

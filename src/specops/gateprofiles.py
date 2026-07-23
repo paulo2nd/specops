@@ -221,27 +221,23 @@ def parse(root: Path) -> tuple[list[GateProfile] | None, dict[str, Any] | None]:
 def default_profile(root: Path) -> list[GateProfile]:
     """Synthesize the implicit default profile from specops.json (FR-005, R11).
 
-    Preserves the ``lint``/``test`` gate names so consumers of the existing names see
-    no regression. An empty ``test_command`` still yields the ``test`` gate (it will
-    resolve to SKIPPED/unavailable downstream, matching today's ``_command_gate``).
+    Preserves the ``lint``/``test`` gate names **and layout** so consumers of the
+    existing names see no regression: both gates are always present in the canonical
+    ``lint`` → ``test`` order, and an empty command resolves to SKIPPED downstream
+    (exactly today's ``_command_gate`` behavior — an empty command is a benign skip,
+    not a blocking failure).
     """
     try:
         cfg = config.load(root)
     except config.ConfigError:
         cfg = {}
-    gates: list[GateProfile] = []
-    lint_cmd = str(cfg.get("lint_command") or "")
-    if lint_cmd:
-        gates.append(GateProfile(
-            name="lint", command=lint_cmd, applies=ApplicabilityPredicate(always=True),
-            timeout=DEFAULT_TIMEOUT, required=True, on_nonzero="block",
-        ))
-    test_cmd = str(cfg.get("test_command") or "")
-    gates.append(GateProfile(
-        name="test", command=test_cmd, applies=ApplicabilityPredicate(always=True),
-        timeout=DEFAULT_TIMEOUT, required=True, on_nonzero="block",
-    ))
-    return gates
+    always = ApplicabilityPredicate(always=True)
+    return [
+        GateProfile(name="lint", command=str(cfg.get("lint_command") or ""),
+                    applies=always, timeout=DEFAULT_TIMEOUT, required=True, on_nonzero="block"),
+        GateProfile(name="test", command=str(cfg.get("test_command") or ""),
+                    applies=always, timeout=DEFAULT_TIMEOUT, required=True, on_nonzero="block"),
+    ]
 
 
 def profiles_for(root: Path) -> list[GateProfile]:

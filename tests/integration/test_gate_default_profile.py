@@ -36,8 +36,9 @@ def test_default_profile_from_test_command(context_map_repo: Path) -> None:
     _write_config(context_map_repo, test_command="pytest", lint_command="")
     gates = gateprofiles.default_profile(context_map_repo)
     names = [g.name for g in gates]
-    assert names == ["test"]  # lint omitted when lint_command empty
-    assert gates[0].required and gates[0].applies.always
+    # both gates always present (empty lint resolves to a benign SKIP downstream)
+    assert names == ["lint", "test"]
+    assert all(g.required and g.applies.always for g in gates)
 
 
 def test_default_profile_includes_lint_when_set(context_map_repo: Path) -> None:
@@ -50,7 +51,7 @@ def test_empty_profiles_list_falls_back_to_default(context_map_repo: Path) -> No
     _write_config(context_map_repo, test_command="pytest")
     write_profiles(context_map_repo, {"output_version": 1, "profiles": []})
     gates = gateprofiles.profiles_for(context_map_repo)
-    assert [g.name for g in gates] == ["test"]  # never zero gates (FR-005)
+    assert [g.name for g in gates] == ["lint", "test"]  # never zero gates (FR-005)
 
 
 def test_cli_gate_list_no_config_exit_zero(context_map_repo: Path) -> None:

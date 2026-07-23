@@ -139,17 +139,17 @@ gate's disposition, reason, covered commit-range/paths, and supporting `evidence
 
 ### Tests for User Story 3 (mandatory) ⚠️
 
-- [ ] T022 [P] [US3] Unit test: outcome-taxonomy mapping to blocking status (required-pass→PASS, cached→PASS, optional-fail non-blocking, required failed/unavailable→FAIL), and `unavailable ≠ failed` — in `tests/unit/test_gate_outcomes.py` [SC-002]
-- [ ] T023 [P] [US3] Unit test: `shell.run_client_command` timeout — TimeoutExpired ⇒ `failed`/`timeout` with a deterministic recorded outcome carrying the configured limit, not elapsed wall-clock — in `tests/unit/test_shell_timeout.py` [SC-002]
-- [ ] T024 [P] [US3] Integration test: caching — a matching cache key reuses the record without executing the command; each of command / inputs / context-map digest / commit changing forces a fresh run and sets the prior record's `superseded_by` — in `tests/integration/test_gate_cache.py` [SC-003]
-- [ ] T025 [P] [US3] Integration test: fully-provenanced verdict via `specops review --json` — every gate shows disposition + reason + commit_range + affected_paths + `evidence_id`; a required failed/unavailable blocks (exit `1`), an optional failure does not (0% false block) — in `tests/integration/test_review_verdict_provenance.py` [SC-004] [SC-007]
+- [X] T022 [P] [US3] Unit test: outcome-taxonomy mapping to blocking status (required-pass→PASS, cached→PASS, optional-fail non-blocking, required failed/unavailable→FAIL), and `unavailable ≠ failed` — in `tests/unit/test_gate_outcomes.py` [SC-002]
+- [X] T023 [P] [US3] Unit test: `shell.run_client_command` timeout — TimeoutExpired ⇒ `failed`/`timeout` with a deterministic recorded outcome carrying the configured limit, not elapsed wall-clock — in `tests/unit/test_shell_timeout.py` [SC-002]
+- [X] T024 [P] [US3] Integration test: caching — a matching cache key reuses the record without executing the command; each of command / inputs / context-map digest / commit changing forces a fresh run and sets the prior record's `superseded_by` — in `tests/integration/test_gate_cache.py` [SC-003]
+- [X] T025 [P] [US3] Integration test: fully-provenanced verdict via `specops review --json` — every gate shows disposition + reason + commit_range + affected_paths + `evidence_id`; a required failed/unavailable blocks (exit `1`), an optional failure does not (0% false block) — in `tests/integration/test_review_verdict_provenance.py` [SC-004] [SC-007]
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] Extend `shell.run_client_command(command, cwd, timeout=None)` to pass `subprocess`'s `timeout` and surface a `timed_out` sentinel (backward-compatible default `None`) in `src/specops/shell.py` [SC-002]
-- [ ] T027 [US3] Extend `GateResult` with a `disposition` field and implement per-gate execution → record/reuse: build the cache key, reuse a matching non-superseded record (`cached`) else run (with timeout) and append a new record, mapping exit/timeout/missing-tool to the taxonomy, in `src/specops/review.py` [SC-002] [SC-003]
-- [ ] T028 [US3] Integrate the selected profile suite into `review.evaluate` — replace the `lint`/`test` branches so the pipeline is `reconcile → [selected profile suite] → working-tree → drift`, with the blocking mapping (required `failed`/`unavailable` ⇒ `passed=False`; optional never blocks) in `src/specops/review.py` [SC-004] [SC-007]
-- [ ] T029 [US3] Wire `specops gate report [--json]` (full provenance: selection + per-gate disposition/reason/inputs/`evidence_id` + `evidence[]`) and enrich `review --json` gate objects with `disposition`/`commit_range`/`affected_paths`/`evidence_id` in `src/specops/cli.py` [SC-004] [SC-008]
+- [X] T026 [US3] Extend `shell.run_client_command(command, cwd, timeout=None)` to pass `subprocess`'s `timeout` and surface a `timed_out` sentinel (backward-compatible default `None`) in `src/specops/shell.py` [SC-002]
+- [X] T027 [US3] Extend `GateResult` with a `disposition` field and implement per-gate execution → record/reuse: build the cache key, reuse a matching non-superseded record (`cached`) else run (with timeout) and append a new record, mapping exit/timeout/missing-tool to the taxonomy, in `src/specops/review.py` [SC-002] [SC-003]
+- [X] T028 [US3] Integrate the selected profile suite into `review.evaluate` — replace the `lint`/`test` branches so the pipeline is `reconcile → [selected profile suite] → working-tree → drift`, with the blocking mapping (required `failed`/`unavailable` ⇒ `passed=False`; optional never blocks) in `src/specops/review.py` [SC-004] [SC-007]
+- [X] T029 [US3] Wire `specops gate report [--json]` (full provenance: selection + per-gate disposition/reason/inputs/`evidence_id` + `evidence[]`) and enrich `review --json` gate objects with `disposition`/`commit_range`/`affected_paths`/`evidence_id` in `src/specops/cli.py` [SC-004] [SC-008]
 
 **Checkpoint**: US3 independently testable — the review verdict performs and records the profile suite with a full, cached, provenanced outcome.
 
