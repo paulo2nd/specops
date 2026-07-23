@@ -84,6 +84,7 @@ Roadmap status uses four values:
 | 013 | Lightweight Workflow Lane | PLANNED | 007, 011, 012 | Adoption |
 | 014 | Diagnostics and Machine Reports | PLANNED | 005–013 | Adoption |
 | 015 | External Review Ingestion | PLANNED | 011, 012 | Adoption |
+| 016 | Review Composition in the Workflow | PLANNED | 007, 011 | Adoption |
 
 ## Standard Spec Kit Execution Protocol
 
@@ -671,6 +672,81 @@ imported finding that a human escalated to `blocking` is verified.
 > specops preflight`, retaining `specops review` as a deprecated alias, and reserve
 > "review" for the phase, the `/specops-review` directive, and the verdict.
 
+## Feature 016 — Review Composition in the Workflow
+
+### Objective
+
+Compose the **semantic agent review** (`/specops-review`) and the Feature 011
+**blocking-findings enforcement** into the Feature 007 workflow definition, so
+running the shipped workflow performs the *actual code review* and enforces its
+findings — not only the deterministic gates. Recorded as a follow-up discovered
+during Feature 011's review (roadmap replanning policy: a follow-up becomes a new
+numbered feature).
+
+**The gap this closes.** Feature 007 shipped a workflow that composes the lifecycle
++ the deterministic gates + a corrective `do-while` loop driven by the `specops
+review` (gate) verdict. It deliberately did **not** compose the semantic review or
+findings, because structured findings did not exist yet (007 FR-027 excluded the
+findings schema; that is Feature 011). Feature 011 then added structured findings
+and the blocking-approval invariant at the `DONE` transition — but its scope was
+the handoff mechanics, not the workflow. The result: a **workflow-driven** run
+today passes the deterministic gates without ever invoking `/specops-review`, so no
+findings are recorded and the Feature 011 enforcement gates an *empty set*. The
+corrective loop only iterates on mechanical failures (lint/test/drift), never on
+"the reviewer found a defect." The implement directive already says "hand off to
+`/specops-review`" — but the workflow does not make that hand-off. No feature owned
+stitching the two together; this one does.
+
+### Required outcomes
+
+- The workflow's corrective loop MUST invoke the **semantic review** (the
+  registered `/specops-review` command, or an equivalent review step that reads the
+  effective diff and records structured findings) — not only the deterministic
+  `specops review` gate.
+- The loop condition and the terminal completion gate MUST react to **unverified
+  blocking findings** (Feature 011), so a feature with an open blocking finding
+  cannot fall through to `DONE` — not merely to the deterministic gate verdict.
+- The deterministic gate (`specops review` / `preflight`) MUST remain the
+  fail-closed **precondition**: reject early on a mechanical failure, then run the
+  semantic review only once it passes (token discipline, Principle IV).
+- Compose **Spec Kit native steps only** (`command`/`shell`/`gate`/`do-while`/`if`)
+  and the existing handoff CLI — SpecOps adds no engine, loop, or gate primitive
+  (Rule 8, consistent with Feature 007).
+- Forward-seam ledger transitions remain owned by the injected directives (Feature
+  007 clarification); this feature composes the review step and the findings-aware
+  conditions, and MUST NOT duplicate transitions.
+- When no structured findings are produced (a repo/agent that does not record
+  them), the workflow MUST **degrade** to the prior deterministic-only behavior
+  (roadmap Rule 5, Feature 011 degrade path) — never block on an empty finding set.
+
+### Explicit non-goals
+
+- No new orchestrator, loop, gate, or resume primitive (Rule 8).
+- No parallel multi-agent fan-out (consistent with Feature 007).
+- No change to the finding lifecycle or the `specops handoff` CLI (Feature 011);
+  this feature composes them, it does not redefine them.
+- Not the external-review ingestion of Feature 015; this composes the **built-in**
+  review. (016 depends only on merged features and is buildable immediately, so it
+  should generally land **before** 015.)
+
+### Acceptance gate
+
+Running the shipped workflow on a feature that contains a real non-conformity
+drives the semantic review, records a **blocking** finding, iterates the corrective
+loop until it is fixed and verified, and **cannot reach `DONE`** while that finding
+is unverified — proving the workflow *performs and enforces* the review, not just
+the deterministic gates; a feature with no findings still completes (degrade).
+
+### `/speckit.specify` brief
+
+> Compose the semantic agent review (`/specops-review`) and the Feature 011
+> blocking-findings enforcement into the Feature 007 workflow definition, so a
+> workflow-driven run performs the actual code review, records structured findings,
+> and makes the corrective loop and completion gate react to unverified blocking
+> findings — using only Spec Kit native steps and the existing handoff CLI, with the
+> deterministic gate kept as the fail-closed precondition and safe degradation when
+> no findings are produced.
+
 ## Dependency and Replanning Policy
 
 - A feature may be split when `/speckit.clarify` or `/speckit.plan` proves that
@@ -704,7 +780,9 @@ corrections form a verifiable trace backed by context-aware gate profiles.
 
 ### Adoption complete
 
-Features 013–015 are merged. Small changes have a proportional safe lane, a single
-diagnostic interface explains project health and next actions, and any external
-reviewer's findings — LLM, static analyzer, or human — feed the structured handoff
-through a stable input contract while the deterministic gate is honestly named.
+Features 013–016 are merged. Small changes have a proportional safe lane, a single
+diagnostic interface explains project health and next actions, the shipped workflow
+actually performs and enforces the semantic review (not just the deterministic
+gates), and any external reviewer's findings — LLM, static analyzer, or human —
+feed the structured handoff through a stable input contract while the deterministic
+gate is honestly named.
