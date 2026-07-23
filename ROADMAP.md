@@ -55,6 +55,7 @@ Roadmap status uses four values:
 | 012 | Gate Profiles and Structured Evidence | PLANNED | 006, 008, 010 | Auditability |
 | 013 | Lightweight Workflow Lane | PLANNED | 007, 011, 012 | Adoption |
 | 014 | Diagnostics and Machine Reports | PLANNED | 005–013 | Adoption |
+| 015 | External Review Ingestion | PLANNED | 011, 012 | Adoption |
 
 ## Standard Spec Kit Execution Protocol
 
@@ -555,6 +556,90 @@ specific next action from a single read-only command.
 > and gate availability, with severity-classified findings and deterministic
 > next-action guidance.
 
+## Feature 015 — External Review Ingestion
+
+### Objective
+
+Let review findings from **any** external reviewer — an LLM code review, a static
+analyzer, or a human — enter the structured corrective handoff (Feature 011)
+through a stable, versioned, stack-neutral input contract, so the bug-finding
+*judgment* SpecOps deliberately does not perform becomes enforceable, auditable
+handoff state. Correct the review/enforce vocabulary in the same change so the
+deterministic gate is no longer misnamed "review".
+
+This closes the boundary the roadmap draws on purpose: `/specops-review` (the
+Principle IV directive) orchestrates the **agent's own** review — a disciplined,
+scoped, single-pass read of the diff against spec/plan/constitution — which is the
+always-on baseline reviewer. Feature 015 lets a **stronger or specialized** source
+(a multi-agent bug hunt, a static analyzer, a human) feed the *same* handoff, so
+the enforcement layer is not limited to the built-in review. SpecOps still never
+performs the bug-finding itself (Principle IV) and never re-verifies a finding's
+correctness — it records the finding as a snapshot of judgment (like a human's
+review comment) and gates on that snapshot deterministically (Principle II/VI).
+
+### Required outcomes
+
+- Provide a versioned, stack-neutral findings **input contract** (a documented JSON
+  schema) consumed by `specops handoff finding import-json`, creating structured
+  findings from any producer without coupling SpecOps to any specific tool.
+- Provide an optional **SARIF input adapter** (complementing the SARIF *output*
+  adapter of Feature 012) so SARIF-emitting tools (CodeQL, semgrep, LLM reviewers)
+  feed the handoff.
+- Record each imported finding's **producer/source** (tool + version) and the
+  **commit/effective-diff digest** it was reviewed against; a finding whose
+  reviewed range no longer matches the current effective diff MUST be reported as
+  **stale**, never silently trusted (reusing the Feature 009/010 digest-drift
+  pattern).
+- Import findings as **`advisory` by default**; promotion to `blocking` is an
+  explicit, audited triage step. No external producer unilaterally blocks a merge;
+  an automated reviewer's confidence is not a deterministic gate.
+- Guarantee **deterministic ingestion**: identical input produces byte-identical
+  handoff state; the approval gate stays deterministic over the recorded snapshot
+  even though the upstream review is not reproducible.
+- Preserve every read-only/idempotency/exit-code guarantee of the Feature 011
+  surface; a re-import of the same findings is idempotent.
+
+### Gate rename (`specops review` → `specops preflight`)
+
+- Rename the deterministic gate suite (reconcile/lint/test/drift) from `specops
+  review` to **`specops preflight`**, so the name matches what it is — a mechanical
+  verification gate, not a code review. "Review" is reserved for the phase
+  (`REVIEW`), the `/specops-review` directive (which genuinely orchestrates the
+  agent's review), and the cycle verdict (`APPROVED`/`REJECTED`).
+- Retain `specops review` as a **deprecated alias**: identical behavior, plus a
+  one-line deprecation notice on stderr, for a defined window. Remove no earlier
+  than the next MINOR release, and never inside a patch.
+- Update the directive templates, constitution, and documentation in the same
+  change set. This outcome does **not** depend on the ingestion work and MAY be
+  pulled forward as a standalone pre-1.0 vocabulary change if desired.
+
+### Explicit non-goals
+
+- SpecOps does not run, bundle, or require any specific reviewer (tool-agnostic).
+- SpecOps does not judge, re-verify, or calibrate the correctness/confidence of
+  imported findings — that stays the producer's and the human's job (Principle IV).
+- No auto-blocking on external findings; no bundled LLM-reviewer integration.
+- No change to how findings are verified or how approval is gated (Feature 011).
+
+### Acceptance gate
+
+Findings from at least two distinct producers (a JSON contract sample and a SARIF
+sample) import deterministically into the handoff as `advisory` findings carrying
+their producer and diff digest; a finding whose reviewed range has moved is flagged
+`stale`; `specops preflight` runs the gate suite while `specops review` still works
+as a deprecated alias with a notice; and approval remains impossible until an
+imported finding that a human escalated to `blocking` is verified.
+
+### `/speckit.specify` brief
+
+> Add a versioned, stack-neutral input contract (JSON + an optional SARIF adapter)
+> that ingests external review findings into the structured corrective handoff as
+> advisory findings carrying producer and effective-diff-digest provenance and
+> staleness detection, keeping bug-finding judgment with the producer and
+> enforcement with SpecOps. Rename the deterministic review gate `specops review →
+> specops preflight`, retaining `specops review` as a deprecated alias, and reserve
+> "review" for the phase, the `/specops-review` directive, and the verdict.
+
 ## Dependency and Replanning Policy
 
 - A feature may be split when `/speckit.clarify` or `/speckit.plan` proves that
@@ -588,5 +673,7 @@ corrections form a verifiable trace backed by context-aware gate profiles.
 
 ### Adoption complete
 
-Features 013–014 are merged. Small changes have a proportional safe lane, and a
-single diagnostic interface explains project health and next actions.
+Features 013–015 are merged. Small changes have a proportional safe lane, a single
+diagnostic interface explains project health and next actions, and any external
+reviewer's findings — LLM, static analyzer, or human — feed the structured handoff
+through a stable input contract while the deterministic gate is honestly named.

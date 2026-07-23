@@ -375,6 +375,47 @@ Markdown revision report is a rendered projection of that authoritative state.
 `specops status transition-phase DONE` fails closed while any blocking finding is
 unverified; a repository with no structured findings degrades to the prior gate.
 
+## Review workflow: where agent and tool findings fit
+
+SpecOps draws a deliberate line between **reviewing** and **enforcing**, and it
+helps to know which command does which:
+
+- **`specops review`** (the deterministic gate; to be renamed **`specops
+  preflight`** — see roadmap Feature 015) runs reconcile/lint/test/drift and
+  returns a verdict. It is a **mechanical gate**, not a code review — it does not
+  read your code for bugs.
+- **`/specops-review`** (the injected review directive) is where a real code review
+  happens: it orchestrates the **agent's own** review — a disciplined, scoped read
+  of the diff against the spec's Success Criteria, the plan, and the Constitution —
+  and records the non-conformities as structured findings. This is the always-on
+  baseline reviewer.
+- **`specops handoff …`** records and **enforces** those findings: approval is
+  impossible while any blocking finding is unverified.
+
+A stronger or specialized reviewer — a multi-agent bug hunt (e.g. an LLM code
+review), a static analyzer, or a human — is a **source of findings**, not the gate.
+Recommended flow during the `REVIEW` phase:
+
+1. `specops review` — the deterministic gate suite. Reject early; do not read code
+   until it passes.
+2. Run your review — the built-in `/specops-review` agent read, and/or a stronger
+   external reviewer.
+3. Record each non-conformity: `specops handoff finding add --severity
+   <blocking|advisory> …`. Findings from an **automated** reviewer are best recorded
+   as `advisory` and **escalated to `blocking` by a human** — an LLM's confidence is
+   not a merge gate. (Roadmap Feature 015 adds a bulk `import-json`/SARIF ingestion
+   so any tool's findings feed the handoff directly.)
+4. Triage: `specops handoff finding dismiss <id> --reason …` for false positives;
+   fix the real ones, then `finding fix` → `finding verify` → `handoff close`.
+5. `specops status transition-phase DONE -r APPROVED`.
+
+**When the full flow is worth it — and when it is overhead.** The handoff's value
+is proportional to **stakes, hands, and sessions**, not to code quality: it pays
+off when a review spans multiple people/agents or sessions, or when someone will
+later audit *why* a change was approved. For a small, reversible, single-session
+change it is mostly ceremony — a lighter proportional lane is planned (roadmap
+Feature 013). Use the full flow deliberately, not reflexively.
+
 ### `specops --version`
 
 Prints the version and exits. Works anywhere.
