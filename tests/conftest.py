@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from specops import ledger
+
 
 @pytest.fixture()
 def tmp_git_repo(tmp_path: Path) -> Path:
@@ -362,7 +364,7 @@ def handoff_repo(tmp_git_repo: Path):
             review_cycles=review_cycles if review_cycles is not None else [make_cycle()],
             phase=phase,
         )
-        led["schema_version"] = 5
+        led["schema_version"] = ledger.CURRENT_SCHEMA
         (feature_dir / "status.yaml").write_text(yaml.dump(led))
         return root
 

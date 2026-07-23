@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
+from specops import ledger
 from specops import status as s
 from specops.errors import SpecopsError
 
@@ -238,7 +239,7 @@ def test_phase_review_to_implement_without_rejected_fails(tmp_path: Path) -> Non
 def _review_with_handoff(feature_dir: Path, findings: list) -> None:
     """Set the open review cycle to carry a v5 handoff with *findings*."""
     data = yaml.safe_load((feature_dir / "status.yaml").read_text())
-    data["schema_version"] = 5
+    data["schema_version"] = ledger.CURRENT_SCHEMA
     data["review_cycles"] = [{
         "round": 1, "started_at": "2026-07-22T00:00:00+00:00", "completed_at": None,
         "result": None, "context_provenance": {"map": "none"},

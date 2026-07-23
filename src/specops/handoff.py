@@ -22,7 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from specops import gitops, ledger, outcome, speckit, status, trace
+from specops import contextmap, gitops, ledger, outcome, speckit, status, trace
+from specops import evidence as evidence_mod
 from specops.errors import SpecopsError
 
 # --- Versioned JSON contract (FR-012) --------------------------------------
@@ -334,9 +335,21 @@ def cmd_finding_fix(
         return HandoffResult(cmd, PRECONDITION_UNMET,
                              f"{cmd}: valid <CLASS>:<summary> --evidence is required", {"id": fid})
 
+    # Feature 012 (v6): record a structured evidence record for the correction and
+    # link it via `evidence_id` — composes Feature 011, does not alter the lifecycle.
+    head, tail = commits[0], commits[-1]
+    commit_range = f"{tail}..{head}" if head != tail else str(head)
+    ev_record = evidence_mod.build_record(
+        producer="auto", command="(handoff finding fix)", exit_code=0,
+        timestamp=ledger.now_utc(), commit_range=commit_range,
+        affected_paths=[], summary=evidence,
+        context_map_digest=contextmap.map_digest(root), subject=fid,
+    )
+    stored = evidence_mod.append_record(data.setdefault("evidence", []), ev_record)
+
     finding.update({
         "state": "FIXED", "task": task, "commits": commits,
-        "evidence": evidence, "fixed_at": ledger.now_utc(),
+        "evidence": evidence, "evidence_id": stored["id"], "fixed_at": ledger.now_utc(),
     })
     status._finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_FIXED, f"{cmd}: {fid} -> FIXED (task {task})", {"id": fid})

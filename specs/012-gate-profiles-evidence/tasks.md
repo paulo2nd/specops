@@ -104,18 +104,18 @@ still readable; a produced record round-trips its id byte-for-byte; a finding ma
 
 ### Tests for User Story 2 (mandatory) ⚠️
 
-- [ ] T013 [P] [US2] Unit tests for `StructuredEvidence`: cache-key id determinism (identical key ⇒ identical `EV-<hex12>`; any key field change ⇒ new id), local `sha256` artifact digest, and volatile fields excluded from the id — in `tests/unit/test_evidence_record.py` [SC-005]
-- [ ] T014 [P] [US2] Migration test: v5→v6 `backfill_evidence` — zero-loss string→record, idempotent re-run, absent list ⇒ explicit `[]`, pre-v6 ledger readable with absent fields reported (not defects), a **malformed** legacy string preserved verbatim as an opaque record without crashing, and an interrupted migration leaving the prior valid ledger readable — in `tests/unit/test_ledger_v6_migration.py` [SC-007]
-- [ ] T015 [P] [US2] Integration test: `complete-task --auto` and `--evidence` append a structured record and set `task.evidence_refs` alongside the retained legacy string; atomic via `save(base_revision=…)` — in `tests/integration/test_complete_task_evidence.py` [SC-005] [SC-007]
-- [ ] T016 [P] [US2] Integration test: `handoff finding fix` records a `StructuredEvidence` record and sets `finding.evidence_id` (the actual evidence linked at FIXED, Feature 011 FR-005), and `handoff finding verify` resolves that structured evidence — without redefining the Feature 011 finding lifecycle — in `tests/integration/test_handoff_finding_evidence.py` [SC-004] [SC-005]
+- [X] T013 [P] [US2] Unit tests for `StructuredEvidence`: cache-key id determinism (identical key ⇒ identical `EV-<hex12>`; any key field change ⇒ new id), local `sha256` artifact digest, and volatile fields excluded from the id — in `tests/unit/test_evidence_record.py` [SC-005]
+- [X] T014 [P] [US2] Migration test: v5→v6 `backfill_evidence` — zero-loss string→record, idempotent re-run, absent list ⇒ explicit `[]`, pre-v6 ledger readable with absent fields reported (not defects), a **malformed** legacy string preserved verbatim as an opaque record without crashing, and an interrupted migration leaving the prior valid ledger readable — in `tests/unit/test_ledger_v6_migration.py` [SC-007]
+- [X] T015 [P] [US2] Integration test: `complete-task --auto` and `--evidence` append a structured record and set `task.evidence_refs` alongside the retained legacy string; atomic via `save(base_revision=…)` — in `tests/integration/test_complete_task_evidence.py` [SC-005] [SC-007]
+- [X] T016 [P] [US2] Integration test: `handoff finding fix` records a `StructuredEvidence` record and sets `finding.evidence_id` (the actual evidence linked at FIXED, Feature 011 FR-005), and `handoff finding verify` resolves that structured evidence — without redefining the Feature 011 finding lifecycle — in `tests/integration/test_handoff_finding_evidence.py` [SC-004] [SC-005]
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement `StructuredEvidence`, the cache-key (`producer/command/commit_range/affected_paths/context_map_digest`) → `EV-sha256[:12]` id, and the local-artifact `sha256` digest in `src/specops/evidence.py` [SC-005]
-- [ ] T018 [US2] Bump `ledger.CURRENT_SCHEMA` 5→6 and add `backfill_evidence(data)` (parse legacy strings zero-loss, idempotent, explicit `[]`, malformed-string-safe verbatim preservation) called from `migrate_to_current` after the existing backfills, in `src/specops/ledger.py` [SC-007]
-- [ ] T019 [US2] Add v6 validators for the top-level `evidence[]` list and `evidence_refs`/`evidence_id` references (well-formedness; dangling ref reported, not crashed) in `src/specops/ledger.py` [SC-005] [SC-007]
-- [ ] T020 [US2] Wire `complete-task --auto/--evidence` to build + append a structured record (`producer="auto"`) and set `evidence_refs`, retaining the legacy string, in `src/specops/status.py` [SC-005]
-- [ ] T021 [US2] Wire Feature 011 `handoff finding fix` (and the `verify` precondition check) to append a `StructuredEvidence` record and set `finding.evidence_id`, composing `evidence.py` and **not** altering the finding lifecycle, in `src/specops/handoff.py` [SC-004] [SC-005]
+- [X] T017 [US2] Implement `StructuredEvidence`, the cache-key (`producer/command/commit_range/affected_paths/context_map_digest`) → `EV-sha256[:12]` id, and the local-artifact `sha256` digest in `src/specops/evidence.py` [SC-005]
+- [X] T018 [US2] Bump `ledger.CURRENT_SCHEMA` 5→6 and add `backfill_evidence(data)` (parse legacy strings zero-loss, idempotent, explicit `[]`, malformed-string-safe verbatim preservation) called from `migrate_to_current` after the existing backfills, in `src/specops/ledger.py` [SC-007]
+- [X] T019 [US2] Add v6 validators for the top-level `evidence[]` list and `evidence_refs`/`evidence_id` references (well-formedness; dangling ref reported, not crashed) in `src/specops/ledger.py` [SC-005] [SC-007]
+- [X] T020 [US2] Wire `complete-task --auto/--evidence` to build + append a structured record (`producer="auto"`) and set `evidence_refs`, retaining the legacy string, in `src/specops/status.py` [SC-005]
+- [X] T021 [US2] Wire Feature 011 `handoff finding fix` (and the `verify` precondition check) to append a `StructuredEvidence` record and set `finding.evidence_id`, composing `evidence.py` and **not** altering the finding lifecycle, in `src/specops/handoff.py` [SC-004] [SC-005]
 
 **Checkpoint**: US2 independently testable — task **and** finding evidence are structured, id-addressable, and migrated with zero loss; v5 ledgers remain readable.
 

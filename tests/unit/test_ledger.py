@@ -329,8 +329,8 @@ def test_write_new_creates_ledger(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_current_schema_is_v5() -> None:
-    assert ledger.CURRENT_SCHEMA == 5
+def test_current_schema_is_v6() -> None:
+    assert ledger.CURRENT_SCHEMA == 6
 
 
 def _cycle_with_findings(findings: list) -> dict:
@@ -413,7 +413,7 @@ def test_migrate_v4_to_v5_is_additive_and_lossless() -> None:
     }
     assert ledger.classify(v4) == ledger.MIGRATABLE
     out = ledger.migrate_to_current(v4)
-    assert out["schema_version"] == 5
+    assert out["schema_version"] == ledger.CURRENT_SCHEMA
     # additive: no handoff keys introduced (absence == zero findings)
     assert "handoff" not in out["review_cycles"][0]
     # lossless: acknowledgements, provenance, tasks, cycles all preserved
@@ -424,7 +424,7 @@ def test_migrate_v4_to_v5_is_additive_and_lossless() -> None:
 
 def test_v5_ledger_with_findings_is_current() -> None:
     data = _cycle_with_findings([_f("R1-F01")])
-    data["schema_version"] = 5
+    data["schema_version"] = ledger.CURRENT_SCHEMA
     assert ledger.classify(data) == ledger.CURRENT
 
 
