@@ -44,37 +44,55 @@ Review against:
 - The contexts reported by `specops context impact` (Step 2a) when a map is present.
 - The Constitution's Core Principles (correctness, not style).
 
-### Step 4 — Write Revision Report
+### Step 4 — Record Structured Findings (Feature 011)
 
-Create `revisions/revision-X.md` where X = (max existing revision number + 1).
+Findings are **first-class ledger state**, not free-form prose. For each non-conformity, record a structured finding:
 
-Each non-conformity on its own line, format:
 ```
-[File]:[Line] - [rule violated and short action]
-```
-
-Example:
-```
-src/specops/status.py:42 - L2 violated: two tasks IN_PROGRESS simultaneously; enforce single-active-task guard
+specops handoff finding add \
+  --severity <blocking|advisory> --rule "<rule violated>" \
+  --file <path> --line <n> --action "<short corrective action>" \
+  --expected-evidence "<what evidence will close it>" --closure "<closure criteria>"
 ```
 
-If the gate report showed any `SKIPPED` gate, record each one in `revision-X.md` on its own line — `Skipped gate: <name> (<reason>)` — so a gate that never ran is visible in the verdict, not silently approved.
+- `blocking` findings gate approval; `advisory` findings are recorded but never block. `--expected-evidence`/`--closure` are required for `blocking`.
+- Each finding gets a stable id `R<round>-F<NN>`. Record the paths the correction is expected to touch with `specops handoff authorize --path <p> …`.
 
-If no non-conformities: write `revision-X.md` with a single line `APPROVED` (followed by any `Skipped gate:` lines).
+If the gate report showed any `SKIPPED` gate, record each as an **advisory** finding so a gate that never ran is visible in the verdict, not silently approved:
+
+```
+specops handoff finding add --severity advisory --rule "skipped-gate" \
+  --file . --action "Skipped gate: <name> (<reason>)"
+```
+
+Render the human-readable revision report — a projection of the structured state, in the compatible `[File]:[Line] - [action]` line format:
+
+```
+specops handoff render --round X    # writes revisions/revision-X.md
+```
+
+**Corrective round (re-review):** for each finding the implementer marked `FIXED`, verify it once its evidence is present:
+
+```
+specops handoff finding verify <R…-F…>
+```
 
 Set the review decision:
-- At least one non-conformity → **REJECTED**
-- Zero non-conformities → **APPROVED**
+- Any **blocking** finding not yet `VERIFIED` → **REJECTED**
+- Every blocking finding `VERIFIED` (advisory may remain open) → **APPROVED**
 
-After writing the report, execute the outcome:
-- APPROVED → `specops status transition-phase DONE -r APPROVED`
+Execute the outcome:
+- APPROVED → `specops handoff close` then `specops status transition-phase DONE -r APPROVED`
 - REJECTED → `specops status transition-phase IMPLEMENT -r REJECTED`
+
+`specops status transition-phase DONE` fails closed while any blocking finding is unverified — approval cannot bypass the corrective handoff. A repository with no structured findings (legacy) degrades to the prior cycle-result gate.
 
 ### Active Learning
 
-If the review reveals recurring failures or knowledge gaps that a skill could prevent:
-- Add a line to `revision-X.md` under a `## Skill Suggestions` section:
-  ```
-  Suggest: create skill '<name>' covering <topic> to prevent recurrence of [File]:[Line] pattern.
-  ```
-- Do not create the skill yourself — record the suggestion for the human to act on.
+If the review reveals recurring failures or knowledge gaps that a skill could prevent, record the suggestion as an **advisory** finding (it never blocks approval):
+```
+specops handoff finding add --severity advisory --rule "skill-suggestion" \
+  --file <path> --line <n> \
+  --action "Suggest: create skill '<name>' covering <topic> to prevent recurrence"
+```
+Do not create the skill yourself — the advisory finding records the suggestion for the human to act on.

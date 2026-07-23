@@ -49,6 +49,18 @@ The ledger is the authority; the agent is the executor.
 - This is a delivered capability; where SpecOps is not initialized the step is a
   no-op and implementation proceeds normally.
 
+### Corrective Findings (Feature 011)
+
+- When re-entering IMPLEMENT to resolve a rejected review, each finding is a
+  structured ledger record with a stable id (`R<round>-F<NN>`). After fixing the
+  code and committing, mark the finding `FIXED`, linking the correction:
+  `specops handoff finding fix <id> --task <task-id> --commit <sha> --evidence "<CLASS>:<summary>"`
+  (or `--auto` to collect the task's commits and evidence).
+- A finding cannot be verified until it is `FIXED` with a task, commit, and
+  evidence. Verification and closure are the reviewer's job (`/specops-review`),
+  never the implementer's. Approval is impossible while any **blocking** finding
+  is unverified.
+
 ### Skills
 
 Before starting the first task, check `skills_dir` (from `specops.json`). Load any skill files present. If the directory is empty or missing, proceed — skills are optional, not a gate.

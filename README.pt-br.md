@@ -367,6 +367,42 @@ Os reconhecimentos ficam no ledger (schema **v4**, migrado adiante
 automaticamente). Todos os comandos aceitam `--json` para uma superfície estável e
 versionada, e mapeiam na taxonomia de saída `0`/`1`/`2` com um campo `status`.
 
+### `specops handoff finding … | authorize | close | validate | report | import | render`
+
+**Handoffs corretivos estruturados** (Feature 011) tornam os achados de revisão e a
+autorização de correção estado versionado de primeira classe no ledger — de modo
+que uma revisão rejeitada pode ser retomada apenas a partir do estado do
+repositório e a aprovação é impossível enquanto qualquer achado **bloqueante**
+estiver não verificado.
+
+- `specops handoff finding add --severity <blocking|advisory> --rule "…" --file <p>
+  [--line <n>] --action "…" [--expected-evidence "…" --closure "…"]` — registra um
+  achado com um id estável `R<round>-F<NN>` na rodada de revisão atual. Achados
+  bloqueantes exigem evidência esperada + critérios de encerramento.
+- `specops handoff finding fix <id> --task <id> --commit <sha> …
+  (--evidence <CLASS>:<summary> | --auto)` — `OPEN → FIXED`, vinculando a correção.
+- `specops handoff finding verify <id>` — `FIXED → VERIFIED` (pré-condição
+  mecânica: evidência presente + vínculos resolvem; sem auto-verificação).
+  Transições ilegais falham fechado (saída `2`).
+- `specops handoff authorize --path <p> …` — registra os caminhos corretivos
+  autorizados da rodada (uma mudança fora deles aparece como `unexplained` via
+  `trace`).
+- `specops handoff close` — encerra o handoff quando todo achado bloqueante está
+  `VERIFIED` (idempotente; saída `1` enquanto restar algum).
+- `specops handoff validate` — falha fechado (saída `1`) em referência pendente,
+  achado bloqueante sem critério de encerramento, estado contraditório ou id
+  duplicado. `specops handoff report` — renderiza cada achado e o conjunto
+  bloqueante restante. Ambos somente leitura.
+- `specops handoff import [--round <n>]` — importa prosa de revisão legada em
+  achados advisory. `specops handoff render --round <n>` — projeta os achados
+  estruturados em um `revisions/revision-X.md` compatível.
+
+Os achados ficam no ledger (schema **v5**, migrado adiante automaticamente); o
+relatório de revisão em Markdown é uma projeção renderizada desse estado
+autoritativo. `specops status transition-phase DONE` falha fechado enquanto
+qualquer achado bloqueante estiver não verificado; um repositório sem achados
+estruturados degrada para o gate anterior.
+
 ### `specops --version`
 
 Imprime a versão e sai. Funciona em qualquer lugar.
