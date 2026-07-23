@@ -358,8 +358,35 @@ def _story_of_task(tasks_text: str) -> dict[str, str]:
     return out
 
 
-def _findings(feature_dir: Path) -> list[dict[str, Any]]:
-    """Parse `revisions/revision-*.md` findings, linked to their round (R7)."""
+def _structured_findings(data: dict) -> list[dict[str, Any]]:
+    """Findings sourced from the v5 handoff state, carrying stable ids (Feature 011)."""
+    out: list[dict[str, Any]] = []
+    for cycle in data.get("review_cycles") or []:
+        if not isinstance(cycle, dict):
+            continue
+        handoff = cycle.get("handoff")
+        if not isinstance(handoff, dict):
+            continue
+        rnd = cycle.get("round") or 0
+        for f in handoff.get("findings") or []:
+            if isinstance(f, dict):
+                out.append({
+                    "id": f.get("id"), "file": f.get("file"), "line": f.get("line"),
+                    "text": f.get("action"), "round": rnd,
+                })
+    return sorted(out, key=lambda f: (
+        f["round"], f.get("file") or "",
+        f["line"] if isinstance(f.get("line"), int) else -1, f.get("id") or "",
+    ))
+
+
+def _findings(feature_dir: Path, data: dict | None = None) -> list[dict[str, Any]]:
+    """Findings for the trace. Prefer the v5 structured handoff findings (with stable
+    ids) when present; else fall back to parsing `revisions/revision-*.md` (Feature
+    010 legacy), unchanged — so pre-feature ledgers still trace (FR-015)."""
+    structured = _structured_findings(data or {})
+    if structured:
+        return structured
     rev_dir = feature_dir / "revisions"
     if not rev_dir.is_dir():
         return []
@@ -430,7 +457,7 @@ def build_graph(root: Path) -> dict[str, Any]:
         "success_criteria": sc_nodes,
         "tasks": task_nodes,
         "review_cycles": cycles,
-        "findings": _findings(fd),
+        "findings": _findings(fd, data),
         "acknowledgements": [
             {"path": a.get("path"), "task": a.get("task"), "reason": a.get("reason")}
             for a in data.get("acknowledgements") or [] if isinstance(a, dict)
