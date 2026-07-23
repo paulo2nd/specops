@@ -406,10 +406,33 @@ autoritativo. `specops status transition-phase DONE` falha fechado enquanto
 qualquer achado bloqueante estiver não verificado; um repositório sem achados
 estruturados degrada para o gate anterior.
 
+## Como o SpecOps se comporta: um caminho pavimentado que você pode deixar — no registro
+
+O SpecOps não é um gate rígido que te bloqueia nem uma sugestão que você pode
+ignorar. Ele apresenta um **caminho correto** e deixa você **desviar — desde que o
+desvio seja registrado**. O que ele bloqueia é o desvio *silencioso*, não o desvio
+em si:
+
+- Um caminho que você mudou e o plano não previu não é rejeitado — você o
+  **reconhece** com um motivo (`specops trace acknowledge`).
+- Um achado de review que se revela falso positivo não é um beco sem saída — você o
+  **descarta** com um motivo (`specops handoff finding dismiss`).
+- Um gate que foi pulado é **registrado** como achado, nunca passa em silêncio.
+
+O SpecOps **registra** o desvio e seu motivo; ele **não** julga se o motivo é bom —
+isso é decisão do time, não da ferramenta. (Um pequeno núcleo de gates críticos de
+segurança — mudanças de schema persistido, segredos, quebra de contrato público,
+ações destrutivas — *não* é furável; ali o SpecOps para e pergunta a um humano.)
+
 ## Fluxo de revisão: onde entram os achados de agentes e ferramentas
 
-O SpecOps traça uma linha deliberada entre **revisar** e **fazer cumprir**, e ajuda
-saber qual comando faz o quê:
+Dois públicos usam a CLI. **Workflows/agentes** dirigem as transições de *estado*
+(`handoff finding add|fix|verify|close`, `status transition-phase`, …); **humanos**
+leem as superfícies de *visibilidade* (`handoff report`, `trace report`, `status
+show`, …) e tomam as decisões (aprovar/rejeitar, escalar/dismiss). Você raramente
+digita os comandos de estado na mão — os diretivos injetados o fazem por você.
+
+Saiba qual comando revisa e qual faz cumprir:
 
 - **`specops review`** (o gate determinístico; a ser renomeado para **`specops
   preflight`** — veja a Feature 015 do roadmap) roda reconcile/lint/test/drift e
@@ -425,29 +448,31 @@ saber qual comando faz o quê:
 
 Um revisor mais forte ou especializado — uma caça a bugs multi-agente (ex.: um code
 review de LLM), um analisador estático ou um humano — é uma **fonte de achados**,
-não o gate. Fluxo recomendado durante a fase `REVIEW`:
+não o gate. Durante a fase `REVIEW`, o diretivo `/specops-review` orquestra o fluxo
+abaixo (você também pode rodá-lo na mão quando não estiver usando o workflow):
 
 1. `specops review` — a suíte de gates determinística. Rejeite cedo; não leia
    código até ela passar.
-2. Rode sua revisão — o review embutido do `/specops-review` e/ou um revisor externo
+2. Revise o diff — o review embutido do `/specops-review` e/ou um revisor externo
    mais forte.
-3. Registre cada não conformidade: `specops handoff finding add --severity
-   <blocking|advisory> …`. Achados de um revisor **automatizado** são melhor
-   registrados como `advisory` e **escalados para `blocking` por um humano** — a
-   confiança de um LLM não é um gate de merge. (A Feature 015 do roadmap adiciona uma
-   ingestão em lote `import-json`/SARIF para que os achados de qualquer ferramenta
-   alimentem o handoff diretamente.)
-4. Triagem: `specops handoff finding dismiss <id> --reason …` para falsos positivos;
-   corrija os reais, depois `finding fix` → `finding verify` → `handoff close`.
+3. Registre cada não conformidade como achado estruturado (`specops handoff finding
+   add …`). Achados de um revisor **automatizado** são melhor registrados como
+   `advisory` e **escalados para `blocking` por um humano** — a confiança de um LLM
+   não é um gate de merge. (A Feature 015 do roadmap adiciona uma ingestão em lote
+   `import-json`/SARIF para que os achados de qualquer ferramenta alimentem o handoff
+   diretamente, invocada pelo diretivo.)
+4. Triagem: `dismiss` nos falsos positivos (com motivo); corrija os reais, depois
+   `finding fix` → `finding verify` → `handoff close`.
 5. `specops status transition-phase DONE -r APPROVED`.
 
 **Quando o fluxo completo vale a pena — e quando é overhead.** O valor do handoff é
 proporcional a **stakes, mãos e sessões**, não à qualidade do código: compensa
-quando uma revisão atravessa várias pessoas/agentes ou sessões, ou quando alguém vai
-depois auditar *por que* uma mudança foi aprovada. Para uma mudança pequena,
-reversível e de uma sentada, é majoritariamente cerimônia — uma lane proporcional
-mais leve está planejada (Feature 013 do roadmap). Use o fluxo completo de forma
-deliberada, não reflexa.
+quando uma revisão atravessa várias pessoas/agentes ou sessões, quando um time menos
+experiente está aprendendo a forma do processo, ou quando alguém vai depois auditar
+*por que* uma mudança foi aprovada. Para uma mudança pequena, reversível e de uma
+sentada, é majoritariamente cerimônia — uma lane proporcional mais leve está
+planejada (Feature 013 do roadmap). Use o fluxo completo de forma deliberada, não
+reflexa.
 
 ### `specops --version`
 

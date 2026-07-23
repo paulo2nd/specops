@@ -5,6 +5,34 @@ an additive workflow guard into a context-aware, auditable execution layer. It
 is a planning index, not an execution ledger. The authoritative execution state
 for an active feature remains that feature's `specs/NNN-*/status.yaml`.
 
+## Design Philosophy — a paved road you can leave, on the record
+
+SpecOps is neither a rigid gate that blocks nor a suggestion that can be ignored.
+It presents a **correct path** and allows deviation from it **as long as the
+deviation is recorded** — an acknowledged path (Feature 010), a dismissed finding
+(Feature 011), a skipped gate recorded as a finding. What it blocks is *silent*
+deviation, not deviation itself. This is what lets one mechanism serve both
+less-experienced teams adopting SDD (the record forces reflection and teaches the
+shape) and large organizations that must guarantee delivery (every deviation is
+auditable).
+
+Two boundaries make this coherent, and every feature MUST honor them:
+
+- **Record, do not validate.** It is SpecOps's job to record the deviation and its
+  reason deterministically; it is **not** SpecOps's job to judge whether the reason
+  is good — that is the team's internal governance, not the tool's (Principle II
+  records; Principle IV judges). A meaningless reason is a team problem, not a tool
+  failure.
+- **A minimal non-pierceable core.** A small, well-chosen set of safety-critical
+  gates — persisted-schema changes, secrets, public-contract breaks, destructive or
+  irreversible actions — is **not** furável: there SpecOps halts and asks a human
+  (the constitution's Stop-and-Ask gates) rather than recording a bypass. Keeping
+  this core *small* is a deliberate design responsibility; everything else is the
+  paved road.
+
+This philosophy is slated for formalization as a Core Principle in the constitution
+by a future feature; it is stated here so the intervening features stay aligned.
+
 ## Roadmap Rules
 
 1. Implement one numbered feature at a time, in the order defined below unless
@@ -581,7 +609,10 @@ review comment) and gates on that snapshot deterministically (Principle II/VI).
 
 - Provide a versioned, stack-neutral findings **input contract** (a documented JSON
   schema) consumed by `specops handoff finding import-json`, creating structured
-  findings from any producer without coupling SpecOps to any specific tool.
+  findings from any producer without coupling SpecOps to any specific tool. Like the
+  rest of the state-changing surface, ingestion is **invoked by the review directive
+  / workflow** (as a step of `/specops-review`), not typed by hand — a human may run
+  it directly, but it is engine plumbing, not a daily human command.
 - Provide an optional **SARIF input adapter** (complementing the SARIF *output*
   adapter of Feature 012) so SARIF-emitting tools (CodeQL, semgrep, LLM reviewers)
   feed the handoff.
