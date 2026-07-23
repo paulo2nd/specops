@@ -82,10 +82,34 @@ Roadmap status uses four values:
 | 011 | Structured Corrective Handoff | MERGED | 006, 010 | Auditability |
 | 012 | Gate Profiles and Structured Evidence | PLANNED | 006, 008, 010 | Auditability |
 | 013 | Lightweight Workflow Lane | PLANNED | 007, 011, 012 | Adoption |
-| 014 | Diagnostics and Machine Reports | PLANNED | 005–013 | Adoption |
+| 014 | Diagnostics and Machine Reports | PLANNED | 005–016 | Adoption |
 | 015 | External Review Ingestion | PLANNED | 011, 012 | Adoption |
 | 016 | Review Composition in the Workflow | PLANNED | 007, 011 | Adoption |
 | 017 | Gate Rename & Vocabulary Pass | PLANNED | — | Adoption |
+
+### Build sequence (dependency review — 2026-07-23)
+
+The numeric ID is a stable identity assigned at creation; the **build order is not
+strictly numeric**. Per Rule 1, this dependency review sets the sequence for the
+remaining (PLANNED) features:
+
+> **012 → 016 → 017 → 013 → 015 → 014**
+
+- **012** stays first — buildable now (deps merged), completes the Auditability
+  milestone, and unblocks 013 and 015.
+- **016** next — buildable now and the highest-value remaining item: it closes the
+  gap where a *workflow-driven* run passes the deterministic gates without actually
+  performing or enforcing the semantic review.
+- **017** next — buildable now and cheap; rename the gate while the surface is still
+  small, so 013/015/014 compose against `preflight` from the start.
+- **013**, then **015** — both blocked on 012; the proportional lightweight lane
+  (adoption thesis) before the external-review ingestion (enterprise thesis).
+- **014** last — a diagnostic surface must sit over the *final* system; it now
+  depends on 005–016 and reflects the 017 rename.
+
+The 016/017 micro-order is flexible (both are small, buildable now, and both touch
+`workflow.yml`); 017-first minimizes churn, 016-first ships the correctness fix
+sooner.
 
 ## Standard Spec Kit Execution Protocol
 
