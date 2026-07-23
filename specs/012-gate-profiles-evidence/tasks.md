@@ -170,15 +170,15 @@ preserving rule/location/severity (`blocking→error`, `advisory→warning`); wi
 
 ### Tests for User Story 4 (mandatory) ⚠️
 
-- [ ] T030 [P] [US4] Unit test: `gate report --json` carries `output_version` and is byte-for-byte identical for identical recorded state; canonical ordering honored — in `tests/unit/test_gate_report_json.py` [SC-009]
-- [ ] T031 [P] [US4] Unit test: SARIF 2.1.0 projection — rule/location/severity mapping, deduped+sorted `rules[]`, deterministic result order (Feature 011 canonical sort), `region` omitted when a finding has no line — in `tests/unit/test_sarif.py` [SC-009]
-- [ ] T032 [P] [US4] Integration test: `--sarif` opt-in on `specops review` and `specops gate report` — emitted only when requested, absent by default (not a defect), read-only — in `tests/integration/test_sarif_optin.py` [SC-009]
+- [X] T030 [P] [US4] Unit test: `gate report --json` carries `output_version` and is byte-for-byte identical for identical recorded state; canonical ordering honored — in `tests/unit/test_gate_report_json.py` [SC-009]
+- [X] T031 [P] [US4] Unit test: SARIF 2.1.0 projection — rule/location/severity mapping, deduped+sorted `rules[]`, deterministic result order (Feature 011 canonical sort), `region` omitted when a finding has no line — in `tests/unit/test_sarif.py` [SC-009]
+- [X] T032 [P] [US4] Integration test: `--sarif` opt-in on `specops review` and `specops gate report` — emitted only when requested, absent by default (not a defect), read-only — in `tests/integration/test_sarif_optin.py` [SC-009]
 
 ### Implementation for User Story 4
 
-- [ ] T033 [P] [US4] Implement the SARIF 2.1.0 projection of Feature 011 structured findings (reads `handoff` findings) in `src/specops/sarif.py` [SC-009]
-- [ ] T034 [US4] Ensure the gate report / `review --json` builder stamps `output_version` and renders profiles + selection reasons + outcomes + inputs + evidence in a stable shape in `src/specops/cli.py` [SC-009]
-- [ ] T035 [US4] Add the opt-in `--sarif` option to `specops review` and `specops gate report` in `src/specops/cli.py` [SC-009]
+- [X] T033 [P] [US4] Implement the SARIF 2.1.0 projection of Feature 011 structured findings (reads `handoff` findings) in `src/specops/sarif.py` [SC-009]
+- [X] T034 [US4] Ensure the gate report / `review --json` builder stamps `output_version` and renders profiles + selection reasons + outcomes + inputs + evidence in a stable shape in `src/specops/cli.py` [SC-009]
+- [X] T035 [US4] Add the opt-in `--sarif` option to `specops review` and `specops gate report` in `src/specops/cli.py` [SC-009]
 
 **Checkpoint**: All four user stories independently functional; the verification result is a stable, versioned contract with optional SARIF.
 

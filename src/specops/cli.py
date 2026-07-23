@@ -248,16 +248,25 @@ def review(
              "do-while loop body so a REJECTED verdict drives the loop instead of "
              "aborting the run (Feature 007).",
     ),
+    sarif: bool = typer.Option(
+        False, "--sarif",
+        help="Emit a SARIF 2.1.0 projection of the review findings and exit 0 "
+             "(a read-only findings export, opt-in; Feature 012).",
+    ),
 ) -> None:
-    """Run the deterministic review gates (reconcile → lint → test → working tree)."""
+    """Run the deterministic review gates (reconcile → profile suite → working tree)."""
     repo = _require_git(Path("."))
-    from specops import outcome
+    from specops import gateprofiles, outcome
     from specops import review as review_mod
     # Contract: usable from any directory inside the repo — resolve the root.
     if repo.working_tree_dir is None:  # bare repository — no tree to review
         typer.echo("Not a work tree (bare repository).", err=True)
         raise typer.Exit(1)
     root = Path(repo.working_tree_dir)
+    if sarif:
+        _emit_sarif(root)
+        return
+    _ov = gateprofiles.OUTPUT_VERSION
     if json_out:
         try:
             report = review_mod.evaluate(root)
@@ -266,11 +275,11 @@ def review(
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
         gates = [_gate_json(r) for r in report.results]
         if report.passed:
-            typer.echo(outcome.render("review", outcome.PASS, verdict="APPROVED", gates=gates))
+            typer.echo(outcome.render(
+                "review", outcome.PASS, verdict="APPROVED", gates=gates, output_version=_ov))
             return
-        typer.echo(
-            outcome.render("review", outcome.GATE_REJECTION, verdict="REJECTED", gates=gates)
-        )
+        typer.echo(outcome.render(
+            "review", outcome.GATE_REJECTION, verdict="REJECTED", gates=gates, output_version=_ov))
         # --soft keeps exit 0 so a do-while body can branch on the verdict; the
         # terminal gate (hard `specops review`) is what fails closed on REJECTED.
         if not soft:
@@ -822,6 +831,24 @@ def handoff_render(
 # ---------------------------------------------------------------------------
 
 
+def _emit_sarif(root: Path) -> None:
+    """Emit a SARIF 2.1.0 projection of the ledger's findings (read-only, exit 0)."""
+    import json as _json
+
+    from specops import ledger, sarif, speckit
+    feature_dir = speckit.resolve_feature_dir(root)
+    data: dict[str, Any] = {}
+    if feature_dir is not None:
+        try:
+            data = ledger.load_raw(feature_dir)
+        except SpecopsError:
+            data = {}
+    version = "0.0.0"
+    with contextlib.suppress(importlib.metadata.PackageNotFoundError):
+        version = importlib.metadata.version("speckit-specops")
+    typer.echo(_json.dumps(sarif.from_ledger(data, tool_version=version)))
+
+
 def _gate_json(r: Any) -> dict[str, Any]:
     """Provenance object for one gate in a verdict (Feature 012, FR-011/FR-012)."""
     obj: dict[str, Any] = {"name": r.name, "status": r.status}
@@ -890,6 +917,8 @@ def gate_validate(
 @_handle_errors
 def gate_report(
     json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+    sarif: bool = typer.Option(
+        False, "--sarif", help="Emit a SARIF 2.1.0 findings projection and exit 0 (opt-in)."),
 ) -> None:
     """Report the verdict's provenance: each gate's disposition/reason/inputs/evidence
     plus the ledger's structured evidence records (read-only, FR-011/FR-012)."""
@@ -900,6 +929,9 @@ def gate_report(
         typer.echo("Not a work tree (bare repository).", err=True)
         raise typer.Exit(1)
     root = Path(repo.working_tree_dir)
+    if sarif:
+        _emit_sarif(root)
+        return
     try:
         report = review.evaluate(root)
     except (LedgerParseError, SpecopsError) as exc:
