@@ -80,7 +80,7 @@ Roadmap status uses four values:
 | 009 | Context-Aware Planning and Impact | MERGED | 008 | Context Intelligence |
 | 010 | End-to-End Traceability | MERGED | 006, 009 | Auditability |
 | 011 | Structured Corrective Handoff | MERGED | 006, 010 | Auditability |
-| 012 | Gate Profiles and Structured Evidence | PLANNED | 006, 008, 010 | Auditability |
+| 012 | Gate Profiles and Structured Evidence | ACTIVE | 006, 008, 010 | Auditability |
 | 013 | Lightweight Workflow Lane | PLANNED | 007, 011, 012 | Adoption |
 | 014 | Diagnostics and Machine Reports | PLANNED | 005–016 | Adoption |
 | 015 | External Review Ingestion | PLANNED | 011, 012 | Adoption |
