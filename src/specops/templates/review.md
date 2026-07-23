@@ -77,6 +77,12 @@ specops handoff render --round X    # writes revisions/revision-X.md
 specops handoff finding verify <R…-F…>
 ```
 
+If a finding turns out to be a false positive (nothing to fix) or belongs to a superseded round, withdraw it instead of forcing a fix — it stops gating approval:
+
+```
+specops handoff finding dismiss <R…-F…> --reason "<why it is withdrawn>"
+```
+
 Set the review decision:
 - Any **blocking** finding not yet `VERIFIED` → **REJECTED**
 - Every blocking finding `VERIFIED` (advisory may remain open) → **APPROVED**

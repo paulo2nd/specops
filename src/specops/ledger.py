@@ -45,7 +45,9 @@ ACK_FIELDS = ("path", "task", "reason")
 # Feature 011 (v5) — structured corrective handoffs. Each review cycle may carry
 # a nested `handoff` object holding the round's findings; see specops.handoff.
 SEVERITIES = ("blocking", "advisory")
-FINDING_STATES = ("OPEN", "FIXED", "VERIFIED")
+# OPEN → FIXED → VERIFIED is the correction lifecycle; DISMISSED is a terminal
+# state for a finding withdrawn as a false positive or a superseded round.
+FINDING_STATES = ("OPEN", "FIXED", "VERIFIED", "DISMISSED")
 
 PHASES = ["SPECIFY", "PLAN", "TASKS", "IMPLEMENT", "REVIEW", "DONE"]
 TASK_STATUSES = ["PENDING", "IN_PROGRESS", "DONE"]

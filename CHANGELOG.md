@@ -22,7 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `finding fix <id> --task … --commit … (--evidence <CLASS>:<summary> | --auto)`
     moves a finding `OPEN → FIXED`, linking the resolving task, commit(s), and
     evidence; `finding verify <id>` moves it `FIXED → VERIFIED` (mechanical
-    precondition; no auto-verify). Illegal transitions fail closed (exit `2`).
+    precondition; no auto-verify). `finding dismiss <id> --reason "…"` withdraws a
+    false-positive or superseded finding to a terminal `DISMISSED` state so it no
+    longer gates approval. Illegal transitions fail closed (exit `2`).
   - `authorize --path …` records the round's authorized corrective paths; `close`
     closes the handoff once every blocking finding is `VERIFIED` (idempotent;
     exit `1` while any remain).

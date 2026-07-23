@@ -355,6 +355,9 @@ any **blocking** finding is unverified.
 - `specops handoff finding verify <id>` — `FIXED → VERIFIED` (mechanical
   precondition: evidence present + links resolve; no auto-verify). Illegal
   transitions fail closed (exit `2`).
+- `specops handoff finding dismiss <id> --reason "…"` — withdraw a false-positive
+  or superseded finding to a terminal `DISMISSED` state (audited reason) so it no
+  longer gates approval, without fabricating a fix.
 - `specops handoff authorize --path <p> …` — record the round's authorized
   corrective paths (a change outside them surfaces as `unexplained` via `trace`).
 - `specops handoff close` — close the handoff once every blocking finding is

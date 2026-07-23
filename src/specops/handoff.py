@@ -33,6 +33,7 @@ FINDING_RECORDED = "finding_recorded"
 HANDOFF_AUTHORIZED = "handoff_authorized"
 FINDING_FIXED = "finding_fixed"
 FINDING_VERIFIED = "finding_verified"
+FINDING_DISMISSED = "finding_dismissed"
 HANDOFF_CLOSED = "handoff_closed"
 HANDOFF_ALREADY_CLOSED = "handoff_already_closed"
 VALIDATE_OK = "validate_ok"
@@ -59,6 +60,7 @@ _CLASS_FOR_STATUS = {
     HANDOFF_AUTHORIZED: outcome.PASS,
     FINDING_FIXED: outcome.PASS,
     FINDING_VERIFIED: outcome.PASS,
+    FINDING_DISMISSED: outcome.PASS,
     HANDOFF_CLOSED: outcome.PASS,
     HANDOFF_ALREADY_CLOSED: outcome.PASS,
     VALIDATE_OK: outcome.PASS,
@@ -171,15 +173,29 @@ def _canonical(data: dict) -> list[tuple[dict, dict]]:
 
 
 def blocking_approval_check(data: dict) -> list[str]:
-    """Ids of every ``blocking`` finding across all cycles that is not ``VERIFIED``.
+    """Ids of every ``blocking`` finding across all cycles that is not resolved.
 
-    Feature-global (all rounds). Empty ⇒ approval permitted / every handoff is
+    Feature-global (all rounds). A blocking finding is resolved once it is
+    ``VERIFIED`` or ``DISMISSED``; empty ⇒ approval permitted / every handoff is
     closable; empty also when no handoffs exist (degrade to the Feature 006 gate).
-    Sorted by canonical order for a stable, actionable diagnostic.
+    Sorted by canonical order for a stable, actionable diagnostic. A finding
+    lacking a usable ``id`` is skipped here (it is a ledger defect surfaced by
+    ``handoff validate``, not a silent, un-nameable blocker).
     """
+    return _unresolved_blocking_ids(f for _cycle, f in _canonical(data))
+
+
+def _is_resolved(finding: dict) -> bool:
+    """A blocking finding no longer gates approval once VERIFIED or DISMISSED."""
+    return finding.get("state") in ("VERIFIED", "DISMISSED")
+
+
+def _unresolved_blocking_ids(findings: Iterator[dict]) -> list[str]:
+    """Ids of the blocking, unresolved findings in *findings* (with a usable id)."""
     return [
-        f["id"] for cycle, f in _canonical(data)
-        if f.get("severity") == "blocking" and f.get("state") != "VERIFIED"
+        f["id"] for f in findings
+        if f.get("severity") == "blocking" and not _is_resolved(f)
+        and isinstance(f.get("id"), str)
     ]
 
 
@@ -229,6 +245,10 @@ def cmd_finding_add(
     cycle = _current_cycle(data)
     if cycle is None:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: no open review cycle to attach a finding to")
+    existing = cycle.get("handoff")
+    if isinstance(existing, dict) and existing.get("closed_at"):
+        return HandoffResult(cmd, BAD_ARGS,
+                             f"{cmd}: the round's handoff is closed; open a new review round")
     handoff = _ensure_handoff(cycle)
     fid = _next_id(cycle)
     if _find_by_id(data, fid) is not None:
@@ -297,9 +317,15 @@ def cmd_finding_fix(
 
     commits = list(commits or [])
     if auto:
-        started = task_rec.get("started_commit") or ""
-        if started:
-            commits = commits or gitops.commits_in_range(repo, started)
+        # Prefer the task's own recorded commits (scoped to that task) over the
+        # whole started_commit..HEAD range, which would sweep in unrelated work
+        # from other tasks that landed on the branch in between.
+        if not commits:
+            recorded = task_rec.get("commits")
+            if recorded:
+                commits = list(recorded)
+            elif task_rec.get("started_commit"):
+                commits = gitops.commits_in_range(repo, task_rec["started_commit"])
         evidence = evidence or task_rec.get("evidence")
     if not commits:
         return HandoffResult(cmd, PRECONDITION_UNMET,
@@ -343,6 +369,36 @@ def cmd_finding_verify(root: Path, fid: str) -> HandoffResult:
     return HandoffResult(cmd, FINDING_VERIFIED, f"{cmd}: {fid} -> VERIFIED", {"id": fid})
 
 
+def cmd_finding_dismiss(root: Path, fid: str, *, reason: str) -> HandoffResult:
+    """Withdraw a finding to the terminal DISMISSED state with an audited reason.
+
+    Escape hatch for a false-positive or superseded-round finding: it stops
+    gating approval without fabricating a fix (no task/commit/evidence link).
+    An already-VERIFIED finding is not dismissable (it was genuinely resolved)."""
+    cmd = "handoff finding dismiss"
+    reason = (reason or "").strip()
+    if not reason:
+        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: --reason is required", {"id": fid})
+    loaded = _load_write(root)
+    if isinstance(loaded, HandoffResult):
+        return HandoffResult(cmd, loaded.status, loaded.human)
+    feature_dir, data, base_rev, base_violations, _repo = loaded
+
+    located = _find_by_id(data, fid)
+    if located is None:
+        return HandoffResult(cmd, UNKNOWN_FINDING, f"{cmd}: unknown finding '{fid}'", {"id": fid})
+    _cycle, finding = located
+    if finding.get("state") in ("VERIFIED", "DISMISSED"):
+        return HandoffResult(cmd, ILLEGAL_TRANSITION,
+                             f"{cmd}: finding '{fid}' is {finding.get('state')}; not dismissable",
+                             {"id": fid})
+
+    finding.update({"state": "DISMISSED", "dismiss_reason": reason,
+                    "verified_at": ledger.now_utc()})
+    status._finalize(feature_dir, data, base_rev, base_violations)
+    return HandoffResult(cmd, FINDING_DISMISSED, f"{cmd}: {fid} -> DISMISSED", {"id": fid})
+
+
 def cmd_close(root: Path) -> HandoffResult:
     """Close the current round's handoff once all its blocking findings are VERIFIED
     (idempotent re-close; else close-blocked). FR-023."""
@@ -359,10 +415,7 @@ def cmd_close(root: Path) -> HandoffResult:
     if handoff.get("closed_at"):
         return HandoffResult(cmd, HANDOFF_ALREADY_CLOSED, f"{cmd}: already closed (idempotent)")
 
-    unverified = [
-        f["id"] for f in handoff.get("findings") or []
-        if f.get("severity") == "blocking" and f.get("state") != "VERIFIED"
-    ]
+    unverified = _unresolved_blocking_ids(iter(handoff.get("findings") or []))
     if unverified:
         return HandoffResult(cmd, CLOSE_BLOCKED,
                              f"{cmd}: unverified blocking findings remain: {', '.join(unverified)}",
@@ -393,22 +446,32 @@ def cmd_import(root: Path, round: int | None) -> HandoffResult:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: no prose at revisions/revision-{rnd}.md")
 
     handoff = _ensure_handoff(cycle)
+    # Idempotent: skip a legacy line already present as a finding (same
+    # file/line/action), so re-running import never duplicates findings.
+    seen = {(f.get("file"), f.get("line"), f.get("action"))
+            for f in handoff["findings"]}
     imported = 0
     for raw in rev.read_text(encoding="utf-8").splitlines():
         m = trace._FINDING_RE.match(raw.strip())
         if not m:
             continue
+        file = trace._norm(m.group("file"))
+        line = int(m.group("line")) if m.group("line") else None
+        action = m.group("text").strip()
+        if (file, line, action) in seen:
+            continue
+        seen.add((file, line, action))
         handoff["findings"].append({
             "id": _next_id(cycle), "severity": "advisory", "rule": "imported",
-            "file": trace._norm(m.group("file")), "line": int(m.group("line")),
-            "action": m.group("text").strip(),
+            "file": file, "line": line, "action": action,
             "expected_evidence": None, "closure_criteria": None,
             "state": "OPEN", "task": None, "commits": [], "evidence": None,
             "fixed_at": None, "verified_at": None,
         })
         imported += 1
     if imported == 0:
-        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: no importable finding lines found")
+        return HandoffResult(cmd, FINDING_RECORDED,
+                             f"{cmd}: nothing new to import (idempotent)", {"imported": 0})
     status._finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_RECORDED, f"{cmd}: imported {imported} finding(s)",
                          {"imported": imported})
@@ -535,12 +598,22 @@ def render_revision_text(data: dict, round: int) -> str:
 
 
 def render_revision(root: Path, round: int) -> HandoffResult:
-    """Write revisions/revision-<round>.md from the structured state (FR-013)."""
+    """Write revisions/revision-<round>.md from the structured state (FR-013).
+
+    Refuses when the round has **no** structured handoff — otherwise it would
+    overwrite a legacy, hand-authored revision file with ``APPROVED`` and destroy
+    the recorded findings (a round with a handoff but zero findings renders
+    ``APPROVED`` legitimately)."""
     cmd = "handoff render"
     feature_dir = _feature_dir(root)
     if feature_dir is None:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: cannot resolve feature directory")
     data = _load_read(root)
+    cycle = next((c for c in _cycles(data) if c.get("round") == round), None)
+    if cycle is None or not isinstance(cycle.get("handoff"), dict):
+        return HandoffResult(cmd, BAD_ARGS,
+                             f"{cmd}: round {round} has no structured handoff to render "
+                             "(refusing to overwrite any legacy revision file)")
     text = render_revision_text(data, round)
     rev_dir = feature_dir / "revisions"
     rev_dir.mkdir(parents=True, exist_ok=True)

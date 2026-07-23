@@ -735,6 +735,18 @@ def handoff_finding_verify(
     _emit_handoff(handoff.cmd_finding_verify(Path("."), finding_id), json_out)
 
 
+@finding_app.command("dismiss")
+@_handle_errors
+def handoff_finding_dismiss(
+    finding_id: str = typer.Argument(..., help="Finding id (e.g. R2-F01)."),
+    reason: str = typer.Option(..., "--reason", help="Why the finding is withdrawn."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Withdraw a false-positive or superseded finding to the terminal DISMISSED state."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_finding_dismiss(Path("."), finding_id, reason=reason), json_out)
+
+
 @handoff_app.command("authorize")
 @_handle_errors
 def handoff_authorize(

@@ -305,6 +305,99 @@ def test_trace_falls_back_to_legacy_prose(handoff_repo) -> None:
     assert graph["findings"] == [{"file": "a.py", "line": 5, "text": "legacy note", "round": 1}]
 
 
+def test_trace_merges_legacy_and_structured_rounds(handoff_repo) -> None:
+    # round 1 is legacy prose; round 2 is structured — both must appear.
+    root = handoff_repo(review_cycles=[
+        make_cycle(round=1, result="REJECTED"),
+        make_cycle(round=2, findings=[make_finding("R2-F01", file="b.py", line=3, action="do")]),
+    ])
+    (_fd(root) / "revisions").mkdir()
+    (_fd(root) / "revisions" / "revision-1.md").write_text("a.py:5 - legacy note\n")
+    rounds = {f["round"] for f in trace.build_graph(root)["findings"]}
+    assert rounds == {1, 2}  # legacy round 1 no longer dropped
+
+
+# ---------------------------------------------------------------------------
+# Code-review fixes (regression guards)
+# ---------------------------------------------------------------------------
+
+
+def test_render_refuses_round_without_handoff_preserving_legacy(handoff_repo) -> None:
+    root = handoff_repo(review_cycles=[make_cycle()])  # no handoff on round 1
+    rev = _fd(root) / "revisions"
+    rev.mkdir()
+    (rev / "revision-1.md").write_text("a.py:5 - real non-conformity\n")
+    res = handoff.render_revision(root, 1)
+    assert res.status == handoff.BAD_ARGS and res.exit_code == 2
+    # legacy prose untouched — not overwritten with APPROVED
+    assert (rev / "revision-1.md").read_text() == "a.py:5 - real non-conformity\n"
+
+
+def test_dismiss_unblocks_approval(handoff_repo) -> None:
+    root = handoff_repo(review_cycles=[make_cycle(findings=[make_finding("R1-F01")])])
+    res = handoff.cmd_finding_dismiss(root, "R1-F01", reason="false positive")
+    assert res.status == handoff.FINDING_DISMISSED
+    f = read_ledger(_fd(root))["review_cycles"][-1]["handoff"]["findings"][0]
+    assert f["state"] == "DISMISSED" and f["dismiss_reason"] == "false positive"
+    assert handoff.blocking_approval_check(read_ledger(_fd(root))) == []
+
+
+def test_dismiss_requires_reason_and_rejects_verified(handoff_repo) -> None:
+    fnd = make_finding("R1-F01", state="VERIFIED", task="T001", commits=["a"],
+                       evidence="CLI_LOG:x")
+    root = handoff_repo(review_cycles=[make_cycle(findings=[fnd])])
+    assert handoff.cmd_finding_dismiss(root, "R1-F01", reason="").status == handoff.BAD_ARGS
+    r = handoff.cmd_finding_dismiss(root, "R1-F01", reason="x")
+    assert r.status == handoff.ILLEGAL_TRANSITION
+
+
+def test_import_is_idempotent(handoff_repo) -> None:
+    root = handoff_repo(review_cycles=[make_cycle()])
+    (_fd(root) / "revisions").mkdir()
+    (_fd(root) / "revisions" / "revision-1.md").write_text("a.py:5 - note\n")
+    assert handoff.cmd_import(root, None).extra["imported"] == 1
+    assert handoff.cmd_import(root, None).extra["imported"] == 0  # no duplicates
+    findings = read_ledger(_fd(root))["review_cycles"][-1]["handoff"]["findings"]
+    assert len(findings) == 1
+
+
+def test_add_refused_after_close(handoff_repo) -> None:
+    root = handoff_repo(review_cycles=[make_cycle(
+        findings=[make_finding("R1-F01", severity="advisory")],
+        closed_at="2026-07-23T00:00:00+00:00")])
+    res = handoff.cmd_finding_add(root, severity="blocking", rule="x", file="b.py",
+                                  line=1, action="a", expected_evidence="e", closure="c")
+    assert res.status == handoff.BAD_ARGS and "closed" in res.human
+
+
+def test_fix_auto_uses_task_recorded_commits(handoff_repo) -> None:
+    root = handoff_repo(
+        tasks=[make_task("T001", commits=["sha-scoped"])],
+        review_cycles=[make_cycle(findings=[make_finding("R1-F01")])])
+    res = handoff.cmd_finding_fix(root, "R1-F01", task="T001", commits=[],
+                                  evidence=None, auto=True)
+    assert res.status == handoff.FINDING_FIXED
+    f = read_ledger(_fd(root))["review_cycles"][-1]["handoff"]["findings"][0]
+    assert f["commits"] == ["sha-scoped"]  # task's own commits, not a HEAD range
+
+
+def test_blocking_approval_check_skips_finding_without_id() -> None:
+    bad = make_finding("x", severity="blocking", state="OPEN")
+    del bad["id"]
+    data = {"review_cycles": [make_cycle(findings=[bad])]}
+    assert handoff.blocking_approval_check(data) == []  # no crash, skipped
+
+
+def test_lineless_finding_render_import_roundtrip(handoff_repo) -> None:
+    root = handoff_repo(review_cycles=[make_cycle(round=1, findings=[
+        make_finding("R1-F01", file="a.py", line=None, action="file-level issue")])])
+    text = handoff.render_revision_text(read_ledger(_fd(root)), 1)
+    assert text == "a.py - file-level issue\n"
+    # the rendered line-less form is re-parseable
+    m = trace._FINDING_RE.match(text.strip())
+    assert m and m.group("file") == "a.py" and m.group("line") is None
+
+
 def test_import_legacy_prose(handoff_repo) -> None:
     root = handoff_repo(review_cycles=[make_cycle()])
     (_fd(root) / "revisions").mkdir()

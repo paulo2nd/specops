@@ -384,6 +384,9 @@ estiver não verificado.
 - `specops handoff finding verify <id>` — `FIXED → VERIFIED` (pré-condição
   mecânica: evidência presente + vínculos resolvem; sem auto-verificação).
   Transições ilegais falham fechado (saída `2`).
+- `specops handoff finding dismiss <id> --reason "…"` — descarta um achado falso
+  positivo ou de rodada superada para um estado terminal `DISMISSED` (com motivo
+  auditado), de modo que ele deixe de bloquear a aprovação, sem forjar uma correção.
 - `specops handoff authorize --path <p> …` — registra os caminhos corretivos
   autorizados da rodada (uma mudança fora deles aparece como `unexplained` via
   `trace`).
