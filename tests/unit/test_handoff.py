@@ -238,6 +238,19 @@ def test_validate_dangling_task(handoff_repo) -> None:
     assert res.status == handoff.DANGLING_REFERENCE and res.exit_code == 1
 
 
+def test_validate_shares_structural_checks_with_ledger_invariant(handoff_repo) -> None:
+    # An invalid severity is a structural defect: both the write-time invariant
+    # and `handoff validate` now report it from the shared source of truth.
+    from specops import ledger
+    fnd = make_finding("R1-F01", severity="critical")
+    root = handoff_repo(review_cycles=[make_cycle(findings=[fnd])])
+    data = read_ledger(_fd(root))
+    kinds = {k for k, _ in ledger.finding_structural_defects(data)}
+    assert ledger.FINDING_DEFECT_SEVERITY in kinds
+    res = handoff.cmd_validate(root)
+    assert res.exit_code == 1  # validate no longer silently passes a malformed finding
+
+
 def test_validate_duplicate_id(handoff_repo) -> None:
     root = handoff_repo(review_cycles=[make_cycle(findings=[
         make_finding("R1-F01"), make_finding("R1-F01", file="b.py"),

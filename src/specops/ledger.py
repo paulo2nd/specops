@@ -322,18 +322,33 @@ def validate_invariants(data: dict) -> list[str]:
     return violations
 
 
-def _finding_violations(data: dict) -> list[str]:
-    """Validate the optional v5 finding/handoff state nested on review cycles.
+# Finding structural-defect kinds — the single source of truth shared by the
+# write-time invariant (``_finding_violations``) and the read-time
+# ``handoff validate`` report (Feature 011). Reference-resolution defects
+# (unknown task / unresolvable commit) are NOT here — they need repo/ledger
+# context the caller owns, so ``handoff`` adds them on top.
+FINDING_DEFECT_MALFORMED = "malformed"
+FINDING_DEFECT_SEVERITY = "invalid-severity"
+FINDING_DEFECT_STATE = "invalid-state"
+FINDING_DEFECT_MISSING_CLOSURE = "missing-closure"
+FINDING_DEFECT_CONTRADICTORY = "contradictory-state"
+FINDING_DEFECT_DUPLICATE_ID = "duplicate-id"
 
-    Absent is allowed (a pre-v5 ledger, or a round with no findings). When a
-    ``handoff`` is present it MUST be a mapping with a list ``authorized_paths``
-    and a list ``findings``; each finding MUST carry a non-empty ``id``, a valid
-    ``severity``/``state``, and — for a ``blocking`` finding — non-empty
-    ``closure_criteria``/``expected_evidence``. ``FIXED``/``VERIFIED`` findings
-    MUST carry their correction links, and a ``VERIFIED`` finding MUST carry
-    evidence. Finding ids MUST be unique across the feature (Feature 011).
+
+def finding_structural_defects(data: dict) -> list[tuple[str, str]]:
+    """Return ``(kind, message)`` for every *structural* finding defect.
+
+    The shared source of truth for both the write-time invariant and the
+    ``handoff validate`` read command, so the two can never diverge. Validates
+    the optional v5 finding/handoff state nested on review cycles (absent is
+    allowed — a pre-v5 ledger or a round with no findings): a ``handoff`` MUST be
+    a mapping with list ``authorized_paths``/``findings``; each finding MUST carry
+    a non-empty ``id``, a valid ``severity``/``state``, and — for a ``blocking``
+    finding — non-empty ``closure_criteria``/``expected_evidence``;
+    ``FIXED``/``VERIFIED`` findings MUST carry their correction links; a
+    ``VERIFIED`` finding MUST carry evidence; ids MUST be unique per feature.
     """
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     seen: dict[str, int] = {}
     for cycle in data.get("review_cycles") or []:
         if not isinstance(cycle, dict):
@@ -343,39 +358,54 @@ def _finding_violations(data: dict) -> list[str]:
             continue
         rnd = cycle.get("round")
         if not isinstance(handoff, dict):
-            out.append(f"review cycle {rnd} handoff is not a mapping")
+            out.append((FINDING_DEFECT_MALFORMED, f"review cycle {rnd} handoff is not a mapping"))
             continue
         if not isinstance(handoff.get("authorized_paths", []), list):
-            out.append(f"review cycle {rnd} handoff authorized_paths is not a list")
+            out.append((FINDING_DEFECT_MALFORMED,
+                        f"review cycle {rnd} handoff authorized_paths is not a list"))
         findings = handoff.get("findings", [])
         if not isinstance(findings, list):
-            out.append(f"review cycle {rnd} handoff findings is not a list")
+            out.append((FINDING_DEFECT_MALFORMED,
+                        f"review cycle {rnd} handoff findings is not a list"))
             continue
         for f in findings:
             if not isinstance(f, dict):
-                out.append(f"review cycle {rnd} has a malformed finding")
+                out.append((FINDING_DEFECT_MALFORMED,
+                            f"review cycle {rnd} has a malformed finding"))
                 continue
             fid = f.get("id")
             if not isinstance(fid, str) or not fid:
-                out.append(f"review cycle {rnd} has a finding without an id")
+                out.append((FINDING_DEFECT_MALFORMED,
+                            f"review cycle {rnd} has a finding without an id"))
                 continue
             seen[fid] = seen.get(fid, 0) + 1
             if f.get("severity") not in SEVERITIES:
-                out.append(f"finding '{fid}' has invalid severity '{f.get('severity')}'")
+                out.append((FINDING_DEFECT_SEVERITY,
+                            f"finding '{fid}' has invalid severity '{f.get('severity')}'"))
             if f.get("state") not in FINDING_STATES:
-                out.append(f"finding '{fid}' has invalid state '{f.get('state')}'")
+                out.append((FINDING_DEFECT_STATE,
+                            f"finding '{fid}' has invalid state '{f.get('state')}'"))
             if f.get("severity") == "blocking" and not (
                 f.get("closure_criteria") and f.get("expected_evidence")
             ):
-                out.append(f"blocking finding '{fid}' missing closure_criteria/expected_evidence")
+                out.append((FINDING_DEFECT_MISSING_CLOSURE,
+                            f"blocking finding '{fid}' missing closure_criteria/expected_evidence"))
             if f.get("state") in ("FIXED", "VERIFIED") and not (
                 f.get("task") and f.get("commits")
             ):
-                out.append(f"finding '{fid}' in state {f.get('state')} missing task/commits link")
+                out.append((FINDING_DEFECT_CONTRADICTORY,
+                            f"finding '{fid}' in state {f.get('state')} missing task/commits link"))
             if f.get("state") == "VERIFIED" and not f.get("evidence"):
-                out.append(f"finding '{fid}' is VERIFIED without evidence")
-    out.extend(f"duplicate finding id '{fid}'" for fid, n in seen.items() if n > 1)
+                out.append((FINDING_DEFECT_CONTRADICTORY,
+                            f"finding '{fid}' is VERIFIED without evidence"))
+    out.extend((FINDING_DEFECT_DUPLICATE_ID, f"duplicate finding id '{fid}'")
+               for fid, n in sorted(seen.items()) if n > 1)
     return out
+
+
+def _finding_violations(data: dict) -> list[str]:
+    """Write-time invariant messages, derived from :func:`finding_structural_defects`."""
+    return [msg for _kind, msg in finding_structural_defects(data)]
 
 
 def _acknowledgement_violations(data: dict) -> list[str]:

@@ -491,31 +491,39 @@ def _load_read(root: Path) -> dict:
     return ledger.load_raw(feature_dir)
 
 
+# Map a ledger structural-defect kind → the handoff validate status (all
+# GATE_REJECTION / exit 1). Malformation/enum defects share CONTRADICTORY_STATE.
+_STRUCTURAL_DEFECT_STATUS = {
+    ledger.FINDING_DEFECT_MALFORMED: CONTRADICTORY_STATE,
+    ledger.FINDING_DEFECT_SEVERITY: CONTRADICTORY_STATE,
+    ledger.FINDING_DEFECT_STATE: CONTRADICTORY_STATE,
+    ledger.FINDING_DEFECT_MISSING_CLOSURE: MISSING_CLOSURE,
+    ledger.FINDING_DEFECT_CONTRADICTORY: CONTRADICTORY_STATE,
+    ledger.FINDING_DEFECT_DUPLICATE_ID: DUPLICATE_ID,
+}
+
+
 def cmd_validate(root: Path) -> HandoffResult:
-    """Read-only: fail closed on any handoff defect, one diagnostic per defect (FR-010)."""
+    """Read-only: fail closed on any handoff defect, one diagnostic per defect (FR-010).
+
+    Structural defects (malformed shape, invalid severity/state, missing closure,
+    contradictory state, duplicate id) come from the shared
+    :func:`ledger.finding_structural_defects` — the same source of truth as the
+    write-time invariant, so the two can never disagree. Reference-resolution
+    defects (unknown task, unresolvable commit) need repo/ledger context and are
+    added here; commit existence is deferred to ``specops reconcile`` (FR-011)."""
     cmd = "handoff validate"
     data = _load_read(root)
     repo = gitops.find_repo(root)
     known_tasks = {t.get("id") for t in data.get("tasks") or [] if isinstance(t, dict)}
 
-    defects: list[tuple[str, str]] = []  # (status, message)
-    seen: dict[str, int] = {}
+    defects: list[tuple[str, str]] = [  # (status, message)
+        (_STRUCTURAL_DEFECT_STATUS[kind], msg)
+        for kind, msg in ledger.finding_structural_defects(data)
+    ]
     for _cycle, f in _canonical(data):
         fid = str(f.get("id"))
-        state = f.get("state")
         task = f.get("task")
-        seen[fid] = seen.get(fid, 0) + 1
-        # (b) missing closure on a blocking finding
-        if f.get("severity") == "blocking" and not (
-            f.get("closure_criteria") and f.get("expected_evidence")
-        ):
-            defects.append((MISSING_CLOSURE, f"{fid}: blocking finding missing closure criteria"))
-        # (c) contradictory state
-        if state == "VERIFIED" and not f.get("evidence"):
-            defects.append((CONTRADICTORY_STATE, f"{fid}: VERIFIED without linked evidence"))
-        if state in ("FIXED", "VERIFIED") and not (task and f.get("commits")):
-            defects.append((CONTRADICTORY_STATE, f"{fid}: {state} without task/commit link"))
-        # (a) dangling reference: task, or commit not resolvable (existence -> reconcile)
         if task and task not in known_tasks:
             defects.append((DANGLING_REFERENCE, f"{fid}: references unknown task '{task}'"))
         if repo is not None:
@@ -524,10 +532,6 @@ def cmd_validate(root: Path) -> HandoffResult:
                     defects.append((DANGLING_REFERENCE,
                                     f"{fid}: references unresolvable commit '{sha[:7]}' "
                                     "(existence enforced by 'specops reconcile')"))
-    # (d) duplicate id
-    for fid, n in sorted(seen.items()):
-        if n > 1:
-            defects.append((DUPLICATE_ID, f"duplicate finding id '{fid}'"))
 
     if not defects:
         return HandoffResult(cmd, VALIDATE_OK, f"{cmd}: OK — no handoff defects", {"defects": []})
