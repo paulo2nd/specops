@@ -29,7 +29,7 @@ from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 LEDGER_FILENAME = "status.yaml"
 
-CURRENT_SCHEMA = 4
+CURRENT_SCHEMA = 5
 OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
 
 # Feature 009 — the no-map context-provenance marker backfilled onto records
@@ -41,6 +41,11 @@ DEFAULT_WORKFLOW_LANE = "full"
 # Feature 010 (v4) — the top-level acknowledgements list. Each record marks a
 # discovered (unplanned) effective-diff path as legitimate; see specops.trace.
 ACK_FIELDS = ("path", "task", "reason")
+
+# Feature 011 (v5) — structured corrective handoffs. Each review cycle may carry
+# a nested `handoff` object holding the round's findings; see specops.handoff.
+SEVERITIES = ("blocking", "advisory")
+FINDING_STATES = ("OPEN", "FIXED", "VERIFIED")
 
 PHASES = ["SPECIFY", "PLAN", "TASKS", "IMPLEMENT", "REVIEW", "DONE"]
 TASK_STATUSES = ["PENDING", "IN_PROGRESS", "DONE"]
@@ -310,8 +315,65 @@ def validate_invariants(data: dict) -> list[str]:
         violations.extend(_provenance_violations(task, f"task '{task.get('id')}'"))
 
     violations.extend(_acknowledgement_violations(data))
+    violations.extend(_finding_violations(data))
 
     return violations
+
+
+def _finding_violations(data: dict) -> list[str]:
+    """Validate the optional v5 finding/handoff state nested on review cycles.
+
+    Absent is allowed (a pre-v5 ledger, or a round with no findings). When a
+    ``handoff`` is present it MUST be a mapping with a list ``authorized_paths``
+    and a list ``findings``; each finding MUST carry a non-empty ``id``, a valid
+    ``severity``/``state``, and — for a ``blocking`` finding — non-empty
+    ``closure_criteria``/``expected_evidence``. ``FIXED``/``VERIFIED`` findings
+    MUST carry their correction links, and a ``VERIFIED`` finding MUST carry
+    evidence. Finding ids MUST be unique across the feature (Feature 011).
+    """
+    out: list[str] = []
+    seen: dict[str, int] = {}
+    for cycle in data.get("review_cycles") or []:
+        if not isinstance(cycle, dict):
+            continue
+        handoff = cycle.get("handoff")
+        if handoff is None:
+            continue
+        rnd = cycle.get("round")
+        if not isinstance(handoff, dict):
+            out.append(f"review cycle {rnd} handoff is not a mapping")
+            continue
+        if not isinstance(handoff.get("authorized_paths", []), list):
+            out.append(f"review cycle {rnd} handoff authorized_paths is not a list")
+        findings = handoff.get("findings", [])
+        if not isinstance(findings, list):
+            out.append(f"review cycle {rnd} handoff findings is not a list")
+            continue
+        for f in findings:
+            if not isinstance(f, dict):
+                out.append(f"review cycle {rnd} has a malformed finding")
+                continue
+            fid = f.get("id")
+            if not isinstance(fid, str) or not fid:
+                out.append(f"review cycle {rnd} has a finding without an id")
+                continue
+            seen[fid] = seen.get(fid, 0) + 1
+            if f.get("severity") not in SEVERITIES:
+                out.append(f"finding '{fid}' has invalid severity '{f.get('severity')}'")
+            if f.get("state") not in FINDING_STATES:
+                out.append(f"finding '{fid}' has invalid state '{f.get('state')}'")
+            if f.get("severity") == "blocking" and not (
+                f.get("closure_criteria") and f.get("expected_evidence")
+            ):
+                out.append(f"blocking finding '{fid}' missing closure_criteria/expected_evidence")
+            if f.get("state") in ("FIXED", "VERIFIED") and not (
+                f.get("task") and f.get("commits")
+            ):
+                out.append(f"finding '{fid}' in state {f.get('state')} missing task/commits link")
+            if f.get("state") == "VERIFIED" and not f.get("evidence"):
+                out.append(f"finding '{fid}' is VERIFIED without evidence")
+    out.extend(f"duplicate finding id '{fid}'" for fid, n in seen.items() if n > 1)
+    return out
 
 
 def _acknowledgement_violations(data: dict) -> list[str]:

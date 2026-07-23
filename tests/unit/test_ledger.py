@@ -329,8 +329,103 @@ def test_write_new_creates_ledger(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_current_schema_is_v4() -> None:
-    assert ledger.CURRENT_SCHEMA == 4
+def test_current_schema_is_v5() -> None:
+    assert ledger.CURRENT_SCHEMA == 5
+
+
+def _cycle_with_findings(findings: list) -> dict:
+    return {
+        "review_cycles": [{
+            "round": 1, "result": None,
+            "handoff": {"authorized_paths": [], "closed_at": None, "findings": findings},
+        }],
+        "tasks": [{"id": "T001", "status": "DONE", "evidence": "CLI_LOG:x"}],
+        "current_phase": "REVIEW",
+    }
+
+
+def _f(fid: str, **kw: object) -> dict:
+    base = {
+        "id": fid, "severity": "blocking", "rule": "R", "file": "a.py", "line": 1,
+        "action": "do", "expected_evidence": "e", "closure_criteria": "c",
+        "state": "OPEN", "task": None, "commits": [], "evidence": None,
+    }
+    base.update(kw)
+    return base
+
+
+def test_finding_invariants_accept_valid() -> None:
+    data = _cycle_with_findings([_f("R1-F01")])
+    assert ledger._finding_violations(data) == []
+
+
+def test_finding_invariant_bad_severity() -> None:
+    data = _cycle_with_findings([_f("R1-F01", severity="critical")])
+    assert any("invalid severity" in v for v in ledger._finding_violations(data))
+
+
+def test_finding_invariant_bad_state() -> None:
+    data = _cycle_with_findings([_f("R1-F01", state="DONE")])
+    assert any("invalid state" in v for v in ledger._finding_violations(data))
+
+
+def test_finding_invariant_blocking_missing_closure() -> None:
+    data = _cycle_with_findings([_f("R1-F01", closure_criteria=None, expected_evidence=None)])
+    assert any("missing closure" in v for v in ledger._finding_violations(data))
+
+
+def test_finding_invariant_fixed_missing_links() -> None:
+    data = _cycle_with_findings([_f("R1-F01", state="FIXED")])
+    assert any("missing task/commits" in v for v in ledger._finding_violations(data))
+
+
+def test_finding_invariant_verified_without_evidence() -> None:
+    data = _cycle_with_findings([_f("R1-F01", state="VERIFIED", task="T001", commits=["a"])])
+    assert any("VERIFIED without evidence" in v for v in ledger._finding_violations(data))
+
+
+def test_finding_invariant_duplicate_id() -> None:
+    data = _cycle_with_findings([_f("R1-F01"), _f("R1-F01", file="b.py")])
+    assert any("duplicate finding id" in v for v in ledger._finding_violations(data))
+
+
+def test_finding_invariants_absent_handoff_ok() -> None:
+    assert ledger._finding_violations({"review_cycles": [{"round": 1}]}) == []
+
+
+def test_migrate_v4_to_v5_is_additive_and_lossless() -> None:
+    v4 = {
+        "schema_version": 4, "revision": 3, "feature": "f", "branch": "main",
+        "baseline": "abc", "workflow_lane": "full", "active_artifact": "tasks.md",
+        "created_at": "2026-07-21T00:00:00+00:00", "updated_at": "2026-07-21T00:00:00+00:00",
+        "current_phase": "REVIEW",
+        "recovery": {"active_task": None, "last_commit": None, "blockers": [],
+                     "last_consistent_revision": 3,
+                     "last_consistent_at": "2026-07-21T00:00:00+00:00",
+                     "migrated_from_backup": None},
+        "tasks": [{"id": "T001", "status": "DONE", "evidence": "CLI_LOG:x",
+                   "context_provenance": {"map": "none"}}],
+        "review_cycles": [{"round": 1, "started_at": "2026-07-21T00:00:00+00:00",
+                           "completed_at": None, "result": None,
+                           "context_provenance": {"map": "none"}}],
+        "acknowledgements": [{"path": "a.py", "task": "T001", "reason": "r"}],
+        "workflow": {"skipped_steps": []},
+    }
+    assert ledger.classify(v4) == ledger.MIGRATABLE
+    out = ledger.migrate_to_current(v4)
+    assert out["schema_version"] == 5
+    # additive: no handoff keys introduced (absence == zero findings)
+    assert "handoff" not in out["review_cycles"][0]
+    # lossless: acknowledgements, provenance, tasks, cycles all preserved
+    assert out["acknowledgements"] == [{"path": "a.py", "task": "T001", "reason": "r"}]
+    assert out["tasks"][0]["evidence"] == "CLI_LOG:x"
+    assert out["review_cycles"][0]["round"] == 1
+
+
+def test_v5_ledger_with_findings_is_current() -> None:
+    data = _cycle_with_findings([_f("R1-F01")])
+    data["schema_version"] = 5
+    assert ledger.classify(data) == ledger.CURRENT
 
 
 def test_backfill_acknowledgements_adds_empty_list() -> None:
@@ -361,7 +456,7 @@ def test_migrate_v3_to_v4_backfills_acknowledgements() -> None:
     }
     assert ledger.classify(v3) == ledger.MIGRATABLE
     out = ledger.migrate_to_current(v3)
-    assert out["schema_version"] == 4
+    assert out["schema_version"] == ledger.CURRENT_SCHEMA
     assert out["acknowledgements"] == []
     # existing task + provenance preserved byte-for-byte
     assert out["tasks"][0]["evidence"] == "CLI_LOG:x"
