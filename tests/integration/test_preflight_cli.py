@@ -1,4 +1,5 @@
-"""Integration tests for `specops review` — exit codes, streams, ledger immutability (004)."""
+"""Integration tests for `specops preflight` — exit codes, streams, ledger immutability
+(Feature 004 behavior), plus the `specops review` deprecated-alias parity (Feature 017)."""
 import json
 import subprocess
 from pathlib import Path
@@ -10,9 +11,9 @@ import yaml
 # ---------------------------------------------------------------------------
 
 
-def _run_review(root: Path) -> subprocess.CompletedProcess:
+def _run_preflight(root: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["specops", "review"],
+        ["specops", "preflight"],
         cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
     )
 
@@ -68,12 +69,12 @@ def _all_pass_setup(root: Path, phase: str = "IMPLEMENT") -> Path:
 # ---------------------------------------------------------------------------
 
 
-class TestReviewJsonOutcome:
-    """Feature 007 (T008): `review --json` emits the stable outcome contract. [SC-006]"""
+class TestPreflightJsonOutcome:
+    """Feature 007: `preflight --json` emits the stable outcome contract. [SC-006]"""
 
     def _run_json(self, root: Path) -> subprocess.CompletedProcess:
         return subprocess.run(
-            ["specops", "review", "--json"],
+            ["specops", "preflight", "--json"],
             cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
         )
 
@@ -82,6 +83,7 @@ class TestReviewJsonOutcome:
         r = self._run_json(fake_speckit_repo)
         assert r.returncode == 0
         obj = json.loads(r.stdout)
+        assert obj["command"] == "preflight"  # Feature 017 FR-004: mirrors invoked name
         assert obj["class"] == "pass"
         assert obj["outcome"] == "ok"
         assert obj["verdict"] == "APPROVED"
@@ -109,7 +111,7 @@ class TestReviewJsonOutcome:
         _all_pass_setup(fake_speckit_repo)
         (fake_speckit_repo / "stray.txt").write_text("x\n")
         r = subprocess.run(
-            ["specops", "review", "--json", "--soft"],
+            ["specops", "preflight", "--json", "--soft"],
             cwd=fake_speckit_repo, capture_output=True, text=True, stdin=subprocess.DEVNULL,
         )
         assert r.returncode == 0  # soft: does not abort the loop
@@ -118,10 +120,10 @@ class TestReviewJsonOutcome:
         assert obj["class"] == "gate-rejection"
 
 
-class TestReviewExitCodes:
+class TestPreflightExitCodes:
     def test_all_pass_exit_zero_report_on_stdout(self, fake_speckit_repo: Path) -> None:
         _all_pass_setup(fake_speckit_repo)
-        result = _run_review(fake_speckit_repo)
+        result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 0
         assert "[gate] reconcile" in result.stdout
         assert "[gate] working-tree" in result.stdout
@@ -130,7 +132,7 @@ class TestReviewExitCodes:
     def test_gate_failure_exit_one_evidence_on_stderr(self, fake_speckit_repo: Path) -> None:
         _all_pass_setup(fake_speckit_repo)
         (fake_speckit_repo / "stray.txt").write_text("x\n")
-        result = _run_review(fake_speckit_repo)
+        result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 1
         assert "stray.txt" in result.stderr
         assert result.stdout == ""
@@ -138,13 +140,13 @@ class TestReviewExitCodes:
     def test_corrupt_ledger_exit_two(self, fake_speckit_repo: Path) -> None:
         ledger = _all_pass_setup(fake_speckit_repo)
         ledger.write_text("{{{ not yaml :::")
-        result = _run_review(fake_speckit_repo)
+        result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 2
 
     def test_missing_config_exit_one_with_init_guidance(self, fake_speckit_repo: Path) -> None:
         baseline = _git(fake_speckit_repo, "rev-parse", "HEAD")
         _write_ledger(fake_speckit_repo, baseline)
-        result = _run_review(fake_speckit_repo)
+        result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 1
         assert "specops.json" in result.stderr
         assert "init" in result.stderr
@@ -155,11 +157,11 @@ class TestReviewExitCodes:
 # ---------------------------------------------------------------------------
 
 
-class TestReviewReadOnly:
+class TestPreflightReadOnly:
     def test_ledger_byte_identical_on_pass(self, fake_speckit_repo: Path) -> None:
         ledger = _all_pass_setup(fake_speckit_repo)
         before = ledger.read_bytes()
-        result = _run_review(fake_speckit_repo)
+        result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 0
         assert ledger.read_bytes() == before
 
@@ -167,7 +169,7 @@ class TestReviewReadOnly:
         ledger = _all_pass_setup(fake_speckit_repo)
         (fake_speckit_repo / "stray.txt").write_text("x\n")
         before = ledger.read_bytes()
-        result = _run_review(fake_speckit_repo)
+        result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 1
         assert ledger.read_bytes() == before
 
@@ -177,11 +179,11 @@ class TestReviewReadOnly:
 # ---------------------------------------------------------------------------
 
 
-class TestReviewCiGate:
+class TestPreflightCiGate:
     def test_runs_in_any_ledger_phase(self, fake_speckit_repo: Path) -> None:
         """No REVIEW-phase precondition: gates evaluate normally in TASKS."""
         _all_pass_setup(fake_speckit_repo, phase="TASKS")
-        result = _run_review(fake_speckit_repo)
+        result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 0
         assert "[gate] working-tree" in result.stdout
 
@@ -190,7 +192,7 @@ class TestReviewCiGate:
         _all_pass_setup(fake_speckit_repo)
         subdir = fake_speckit_repo / "specs" / "001-demo"
         result = subprocess.run(
-            ["specops", "review"],
+            ["specops", "preflight"],
             cwd=subdir, capture_output=True, text=True, stdin=subprocess.DEVNULL,
         )
         assert result.returncode == 0
@@ -200,13 +202,106 @@ class TestReviewCiGate:
         """Closed stdin (CI): completes without prompting on pass and on failure."""
         _all_pass_setup(fake_speckit_repo)
         ok = subprocess.run(
-            ["specops", "review"], cwd=fake_speckit_repo,
+            ["specops", "preflight"], cwd=fake_speckit_repo,
             capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
         )
         assert ok.returncode == 0
         (fake_speckit_repo / "stray.txt").write_text("x\n")
         fail = subprocess.run(
-            ["specops", "review"], cwd=fake_speckit_repo,
+            ["specops", "preflight"], cwd=fake_speckit_repo,
             capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
         )
         assert fail.returncode == 1
+
+
+# ---------------------------------------------------------------------------
+# Feature 017: `specops review` deprecated-alias parity
+# ---------------------------------------------------------------------------
+
+
+def _run_review(root: Path, *flags: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["specops", "review", *flags],
+        cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+    )
+
+
+class TestReviewAliasParity:
+    """FR-002/FR-003/FR-004, SC-002: `specops review` is a behavior-identical alias of
+    `specops preflight`, differing only by exactly one stderr deprecation line and the
+    invoked-name-mirroring `command` value; stdout stays byte-identical."""
+
+    def test_stdout_byte_identical_and_one_stderr_line_on_pass(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        _all_pass_setup(fake_speckit_repo)
+        pre = _run_preflight(fake_speckit_repo)
+        rev = _run_review(fake_speckit_repo)
+        # Same exit code and byte-identical stdout (the notice never touches stdout).
+        assert rev.returncode == pre.returncode == 0
+        assert rev.stdout == pre.stdout
+        # preflight is silent on stderr; review emits exactly one deprecation line.
+        assert pre.stderr == ""
+        stderr_lines = [ln for ln in rev.stderr.splitlines() if ln.strip()]
+        assert len(stderr_lines) == 1
+        assert "deprecated" in stderr_lines[0]
+        assert "specops preflight" in stderr_lines[0]
+
+    def test_json_stdout_is_clean_and_mirrors_review_name(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        _all_pass_setup(fake_speckit_repo)
+        rev = _run_review(fake_speckit_repo, "--json")
+        assert rev.returncode == 0
+        obj = json.loads(rev.stdout)  # stdout is valid JSON, no notice mixed in
+        assert obj["command"] == "review"  # FR-004: mirrors the invoked alias name
+        # The notice is the only thing on stderr.
+        assert "deprecated" in rev.stderr
+
+    def test_json_stdout_byte_identical_except_command_value(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        _all_pass_setup(fake_speckit_repo)
+        pre_proc = subprocess.run(
+            ["specops", "preflight", "--json"], cwd=fake_speckit_repo,
+            capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        )
+        pre = json.loads(pre_proc.stdout)
+        rev = json.loads(_run_review(fake_speckit_repo, "--json").stdout)
+        assert pre["command"] == "preflight" and rev["command"] == "review"
+        assert pre.keys() == rev.keys()  # SC-005: no key renamed
+        assert {k: v for k, v in pre.items() if k != "command"} == {
+            k: v for k, v in rev.items() if k != "command"
+        }
+
+    def test_failure_parity_still_one_stderr_line(self, fake_speckit_repo: Path) -> None:
+        _all_pass_setup(fake_speckit_repo)
+        (fake_speckit_repo / "stray.txt").write_text("x\n")
+        rev = _run_review(fake_speckit_repo)
+        assert rev.returncode == 1  # same fail-closed exit as preflight
+        # Deprecation notice + the gate evidence both land on stderr; the notice
+        # is present exactly once and stdout stays empty (hard mode).
+        assert rev.stdout == ""
+        assert rev.stderr.count("specops review is deprecated") == 1
+        assert "stray.txt" in rev.stderr
+
+
+class TestReviewAliasHelp:
+    """FR-014: `review` is marked deprecated in help; `preflight` is canonical."""
+
+    def test_review_help_marks_deprecated(self, fake_speckit_repo: Path) -> None:
+        r = subprocess.run(
+            ["specops", "review", "--help"],
+            cwd=fake_speckit_repo, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        )
+        assert r.returncode == 0
+        assert "DEPRECATED" in r.stdout.upper()
+        assert "preflight" in r.stdout
+
+    def test_preflight_listed_as_command(self, fake_speckit_repo: Path) -> None:
+        r = subprocess.run(
+            ["specops", "--help"],
+            cwd=fake_speckit_repo, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        )
+        assert r.returncode == 0
+        assert "preflight" in r.stdout

@@ -28,7 +28,7 @@ Single Python project: `src/specops/`, `tests/` at repo root. Installable extens
 
 **Purpose**: Establish the green baseline the "zero regressions" criteria (SC-004/SC-006) are measured against.
 
-- [ ] T001 Confirm a clean baseline on branch `017-gate-rename-vocabulary`: run `conda run -n specops ruff check .`, `conda run -n specops mypy src`, and `conda run -n specops pytest -q` and record that all pass before any change.
+- [X] T001 Confirm a clean baseline on branch `017-gate-rename-vocabulary`: run `conda run -n specops ruff check .`, `conda run -n specops mypy src`, and `conda run -n specops pytest -q` and record that all pass before any change. (baseline: ruff ✓, mypy ✓, 748 passed, 87.9% cov)
 
 ---
 
@@ -38,7 +38,7 @@ Single Python project: `src/specops/`, `tests/` at repo root. Installable extens
 
 **⚠️ CRITICAL**: US1 and US2 cannot begin until this is complete.
 
-- [ ] T002 Refactor `src/specops/cli.py`: extract the body of `review()` into a private shared impl `_run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool)` that passes `command_name` into every `outcome.render(command_name, …)` call (replacing the hard-coded `"review"`). Leave the existing `review` command delegating to `_run_gate("review", …)` with no behavior change and no notice yet, so all existing tests still pass.
+- [X] T002 Refactor `src/specops/cli.py`: extract the body of `review()` into a private shared impl `_run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool)` that passes `command_name` into every `outcome.render(command_name, …)` call (replacing the hard-coded `"review"`). Leave the existing `review` command delegating to `_run_gate("review", …)` with no behavior change and no notice yet, so all existing tests still pass.
 
 **Checkpoint**: `conda run -n specops pytest -q` still green; `specops review` behaves exactly as before.
 
@@ -52,12 +52,12 @@ Single Python project: `src/specops/`, `tests/` at repo root. Installable extens
 
 ### Tests for User Story 1 (write first, ensure they FAIL) ⚠️
 
-- [ ] T003 [P] [US1] In `tests/unit/test_outcome_contract.py`, add a case asserting `outcome.render("preflight", outcome.PASS, verdict="APPROVED", gates=[…])` yields `"command": "preflight"` with unchanged keys/shape; confirm existing `render("review", …)` cases still hold. (SC-005)
-- [ ] T004 [P] [US1] Create `tests/integration/test_preflight_cli.py` with `specops preflight` cases: (a) passing fixture → `class:"pass"`, `verdict:"APPROVED"`, exit 0, `command:"preflight"`, `result.stderr == ""`; (b) failing fixture in hard mode → `class:"gate-rejection"`, exit 1, evidence on stderr; (c) `--json --soft` on a rejecting fixture → exit 0 with the verdict in JSON; (d) `--sarif` → exit 0 read-only. Use the repo's `from typer.testing import CliRunner; runner = CliRunner()` pattern and read `result.stderr`/`result.stdout` separately — do NOT pass `mix_stderr=` (removed in Click 8.4.2; finding I1). (SC-001)
+- [X] T003 [P] [US1] In `tests/unit/test_outcome_contract.py`, add a case asserting `outcome.render("preflight", outcome.PASS, verdict="APPROVED", gates=[…])` yields `"command": "preflight"` with unchanged keys/shape; confirm existing `render("review", …)` cases still hold. (SC-005)
+- [X] T004 [P] [US1] Create `tests/integration/test_preflight_cli.py` with `specops preflight` cases: (a) passing fixture → `class:"pass"`, `verdict:"APPROVED"`, exit 0, `command:"preflight"`, `result.stderr == ""`; (b) failing fixture in hard mode → `class:"gate-rejection"`, exit 1, evidence on stderr; (c) `--json --soft` on a rejecting fixture → exit 0 with the verdict in JSON; (d) `--sarif` → exit 0 read-only. Use the repo's `from typer.testing import CliRunner; runner = CliRunner()` pattern and read `result.stderr`/`result.stdout` separately — do NOT pass `mix_stderr=` (removed in Click 8.4.2; finding I1). (SC-001)
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] In `src/specops/cli.py`, register `@app.command("preflight")` delegating to `_run_gate("preflight", …)` with the identical `--json` / `--soft` / `--sarif` options and docstring; make `preflight` the canonical command. Run T003/T004 to green.
+- [X] T005 [US1] In `src/specops/cli.py`, register `@app.command("preflight")` delegating to `_run_gate("preflight", …)` with the identical `--json` / `--soft` / `--sarif` options and docstring; make `preflight` the canonical command. Run T003/T004 to green.
 
 **Checkpoint**: `specops preflight` fully functional and independently testable.
 
@@ -71,13 +71,13 @@ Single Python project: `src/specops/`, `tests/` at repo root. Installable extens
 
 ### Tests for User Story 2 (write first, ensure they FAIL) ⚠️
 
-- [ ] T006 [P] [US2] In `tests/integration/test_preflight_cli.py`, add alias tests: for identical fixture state, `specops review` stdout is byte-identical to `specops preflight` and exit codes match; stderr is exactly one line naming `specops preflight` + the removal window; `specops review --json` stdout is valid JSON with `command:"review"` and no notice text mixed in. (SC-002, FR-003/FR-004)
-- [ ] T007 [P] [US2] Add a help-surface test asserting `specops review --help` shows a `[DEPRECATED — use 'specops preflight']` marker in its help/short_help text and that `preflight` is presented as canonical. Do NOT assert on Click's `deprecated=` flag output. (FR-014)
+- [X] T006 [P] [US2] In `tests/integration/test_preflight_cli.py`, add alias tests: for identical fixture state, `specops review` stdout is byte-identical to `specops preflight` and exit codes match; stderr is exactly one line naming `specops preflight` + the removal window; `specops review --json` stdout is valid JSON with `command:"review"` and no notice text mixed in. (SC-002, FR-003/FR-004)
+- [X] T007 [P] [US2] Add a help-surface test asserting `specops review --help` shows a `[DEPRECATED — use 'specops preflight']` marker in its help/short_help text and that `preflight` is presented as canonical. Do NOT assert on Click's `deprecated=` flag output. (FR-014)
 
 ### Implementation for User Story 2
 
-- [ ] T008 [US2] In `src/specops/cli.py`, register the `review` command with a `help`/`short_help` that begins `[DEPRECATED — use 'specops preflight']` and emit **exactly one** deprecation line to **stderr** via `typer.echo(<notice>, err=True)` **before** delegating to `_run_gate("review", …)`; the notice names `specops preflight` and the removal window and is NOT suppressible by any flag or env var. **Do NOT set `deprecated=True`** on the command: the installed Typer 0.27.0 / Click 8.4.2 auto-emits its own second stderr line (`DeprecationWarning: The command 'review' is deprecated.`) with the wrong wording, which would break FR-002/SC-002's "exactly one line" (analysis finding C1). The single hand-emitted notice is the only deprecation output. Run T006/T007 to green.
-- [ ] T009 [US2] Update `tests/integration/test_review_cli.py`: re-point the pure-behavior assertions (verdict, exit code, stdout, `result.stderr == ""`) to `specops preflight` so the newly-added alias notice does not cause a false regression; retain any assertion that legitimately exercises the `review` name as the alias. (guards SC-004)
+- [X] T008 [US2] In `src/specops/cli.py`, register the `review` command with a `help`/`short_help` that begins `[DEPRECATED — use 'specops preflight']` and emit **exactly one** deprecation line to **stderr** via `typer.echo(<notice>, err=True)` **before** delegating to `_run_gate("review", …)`; the notice names `specops preflight` and the removal window and is NOT suppressible by any flag or env var. **Do NOT set `deprecated=True`** on the command: the installed Typer 0.27.0 / Click 8.4.2 auto-emits its own second stderr line (`DeprecationWarning: The command 'review' is deprecated.`) with the wrong wording, which would break FR-002/SC-002's "exactly one line" (analysis finding C1). The single hand-emitted notice is the only deprecation output. Run T006/T007 to green.
+- [X] T009 [US2] Update `tests/integration/test_review_cli.py`: re-point the pure-behavior assertions (verdict, exit code, stdout, `result.stderr == ""`) to `specops preflight` so the newly-added alias notice does not cause a false regression; retain any assertion that legitimately exercises the `review` name as the alias. (guards SC-004)
 
 **Checkpoint**: MVP complete — `preflight` and the `review` alias both work; upgrading breaks no existing invocation.
 
