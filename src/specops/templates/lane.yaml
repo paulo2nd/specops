@@ -1,0 +1,21 @@
+schema_version: 1
+lane_id: "{{lane-id}}"
+feature: "{{feature-name}}"
+branch: "{{branch}}"
+baseline: "{{commit-hash}}"
+created_at: "{{timestamp}}"
+updated_at: "{{timestamp}}"
+
+state: "OPEN"
+
+eligibility:
+  confirmed: true
+  criteria_version: 1
+  answers: []
+  bundled: false
+  bundle_note: null
+
+decisions: []
+
+closure: null
+promotion: null

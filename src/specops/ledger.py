@@ -172,6 +172,26 @@ def refusal_message(cls: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+def attach_lane_provenance(data: dict, lane_data: dict) -> dict:
+    """Add additive lightweight-lane promotion provenance to a synthesized ledger.
+
+    Feature 013: a promoted lane synthesizes a full ledger (this dict) that records it
+    came from the lite lane. The keys are additive on the v6 schema (no schema bump):
+    ``promoted_from_lane`` and a ``lane_provenance`` block carrying the lane's
+    eligibility answers, stop-and-ask decisions, and any gathered closure evidence, so
+    the full workflow continues with populated context rather than an empty ledger (P-2).
+    """
+    data["promoted_from_lane"] = True
+    closure = lane_data.get("closure") or {}
+    data["lane_provenance"] = {
+        "lane_id": lane_data.get("lane_id"),
+        "eligibility": lane_data.get("eligibility"),
+        "decisions": lane_data.get("decisions") or [],
+        "evidence": (closure.get("gate_evidence") or {}).get("gates", []),
+    }
+    return data
+
+
 def migrate_to_current(data: dict) -> dict:
     """Deterministically upgrade a migratable ledger to CURRENT_SCHEMA. Pure; no I/O.
 

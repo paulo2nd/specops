@@ -31,8 +31,8 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 **Purpose**: Scaffolding the lane work depends on (the package already exists).
 
-- [ ] T001 [P] Create `tests/fixtures/lane/` with fixture repos/diffs: an eligible small change, one diff per **diff-detectable** category (migration, secret, dependency, destructive), attestation cases for the two attested categories (root-cause, public-contract), and a multi-commit branch for promotion
-- [ ] T002 [P] Create the lane-record scaffold `src/specops/templates/lane.yaml` per data-model §1 (schema_version 1, state OPEN, eligibility/decisions/closure/promotion placeholders)
+- [X] T001 [P] Create `tests/fixtures/lane/` with fixture repos/diffs: an eligible small change, one diff per **diff-detectable** category (migration, secret, dependency, destructive), attestation cases for the two attested categories (root-cause, public-contract), and a multi-commit branch for promotion
+- [X] T002 [P] Create the lane-record scaffold `src/specops/templates/lane.yaml` per data-model §1 (schema_version 1, state OPEN, eligibility/decisions/closure/promotion placeholders)
 
 ---
 
@@ -40,8 +40,8 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 **Purpose**: The lane record layer and CLI wiring every story hangs off. ⚠️ No user story can proceed until this is done.
 
-- [ ] T003 Create `src/specops/lane.py` — lane-record load/save/validate with atomic write and `updated_at` refresh, schema constants and invariants INV-1…INV-6 (schema_version==1, terminal-state exclusivity, no bypass field, commit-reachability via `gitops.is_ancestor`, `status.yaml` mutual-exclusion), reusing `ledger.now_utc` and `gitops`
-- [ ] T004 Register a `lane` Typer sub-app in `src/specops/cli.py` (`app.add_typer(lane_app, name="lane")`) and add a `LaneResult(CommandResult)` outcome mapping in `src/specops/lane.py` so every lane command renders via `outcome.render` with 0/1/2 exit codes (Principle VI)
+- [X] T003 Create `src/specops/lane.py` — lane-record load/save/validate with atomic write and `updated_at` refresh, schema constants and invariants INV-1…INV-6 (schema_version==1, terminal-state exclusivity, no bypass field, commit-reachability via `gitops.is_ancestor`, `status.yaml` mutual-exclusion), reusing `ledger.now_utc` and `gitops`
+- [X] T004 Register a `lane` Typer sub-app in `src/specops/cli.py` (`app.add_typer(lane_app, name="lane")`) and add a `LaneResult(CommandResult)` outcome mapping in `src/specops/lane.py` so every lane command renders via `outcome.render` with 0/1/2 exit codes (Principle VI)
 
 **Checkpoint**: Lane record + CLI surface exist; story implementation can begin.
 
@@ -55,14 +55,14 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T005 [P] [US1] Unit tests for `lane start`/`status`/`close` happy path + eligibility fail-closed + `status.yaml` mutual-exclusion in `tests/unit/test_lane.py`
-- [ ] T006 [P] [US1] Integration test of the clean-lane flow (start → commit → close, asserting absence of full-lifecycle artifacts) in `tests/integration/test_lane_flow.py`
+- [X] T005 [P] [US1] Unit tests for `lane start`/`status`/`close` happy path + eligibility fail-closed + `status.yaml` mutual-exclusion in `tests/unit/test_lane.py`
+- [X] T006 [P] [US1] Integration test of the clean-lane flow (start → commit → close, asserting absence of full-lifecycle artifacts) in `tests/integration/test_lane_flow.py`
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Implement `specops lane start` in `src/specops/lane.py` + `src/specops/cli.py`: record eligibility answers (criteria v1), fail closed (exit 1) if any criterion unconfirmed, refuse (exit 2) if `lane.yaml` or `status.yaml` already exists (INV-6)
-- [ ] T008 [US1] Implement `specops lane status [--json]` (read-only summary: state, baseline, decision count, terminal outcome) in `src/specops/lane.py` + `src/specops/cli.py`
-- [ ] T009 [US1] Implement `specops lane close [--json]` core in `src/specops/lane.py` + `src/specops/cli.py`: run the `review` preflight gate-profile suite, fail closed on a required FAIL/unavailable or a missing/flagged attestation (both must be `clear`), set `state: CLOSED`, write the `closure` block with evidence refs and a retrospective summary (C-1)
+- [X] T007 [US1] Implement `specops lane start` in `src/specops/lane.py` + `src/specops/cli.py`: record eligibility answers (criteria v1), fail closed (exit 1) if any criterion unconfirmed, refuse (exit 2) if `lane.yaml` or `status.yaml` already exists (INV-6)
+- [X] T008 [US1] Implement `specops lane status [--json]` (read-only summary: state, baseline, decision count, terminal outcome) in `src/specops/lane.py` + `src/specops/cli.py`
+- [X] T009 [US1] Implement `specops lane close [--json]` core in `src/specops/lane.py` + `src/specops/cli.py`: run the `review` preflight gate-profile suite, fail closed on a required FAIL/unavailable or a missing/flagged attestation (both must be `clear`), set `state: CLOSED`, write the `closure` block with evidence refs and a retrospective summary (C-1)
 
 **Checkpoint**: US1 is a runnable MVP lane — start, status, fail-closed close — testable via the CLI primitives.
 
@@ -76,15 +76,15 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T010 [P] [US2] Unit tests for the safety detector — one per **diff-detectable** category (migration, secret, dependency, destructive) + generic-default patterns + `specops.json` override + non-removable floor — and the **two** attestations (root-cause, public-contract), asserting each is always presented and a flag answer halts, in `tests/unit/test_safety.py`
-- [ ] T011 [P] [US2] Integration test that each detected category and a flagged attestation (root-cause or public-contract) halt the lane and offer only halt/promote in `tests/integration/test_lane_flow.py`
+- [X] T010 [P] [US2] Unit tests for the safety detector — one per **diff-detectable** category (migration, secret, dependency, destructive) + generic-default patterns + `specops.json` override + non-removable floor — and the **two** attestations (root-cause, public-contract), asserting each is always presented and a flag answer halts, in `tests/unit/test_safety.py`
+- [X] T011 [P] [US2] Integration test that each detected category and a flagged attestation (root-cause or public-contract) halt the lane and offer only halt/promote in `tests/integration/test_lane_flow.py`
 
 ### Implementation for User Story 2
 
-- [ ] T012 [P] [US2] Create `src/specops/safety.py` — `detect(diff_status, overrides) -> [Detection]` over `gitops.effective_diff_status` for the **four** diff-detectable categories (migration, secret, dependency, destructive) with generic built-in path/pattern defaults (research R5), plus the model for the **two** always-on attestations (root-cause, public-contract)
-- [ ] T013 [P] [US2] Add an optional `lane` overrides block to `src/specops/config.py` (per-category glob add/replace; the built-in detection floor is non-removable to protect the core — Complexity Tracking)
-- [ ] T014 [US2] Implement `specops lane check [--staged] [--json]` (read-only; `detections`/`categories` over the four diff-detectable categories; exit 1 on any detection) in `src/specops/lane.py` + `src/specops/cli.py` using `safety.py`
-- [ ] T015 [US2] Implement `specops lane attest --root-cause {clear|flag} --public-contract {clear|flag} [--json]` (record both always-on attestations; either `flag` → exit 1) in `src/specops/lane.py` + `src/specops/cli.py`
+- [X] T012 [P] [US2] Create `src/specops/safety.py` — `detect(diff_status, overrides) -> [Detection]` over `gitops.effective_diff_status` for the **four** diff-detectable categories (migration, secret, dependency, destructive) with generic built-in path/pattern defaults (research R5), plus the model for the **two** always-on attestations (root-cause, public-contract)
+- [X] T013 [P] [US2] Add an optional `lane` overrides block to `src/specops/config.py` (per-category glob add/replace; the built-in detection floor is non-removable to protect the core — Complexity Tracking)
+- [X] T014 [US2] Implement `specops lane check [--staged] [--json]` (read-only; `detections`/`categories` over the four diff-detectable categories; exit 1 on any detection) in `src/specops/lane.py` + `src/specops/cli.py` using `safety.py`
+- [X] T015 [US2] Implement `specops lane attest --root-cause {clear|flag} --public-contract {clear|flag} [--json]` (record both always-on attestations; either `flag` → exit 1) in `src/specops/lane.py` + `src/specops/cli.py`
 
 **Checkpoint**: The safety core halts every category; the record schema cannot express a bypass.
 
@@ -98,14 +98,14 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T016 [P] [US3] Unit tests for ledger synthesis-at-PLAN and the commit-preservation invariant (reachable set unchanged) in `tests/unit/test_lane.py`
-- [ ] T017 [P] [US3] Integration test of promotion via both triggers (`safety-trip`, `scope-growth`) using the identical path (FR-016) in `tests/integration/test_lane_flow.py`
+- [X] T016 [P] [US3] Unit tests for ledger synthesis-at-PLAN and the commit-preservation invariant (reachable set unchanged) in `tests/unit/test_lane.py`
+- [X] T017 [P] [US3] Integration test of promotion via both triggers (`safety-trip`, `scope-growth`) using the identical path (FR-016) in `tests/integration/test_lane_flow.py`
 
 ### Implementation for User Story 3
 
-- [ ] T018 [P] [US3] Add additive promotion-provenance keys (`promoted_from_lane`, `lane_provenance`) and a small helper to `src/specops/ledger.py` (no schema bump; v6 stays current)
-- [ ] T019 [P] [US3] Add a synthesize-full-ledger-at-PLAN helper to `src/specops/status.py`, reusing the `status.yaml` template-fill logic (baseline, `current_phase: PLAN`, imported commits as existing work)
-- [ ] T020 [US3] Implement `specops lane promote --reason {safety-trip|scope-growth} [--json]` in `src/specops/lane.py` + `src/specops/cli.py`: reachability-check every commit (`gitops.is_ancestor`; exit 2 on divergence), synthesize the ledger, copy lane context into `lane_provenance`, mark `state: PROMOTED`
+- [X] T018 [P] [US3] Add additive promotion-provenance keys (`promoted_from_lane`, `lane_provenance`) and a small helper to `src/specops/ledger.py` (no schema bump; v6 stays current)
+- [X] T019 [P] [US3] Add a synthesize-full-ledger-at-PLAN helper to `src/specops/status.py`, reusing the `status.yaml` template-fill logic (baseline, `current_phase: PLAN`, imported commits as existing work)
+- [X] T020 [US3] Implement `specops lane promote --reason {safety-trip|scope-growth} [--json]` in `src/specops/lane.py` + `src/specops/cli.py`: reachability-check every commit (`gitops.is_ancestor`; exit 2 on divergence), synthesize the ledger, copy lane context into `lane_provenance`, mark `state: PROMOTED`
 
 **Checkpoint**: All three P1 stories complete — the lane runs and escapes losslessly.
 
@@ -177,7 +177,7 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 - [ ] T034 [P] Add a Feature 013 entry under `[Unreleased]` in `CHANGELOG.md`
 - [ ] T035 Run the `quickstart.md` scenarios A–F against a fixture repo (never this repository — No Self-Application)
 - [ ] T036 Run the full quality gates — `conda run -n specops ruff check`, `conda run -n specops mypy src`, `conda run -n specops pytest` — and resolve findings; assert no `lane` command or `specops-lite` step names a gate "review" (FR-021 vocabulary guard, L1)
-- [ ] T037 [P] Integration test: safe degradation (no context map present) and offline operation for `lane check`/`close`/`promote` in `tests/integration/test_lane_flow.py` (FR-019/SC-006, G1)
+- [X] T037 [P] Integration test: safe degradation (no context map present) and offline operation for `lane check`/`close`/`promote` in `tests/integration/test_lane_flow.py` (FR-019/SC-006, G1)
 
 ---
 

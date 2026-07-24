@@ -230,6 +230,38 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
     return f"Ledger created: {rel}"
 
 
+def synthesize_ledger_at_plan(feature_dir: Path, repo: git.Repo, lane_data: dict) -> Path:
+    """Synthesize a full ledger at the PLAN phase from a promoted lightweight lane.
+
+    Feature 013 (FR-015): builds ``status.yaml`` from the standard template, positioned at
+    ``current_phase: PLAN`` with the lane's baseline, so the promoted change flows through
+    plan → tasks → implement → review before DONE. The lane's branch commits are preserved
+    by the branch itself (promotion never rewrites history); their context is carried into
+    the ledger via :func:`ledger.attach_lane_provenance`. Fails if a ledger already exists.
+    """
+    ledger_path = _ledger_path(feature_dir)
+    if ledger_path.is_file():
+        raise SpecopsError(f"Ledger already exists: {ledger_path}")
+
+    branch = gitops.current_branch(repo)
+    baseline = str(lane_data.get("baseline") or gitops.head_sha(repo))
+    ts = now_utc()
+    template = (_templates_dir() / "status.yaml").read_text(encoding="utf-8")
+    content = (
+        template
+        .replace("{{feature-name}}", feature_dir.name)
+        .replace("{{branch}}", branch)
+        .replace("{{commit-hash}}", baseline)
+        .replace("{{active-artifact}}", ledger.artifact_for_phase("PLAN"))
+        .replace("{{timestamp}}", ts)
+    )
+    data = yaml.safe_load(content)
+    data["current_phase"] = "PLAN"
+    ledger.attach_lane_provenance(data, lane_data)
+    ledger.write_new(feature_dir, data)
+    return ledger_path
+
+
 _OPTIONAL_STEPS = ("clarify", "checklist", "analyze")
 _STEP_DECISIONS = ("run", "skip")
 
