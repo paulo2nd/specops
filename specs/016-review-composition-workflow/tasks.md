@@ -126,7 +126,7 @@ description: "Task list for Feature 016 — Review Composition in the Workflow"
 - [X] T014 Update the corrective-loop rationale comment block in `src/specops/templates/workflows/specops/workflow.yml` to describe the composed semantic review, the mechanical-first guard, and the findings-aware condition, preserving the existing non-CI-reproducible verification caveat. [SC-001]
 - [X] T015 Run full gates: `conda run -n specops ruff check src tests`, `conda run -n specops mypy src`, `conda run -n specops pytest -q`; confirm `test_definition_parses_in_real_speckit_engine` passes or skips (engine absent) and there are no regressions. [SC-006]
 - [X] T016 Walk `quickstart.md` CI-reproducible checks (steps 1–3) against the edited template and confirm the structural + co-installation assertions match the delivered `workflow.yml`. [SC-006]
-- [ ] T017 In the feature's own PR commit, flip the ROADMAP.md row 016 from `ACTIVE` to `MERGED` (repo policy: MERGED flip lands inside the feature PR, not a separate chore PR). [SC-007]
+- [X] T017 In the feature's own PR commit, flip the ROADMAP.md row 016 from `ACTIVE` to `MERGED` (repo policy: MERGED flip lands inside the feature PR, not a separate chore PR). [SC-007]
 
 ---
 
