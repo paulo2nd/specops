@@ -44,12 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   says what it is. **Behavior is byte-for-byte unchanged** — same gates, verdict, exit
   codes, `--json`/`--soft`/`--sarif`, and read-only guarantee.
   - `specops review` is retained as a **deprecated alias**: identical behavior and stdout
-    (byte-identical, including `--json`), plus a one-line deprecation notice on **stderr**
-    only. It emits on every invocation and cannot be suppressed. **Removal no earlier than
-    the next minor release, never in a patch.**
+    (byte-identical except the `command` value in `--json`, which mirrors the invoked
+    name — see below), plus a one-line deprecation notice on **stderr** only. It emits on
+    every invocation and cannot be suppressed. **Removal no earlier than the next minor
+    release, never in a patch.**
   - In `--json` output the `command` value mirrors the invoked name (`preflight` or
     `review`) — no JSON **key** changed, and no persisted ledger field, phase id, or
-    verdict value changed.
+    verdict value changed. So a consumer that parses `specops review --json` stdout keeps
+    working unchanged unless it asserts on the `command` value itself.
   - The shipped `workflow.yml`, the `/specops-review` directive template, the constitution
     (amended to 1.8.1), and the EN/PT READMEs now name the gate `preflight`. "review"
     stays reserved for the REVIEW phase, the `/specops-review` directive, and the verdict.

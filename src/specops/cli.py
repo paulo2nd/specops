@@ -247,6 +247,22 @@ _REVIEW_DEPRECATION = (
     "(this alias will be removed no earlier than the next minor release)."
 )
 
+# Shared option definitions so `preflight` and its `review` alias declare an identical
+# option surface from one source — editing a flag/help here changes both, preserving the
+# alias-parity contract (Feature 017).
+_JSON_OPT = typer.Option(False, "--json", help="Emit the stable outcome JSON (Feature 007).")
+_SOFT_OPT = typer.Option(
+    False, "--soft",
+    help="With --json, always exit 0 (the verdict is in the JSON). Use inside a "
+         "do-while loop body so a REJECTED verdict drives the loop instead of "
+         "aborting the run (Feature 007).",
+)
+_SARIF_OPT = typer.Option(
+    False, "--sarif",
+    help="Emit a SARIF 2.1.0 projection of the review findings and exit 0 "
+         "(a read-only findings export, opt-in; Feature 012).",
+)
+
 
 def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> None:
     """Shared deterministic-gate implementation for `preflight` and its `review` alias.
@@ -289,45 +305,22 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
     typer.echo(review_mod.run_gates(root))
 
 
-@app.command("preflight")
+@app.command("preflight", help=_GATE_HELP)
 @_handle_errors
 def preflight(
-    json_out: bool = typer.Option(
-        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
-    ),
-    soft: bool = typer.Option(
-        False, "--soft",
-        help="With --json, always exit 0 (the verdict is in the JSON). Use inside a "
-             "do-while loop body so a REJECTED verdict drives the loop instead of "
-             "aborting the run (Feature 007).",
-    ),
-    sarif: bool = typer.Option(
-        False, "--sarif",
-        help="Emit a SARIF 2.1.0 projection of the review findings and exit 0 "
-             "(a read-only findings export, opt-in; Feature 012).",
-    ),
+    json_out: bool = _JSON_OPT,
+    soft: bool = _SOFT_OPT,
+    sarif: bool = _SARIF_OPT,
 ) -> None:
-    """Run the deterministic gate suite (reconcile → profile suite → working tree)."""
     _run_gate("preflight", json_out, soft, sarif)
 
 
 @app.command("review", help="[DEPRECATED — use 'specops preflight'] " + _GATE_HELP)
 @_handle_errors
 def review(
-    json_out: bool = typer.Option(
-        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
-    ),
-    soft: bool = typer.Option(
-        False, "--soft",
-        help="With --json, always exit 0 (the verdict is in the JSON). Use inside a "
-             "do-while loop body so a REJECTED verdict drives the loop instead of "
-             "aborting the run (Feature 007).",
-    ),
-    sarif: bool = typer.Option(
-        False, "--sarif",
-        help="Emit a SARIF 2.1.0 projection of the review findings and exit 0 "
-             "(a read-only findings export, opt-in; Feature 012).",
-    ),
+    json_out: bool = _JSON_OPT,
+    soft: bool = _SOFT_OPT,
+    sarif: bool = _SARIF_OPT,
 ) -> None:
     # Deprecated alias of `preflight` (Feature 017). Emit exactly one notice to
     # stderr before running so stdout stays byte-identical for consumers (FR-003);
