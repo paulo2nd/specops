@@ -33,8 +33,9 @@ class TestReviewAsset:
         assert "description:" in installed_review
 
     def test_review_contains_collapsed_gate_step(self, installed_review: str) -> None:
-        """The gate step delegates to the CLI: run specops review."""
-        assert "specops review" in installed_review
+        """The gate step delegates to the CLI: run specops preflight (Feature 017)."""
+        assert "specops preflight" in installed_review
+        assert "specops review" not in installed_review  # gate renamed; alias not used here
 
     def test_review_gate_step_rejects_on_nonzero_exit(self, installed_review: str) -> None:
         """Non-zero exit → REJECTED, report output, stop without reading code."""
@@ -56,7 +57,7 @@ class TestReviewAsset:
 
     def test_review_gate_step_before_surgical_review(self, installed_review: str) -> None:
         """The CLI gate step appears before the surgical diff review step."""
-        gate_pos = installed_review.find("specops review")
+        gate_pos = installed_review.find("specops preflight")
         surgical_pos = installed_review.find("Surgical Diff Review")
         assert gate_pos != -1 and surgical_pos != -1
         assert gate_pos < surgical_pos

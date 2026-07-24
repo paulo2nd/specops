@@ -96,11 +96,15 @@ def test_corrective_loop_is_native_do_while_on_verdict() -> None:
 
 
 def test_in_loop_review_is_soft_terminal_gate_is_hard() -> None:
-    """The in-loop review must not abort the run (--soft, exit 0); the terminal
-    gate must fail closed (hard `specops review`) — FR-019."""
+    """The in-loop gate must not abort the run (--soft, exit 0); the terminal
+    gate must fail closed (hard `specops preflight`) — FR-019.
+
+    Feature 017: the deterministic gate is invoked as `preflight` (renamed from
+    `review`); the semantic `specops.review` command is a separate step (see
+    test_semantic_review_is_composed_and_guarded_by_mechanical_pass)."""
     all_steps = {s["id"]: s for s in _flatten(_load()["steps"])}
-    assert "--soft" in all_steps["review-soft"]["run"]
-    assert all_steps["terminal-gate"]["run"] == "specops review"  # no --soft → fails closed
+    assert all_steps["review-soft"]["run"] == "specops preflight --json --soft"
+    assert all_steps["terminal-gate"]["run"] == "specops preflight"  # no --soft → fails closed
 
 
 def test_terminal_gate_between_loop_and_done() -> None:

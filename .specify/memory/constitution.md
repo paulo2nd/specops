@@ -1,6 +1,26 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.8.0 → 1.8.1
+Rationale (1.8.1, 2026-07-24): Amended during /speckit-implement of
+specs/017-gate-rename-vocabulary (Gate Rename & Vocabulary Pass). The deterministic
+gate command is renamed `specops review → specops preflight` so the primitive is
+named for what it is — a mechanical pre-flight gate, not a code review — preventing
+miscomposed workflows that invoke "review" believing the review happens there and
+omit the actual review step (the Feature 016 gap). "review" is now reserved for the
+REVIEW phase, the `/specops-review` directive, and the review-cycle verdict
+(`APPROVED`/`REJECTED`). `specops review` is retained as a behavior-identical
+DEPRECATED ALIAS emitting one stderr notice, removed no earlier than the next MINOR.
+PATCH bump: naming/wording only — no principle removed, redefined, or added; gate
+behavior is byte-for-byte unchanged. Living body references updated to `preflight`;
+prior Sync Impact entries retain the historical name (frozen amendment log).
+Templates updated in the same change set: src/specops/templates/review.md (gate
+invocation) and src/specops/templates/workflows/specops/workflow.yml (`review-soft` +
+`terminal-gate` steps) — the semantic `command: specops.review` step is deliberately
+untouched. The deprecated alias is covered by the feature's own tests, never run
+against this repository (No Self-Application).
+
+Previous report (1.8.0):
 Version change: 1.7.0 → 1.8.0
 Rationale (1.8.0, 2026-07-23): Amended during /speckit-implement of
 specs/012-gate-profiles-evidence (Gate Profiles and Structured Evidence). Feature
@@ -335,19 +355,19 @@ sourced identically from the SpecOps templates. The directives are:
   never hand-authored. The review agent verifies a corrected finding with `specops
   handoff finding verify` and closes the round with `specops handoff close`;
   approval (`status transition-phase DONE`) is impossible while any **blocking**
-  finding is unverified. `specops review` also runs a deterministic **drift gate**
+  finding is unverified. `specops preflight` also runs a deterministic **drift gate**
   (Feature 010): it rejects when any effective-diff path is `unexplained` — neither
   declared in `plan.md` nor recorded via `specops trace acknowledge` — while
   planned and `discovered-and-acknowledged` paths pass, and SpecOps/Speckit-managed
   artifacts (`specs/**`, `.specify/**`, `specops.json`) are excluded as
   methodology state. Map-*digest* drift remains a non-blocking warning. Since
-  Feature 012 the mechanical verification step of `specops review` runs the selected
+  Feature 012 the mechanical verification step of `specops preflight` runs the selected
   **gate-profile suite** (`.specify/specops/gate-profiles.yaml`, or the synthesized
   default `lint`/`test` profile) in place of the fixed lint/test gates — each gate
   carrying an outcome-taxonomy disposition (`required`|`optional`|`skipped`|`cached`|
   `failed`|`unavailable`) and, in `--json`, its disposition, reason, covered inputs,
   and supporting evidence id; a required failure/unavailability blocks, an optional
-  one does not. `specops review` stays byte-for-byte read-only; the read-only
+  one does not. `specops preflight` stays byte-for-byte read-only; the read-only
   `specops gate list`/`validate`/`report` surfaces inspect the profiles, selection,
   and evidence.
 - **Stop-and-Ask Gates (§8.2)**: agents halt and ask the human on persisted
@@ -464,4 +484,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.8.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-23
+**Version**: 1.8.1 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-24

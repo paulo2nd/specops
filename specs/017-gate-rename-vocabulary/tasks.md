@@ -91,16 +91,16 @@ Single Python project: `src/specops/`, `tests/` at repo root. Installable extens
 
 ### Tests for User Story 3 (write first, ensure they FAIL) ⚠️
 
-- [ ] T010 [P] [US3] Update `tests/unit/test_workflow_definition.py`: assert `review-soft.run` contains `specops preflight --json --soft` and `terminal-gate.run == "specops preflight"`; KEEP the assertion `semantic-review.command == "specops.review"` unchanged (over-correction guard, FR-013). (SC-003)
-- [ ] T011 [P] [US3] Update `tests/integration/test_review_asset.py`: change the gate assertions that currently require `"specops review" in installed_review` (≈ lines 37, 59–62) to `"specops preflight"`; keep the surgical-order, `REJECTED`, and transition assertions intact.
+- [X] T010 [P] [US3] Update `tests/unit/test_workflow_definition.py`: assert `review-soft.run` contains `specops preflight --json --soft` and `terminal-gate.run == "specops preflight"`; KEEP the assertion `semantic-review.command == "specops.review"` unchanged (over-correction guard, FR-013). (SC-003)
+- [X] T011 [P] [US3] Update `tests/integration/test_review_asset.py`: change the gate assertions that currently require `"specops review" in installed_review` (≈ lines 37, 59–62) to `"specops preflight"`; keep the surgical-order, `REJECTED`, and transition assertions intact.
 
 ### Implementation for User Story 3
 
-- [ ] T012 [US3] Update `src/specops/templates/workflows/specops/workflow.yml`: rename the two `shell: specops review` steps (`review-soft` → `specops preflight --json --soft`; `terminal-gate` → `specops preflight`) and update the header comment block; DO NOT touch `command: specops.review` (the semantic directive).
-- [ ] T013 [US3] Update `src/specops/templates/review.md` (the `/specops-review` directive): change the gate invocation and references from `specops review` to `specops preflight`; keep the directive itself named review.
-- [ ] T014 [US3] Amend `.specify/memory/constitution.md` (PATCH bump 1.8.0 → 1.8.1): change gate references to `specops preflight`, explicitly reserve "review" for the phase / `/specops-review` directive / verdict, update the Sync Impact Report comment and the `**Version**` / `**Last Amended**` footer. No principle removed or redefined.
-- [ ] T015 [P] [US3] Update `README.md`: change gate references to `specops preflight`, resolve the "to be renamed" forward-reference (≈ line 469), and document the `specops review` deprecated alias and its removal window.
-- [ ] T016 [P] [US3] Update `README.pt-br.md` equivalently (≈ line 502), keeping it behaviorally equivalent to `README.md` (FR-010/SC-007).
+- [X] T012 [US3] Update `src/specops/templates/workflows/specops/workflow.yml`: rename the two `shell: specops review` steps (`review-soft` → `specops preflight --json --soft`; `terminal-gate` → `specops preflight`) and update the header comment block; DO NOT touch `command: specops.review` (the semantic directive).
+- [X] T013 [US3] Update `src/specops/templates/review.md` (the `/specops-review` directive): change the gate invocation and references from `specops review` to `specops preflight`; keep the directive itself named review.
+- [X] T014 [US3] Amend `.specify/memory/constitution.md` (PATCH bump 1.8.0 → 1.8.1): change gate references to `specops preflight`, explicitly reserve "review" for the phase / `/specops-review` directive / verdict, update the Sync Impact Report comment and the `**Version**` / `**Last Amended**` footer. No principle removed or redefined.
+- [X] T015 [P] [US3] Update `README.md`: change gate references to `specops preflight`, resolve the "to be renamed" forward-reference (≈ line 469), and document the `specops review` deprecated alias and its removal window.
+- [X] T016 [P] [US3] Update `README.pt-br.md` equivalently (≈ line 502), keeping it behaviorally equivalent to `README.md` (FR-010/SC-007).
 
 **Checkpoint**: composing authors reading the shipped artifacts see the honest name; the semantic review is intact and the workflow validates.
 

@@ -166,7 +166,7 @@ da aprovação) → tasks → analyze → um **loop corretivo `do-while`** limit
 injetados; o workflow nunca as duplica, e uma precondição `specops reconcile`
 fail-closed mantém o ledger como autoridade.
 
-Cada rodada corretiva (Feature 016) executa o gate determinístico `specops review`
+Cada rodada corretiva (Feature 016) executa o gate determinístico `specops preflight`
 como uma **precondição fail-closed** barata e então — apenas quando ela passa —
 conduz o **review semântico `/specops-review`**, de modo que o workflow realiza e
 impõe a revisão de código *de fato*, não apenas os gates mecânicos. O loop repete
@@ -244,12 +244,18 @@ podem intencionalmente não ter commit quando a granularidade é por user story.
 Sai com 1 em qualquer divergência.
 
 ```bash
-specops reconcile || exit 1   # preflight antes da revisão
+specops reconcile || exit 1   # verifica o estado antes do gate
 ```
 
-### `specops review`
+### `specops preflight`
 
-Gate somente leitura. Executa os gates determinísticos de revisão do-mais-barato-
+> Renomeado de `specops review` (Feature 017). `specops review` continua funcionando
+> como **alias depreciado** — comportamento idêntico mais um aviso de depreciação de uma
+> linha no stderr — e será removido não antes da próxima versão minor. Migre os passos de
+> CI e de workflow para `specops preflight`. "review" agora nomeia apenas a fase REVIEW, a
+> diretiva `/specops-review` e o veredito do ciclo de revisão.
+
+Gate somente leitura. Executa a suíte de gates determinística do-mais-barato-
 primeiro com parada antecipada: **reconcile → a suíte de perfis de gate selecionada →
 working tree/diff efetivo → drift**. Desde a Feature 012 a suíte de perfis substitui
 os gates fixos lint/test (sem configuração, é o perfil padrão `lint`/`test` — veja
@@ -272,7 +278,7 @@ SpecOps/Speckit (`specs/**`, `.specify/**`, `specops.json`) são excluídos por
 serem estado da metodologia. Veja `specops trace` abaixo.
 
 ```bash
-specops review                # local: valida os gates da mudança atual
+specops preflight             # local: valida os gates da mudança atual
 ```
 
 Como gate de CI:
@@ -280,7 +286,7 @@ Como gate de CI:
 ```yaml
 # .github/workflows/ci.yml (step)
 - run: pip install speckit-specops
-- run: specops review
+- run: specops preflight
 ```
 
 Como gate automatizado dentro de um workflow do Speckit (substitui um gate
@@ -289,7 +295,7 @@ humano de approve/reject; o YAML é seu, sem acoplamento ao SpecOps):
 ```yaml
 - id: review
   type: shell
-  run: specops review
+  run: specops preflight
   on_fail: abort
 ```
 
@@ -340,7 +346,7 @@ O mapa é **consumido** no ciclo de vida por mais três comandos somente-leitura
 Consumir esses comandos também registra a **proveniência de contexto** (ids de
 contexto resolvidos + digest do mapa, ou um marcador explícito
 `{map: none}`/`{map: invalid}`) em cada registro de tarefa e de ciclo de revisão
-do ledger (esquema v3), e `specops review` exibe um aviso não-bloqueante quando o
+do ledger (esquema v3), e `specops preflight` exibe um aviso não-bloqueante quando o
 mapa mudou desde o planejamento.
 
 Todos os comandos aceitam `--json` para uma superfície de máquina estável e
@@ -419,7 +425,7 @@ profiles:
   motivo/entradas/id de evidência de cada gate) mais os registros de evidência
   estruturada do ledger.
 
-A suíte roda dentro do `specops review` (não há executor autônomo). Cada execução de gate
+A suíte roda dentro do `specops preflight` (não há executor autônomo). Cada execução de gate
 e cada vínculo de evidência de tarefa/finding é registrado como um **registro de evidência
 estruturada** — um id derivado da chave de cache (`EV-<hex12>`), produtor, comando, código
 de saída, timestamp, faixa de commits, caminhos afetados, resumo e um digest `sha256` local
@@ -499,10 +505,11 @@ digita os comandos de estado na mão — os diretivos injetados o fazem por voc�
 
 Saiba qual comando revisa e qual faz cumprir:
 
-- **`specops review`** (o gate determinístico; a ser renomeado para **`specops
-  preflight`** — veja a Feature 017 do roadmap) roda reconcile/lint/test/drift e
+- **`specops preflight`** (o gate determinístico; anteriormente `specops review`, agora
+  um alias depreciado — Feature 017) roda reconcile/lint/test/drift e
   retorna um veredito. É um **gate mecânico**, não um code review — ele não lê seu
-  código atrás de bugs.
+  código atrás de bugs. O nome honesto é o ponto: quem compõe um workflow não confunde
+  mais este gate com o passo de revisão.
 - **`/specops-review`** (o diretivo de revisão injetado) é onde um code review real
   acontece: ele orquestra a revisão **do próprio agente** — uma leitura disciplinada
   e escopada do diff contra os Critérios de Sucesso da spec, o plano e a
@@ -516,7 +523,7 @@ review de LLM), um analisador estático ou um humano — é uma **fonte de achad
 não o gate. Durante a fase `REVIEW`, o diretivo `/specops-review` orquestra o fluxo
 abaixo (você também pode rodá-lo na mão quando não estiver usando o workflow):
 
-1. `specops review` — a suíte de gates determinística. Rejeite cedo; não leia
+1. `specops preflight` — a suíte de gates determinística. Rejeite cedo; não leia
    código até ela passar.
 2. Revise o diff — o review embutido do `/specops-review` e/ou um revisor externo
    mais forte.
@@ -548,7 +555,7 @@ Imprime a versão e sai. Funciona em qualquer lugar.
 | Chave | Propósito | Padrão |
 |---|---|---|
 | `test_command` | Comando rodado por `complete-task --auto` | `pytest` |
-| `lint_command` | Gate de lint executado por `specops review` (vazio = pulado) | `""` |
+| `lint_command` | Gate de lint executado por `specops preflight` (vazio = pulado) | `""` |
 | `skills_dir` | Diretório de onde o prompt de revisão carrega skills | `.specify/skills` |
 
 Chaves desconhecidas são preservadas na reinicialização.
@@ -560,7 +567,7 @@ Instalado por `specops init` (o nome segue o separador do layout, ex.:
 empacotado que conduz o agente de revisão do-mais-barato-primeiro:
 
 1. Carrega skills de `skills_dir`.
-2. `specops review` — a CLI executa todos os gates determinísticos (reconcile,
+2. `specops preflight` — a CLI executa todos os gates determinísticos (reconcile,
    lint, test, working tree); qualquer saída diferente de zero é um REJECTED
    imediato sem ler uma única linha de código.
 3. Revisão cirúrgica apenas dos arquivos do diff efetivo.
