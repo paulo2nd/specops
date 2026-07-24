@@ -1,6 +1,6 @@
 """Shared runner for client-configured shell commands from specops.json.
 
-Single execution semantics for every consumer (`specops review` gates,
+Single execution semantics for every consumer (`specops preflight` gates,
 `complete-task --auto`): user-authored shell string, captured output,
 decode-tolerant, executed from the repository root, with an optional deterministic
 timeout (Feature 012, FR-010).

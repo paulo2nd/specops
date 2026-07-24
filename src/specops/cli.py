@@ -236,30 +236,46 @@ def consistency(
     typer.echo("consistency: ok")
 
 
-@app.command("review")
-@_handle_errors
-def review(
-    json_out: bool = typer.Option(
-        False, "--json", help="Emit the stable outcome JSON (Feature 007)."
-    ),
-    soft: bool = typer.Option(
-        False, "--soft",
-        help="With --json, always exit 0 (the verdict is in the JSON). Use inside a "
-             "do-while loop body so a REJECTED verdict drives the loop instead of "
-             "aborting the run (Feature 007).",
-    ),
-    sarif: bool = typer.Option(
-        False, "--sarif",
-        help="Emit a SARIF 2.1.0 projection of the review findings and exit 0 "
-             "(a read-only findings export, opt-in; Feature 012).",
-    ),
-) -> None:
-    """Run the deterministic review gates (reconcile → profile suite → working tree)."""
+# The deterministic gate suite. Canonical command is `preflight`; `review` is a
+# deprecated alias kept for a window (Feature 017). Both delegate to `_run_gate`,
+# which echoes the *invoked* name into the outcome contract's `command` field so
+# machine consumers see the name they invoked (FR-004).
+_GATE_HELP = "Run the deterministic gate suite (reconcile → profile suite → working tree)."
+
+_REVIEW_DEPRECATION = (
+    "specops review is deprecated; use 'specops preflight' "
+    "(this alias will be removed no earlier than the next minor release)."
+)
+
+# Shared option definitions so `preflight` and its `review` alias declare an identical
+# option surface from one source — editing a flag/help here changes both, preserving the
+# alias-parity contract (Feature 017).
+_JSON_OPT = typer.Option(False, "--json", help="Emit the stable outcome JSON (Feature 007).")
+_SOFT_OPT = typer.Option(
+    False, "--soft",
+    help="With --json, always exit 0 (the verdict is in the JSON). Use inside a "
+         "do-while loop body so a REJECTED verdict drives the loop instead of "
+         "aborting the run (Feature 007).",
+)
+_SARIF_OPT = typer.Option(
+    False, "--sarif",
+    help="Emit a SARIF 2.1.0 projection of the review findings and exit 0 "
+         "(a read-only findings export, opt-in; Feature 012).",
+)
+
+
+def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> None:
+    """Shared deterministic-gate implementation for `preflight` and its `review` alias.
+
+    *command_name* is the invoked command; it is passed to :func:`outcome.render` so the
+    JSON `command` value mirrors the invoked name (Feature 017 FR-004). Behavior is
+    otherwise identical for both names.
+    """
     repo = _require_git(Path("."))
     from specops import gateprofiles, outcome
     from specops import review as review_mod
     # Contract: usable from any directory inside the repo — resolve the root.
-    if repo.working_tree_dir is None:  # bare repository — no tree to review
+    if repo.working_tree_dir is None:  # bare repository — no tree to gate
         typer.echo("Not a work tree (bare repository).", err=True)
         raise typer.Exit(1)
     root = Path(repo.working_tree_dir)
@@ -271,21 +287,46 @@ def review(
         try:
             report = review_mod.evaluate(root)
         except (LedgerParseError, SpecopsError) as exc:
-            typer.echo(outcome.render("review", outcome.INFRA_ERROR, detail=exc.message))
+            typer.echo(outcome.render(command_name, outcome.INFRA_ERROR, detail=exc.message))
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
         gates = [_gate_json(r) for r in report.results]
         if report.passed:
             typer.echo(outcome.render(
-                "review", outcome.PASS, verdict="APPROVED", gates=gates, output_version=_ov))
+                command_name, outcome.PASS, verdict="APPROVED", gates=gates, output_version=_ov))
             return
         typer.echo(outcome.render(
-            "review", outcome.GATE_REJECTION, verdict="REJECTED", gates=gates, output_version=_ov))
+            command_name, outcome.GATE_REJECTION,
+            verdict="REJECTED", gates=gates, output_version=_ov))
         # --soft keeps exit 0 so a do-while body can branch on the verdict; the
-        # terminal gate (hard `specops review`) is what fails closed on REJECTED.
+        # terminal gate (hard `specops preflight`) is what fails closed on REJECTED.
         if not soft:
             raise typer.Exit(outcome.exit_for(outcome.GATE_REJECTION))
         return
     typer.echo(review_mod.run_gates(root))
+
+
+@app.command("preflight", help=_GATE_HELP)
+@_handle_errors
+def preflight(
+    json_out: bool = _JSON_OPT,
+    soft: bool = _SOFT_OPT,
+    sarif: bool = _SARIF_OPT,
+) -> None:
+    _run_gate("preflight", json_out, soft, sarif)
+
+
+@app.command("review", help="[DEPRECATED — use 'specops preflight'] " + _GATE_HELP)
+@_handle_errors
+def review(
+    json_out: bool = _JSON_OPT,
+    soft: bool = _SOFT_OPT,
+    sarif: bool = _SARIF_OPT,
+) -> None:
+    # Deprecated alias of `preflight` (Feature 017). Emit exactly one notice to
+    # stderr before running so stdout stays byte-identical for consumers (FR-003);
+    # not the Click `deprecated=` flag, which would auto-emit a competing line.
+    typer.echo(_REVIEW_DEPRECATION, err=True)
+    _run_gate("review", json_out, soft, sarif)
 
 
 # ---------------------------------------------------------------------------

@@ -119,7 +119,7 @@ steps:
   #   1. `reconcile --json` — fail-closed precondition (FR-010) of the corrective
   #      transition.
   #   2. `implement` — the lifecycle command.
-  #   3. `review-soft` (`specops review --json --soft`) — the DETERMINISTIC gate,
+  #   3. `review-soft` (`specops preflight --json --soft`) — the DETERMINISTIC gate,
   #      kept as the cheap fail-closed PRECONDITION (Feature 016 FR-002, Principle
   #      IV §18 token discipline). `--soft` always exits 0 (verdict in JSON) so a
   #      REJECTED verdict DRIVES the loop instead of aborting the run.
@@ -163,7 +163,7 @@ steps:
           args: "{{ inputs.spec }}"
       - id: review-soft
         type: shell
-        run: "specops review --json --soft"
+        run: "specops preflight --json --soft"
         output_format: json
       # Semantic agent review — only when the mechanical gate passes (FR-002).
       - id: semantic-review-round
@@ -189,12 +189,12 @@ steps:
             run: "specops status transition-phase IMPLEMENT -r REJECTED --if-needed"
 
   # --- Terminal deterministic gate (FR-019): fail closed if not APPROVED ------
-  # A hard `specops review` exits non-zero when the verdict is not APPROVED, so an
+  # A hard `specops preflight` exits non-zero when the verdict is not APPROVED, so an
   # exhausted-loop still-rejecting feature halts here and never reaches DONE. This
   # is NOT a human gate (a human approve could bypass a still-failing review).
   - id: terminal-gate
     type: shell
-    run: "specops review"
+    run: "specops preflight"
 
   # --- Completion: workflow-owned final transition (idempotent-tolerant) ------
   - id: done

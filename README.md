@@ -155,7 +155,7 @@ that fails closed unless the verdict is `APPROVED`. Forward-seam phase transitio
 stay owned by the injected directives; the workflow never double-issues them, and
 a fail-closed `specops reconcile` precondition keeps the ledger authoritative.
 
-Each corrective round (Feature 016) runs the deterministic `specops review` gate
+Each corrective round (Feature 016) runs the deterministic `specops preflight` gate
 as a cheap **fail-closed precondition** and then — only when it passes — drives the
 **semantic `/specops-review`** so the workflow performs and enforces the *actual*
 code review, not just the mechanical gates. The loop re-iterates while the gate is
@@ -227,12 +227,18 @@ and every `DONE` task has evidence. Intermediate tasks may intentionally have no
 commit when commit granularity is per user story. Exit 1 on any divergence.
 
 ```bash
-specops reconcile || exit 1   # preflight before review
+specops reconcile || exit 1   # sanity-check state before the gate
 ```
 
-### `specops review`
+### `specops preflight`
 
-Read-only gate. Runs the deterministic review gates cheapest-first with early
+> Renamed from `specops review` (Feature 017). `specops review` still works as a
+> **deprecated alias** — identical behavior plus a one-line deprecation notice on
+> stderr — and will be removed no earlier than the next minor release. Migrate CI and
+> workflow steps to `specops preflight`. "review" now names only the REVIEW phase, the
+> `/specops-review` directive, and the review-cycle verdict.
+
+Read-only gate. Runs the deterministic gate suite cheapest-first with early
 stop: **reconcile → the selected gate-profile suite → working tree/effective diff →
 drift**. Since Feature 012 the profile suite replaces the fixed lint/test gates
 (with no config it is the default `lint`/`test` profile — see `specops gate` below);
@@ -254,7 +260,7 @@ pass, and SpecOps/Speckit-managed artifacts (`specs/**`, `.specify/**`,
 `specops.json`) are excluded as methodology state. See `specops trace` below.
 
 ```bash
-specops review                # local: gate-check the current change
+specops preflight             # local: gate-check the current change
 ```
 
 As a CI gate:
@@ -262,16 +268,16 @@ As a CI gate:
 ```yaml
 # .github/workflows/ci.yml (step)
 - run: pip install speckit-specops
-- run: specops review
+- run: specops preflight
 ```
 
 As an automated gate inside a Speckit workflow (replaces a human
 approve/reject gate; the YAML is yours, no SpecOps coupling):
 
 ```yaml
-- id: review
+- id: preflight
   type: shell
-  run: specops review
+  run: specops preflight
   on_fail: abort
 ```
 
@@ -316,7 +322,7 @@ The map is **consumed** in the lifecycle by three more read-only commands:
 
 Consuming these also snapshots **context provenance** (resolved context ids + map
 digest, or an explicit `{map: none}`/`{map: invalid}` marker) into every task and
-review-cycle ledger record (schema v3), and `specops review` surfaces a
+review-cycle ledger record (schema v3), and `specops preflight` surfaces a
 non-blocking warning when the map changed since planning.
 
 All commands accept `--json` for a stable, versioned machine surface. Exit codes:
@@ -390,7 +396,7 @@ profiles:
 - `specops gate report [--json] [--sarif]` — the verdict provenance (each gate's
   disposition/reason/inputs/evidence id) plus the ledger's structured evidence records.
 
-The suite runs inside `specops review` (there is no standalone runner). Every gate run
+The suite runs inside `specops preflight` (there is no standalone runner). Every gate run
 and every task/finding evidence link is recorded as a **structured evidence record** —
 a cache-key-derived id (`EV-<hex12>`), producer, command, exit code, timestamp, commit
 range, affected paths, summary, and an optional local-artifact `sha256` digest — stored
@@ -466,10 +472,11 @@ state commands by hand — the injected directives do, on your behalf.
 
 Know which command reviews and which enforces:
 
-- **`specops review`** (the deterministic gate; to be renamed **`specops
-  preflight`** — see roadmap Feature 017) runs reconcile/lint/test/drift and
+- **`specops preflight`** (the deterministic gate; formerly `specops review`, now a
+  deprecated alias — Feature 017) runs reconcile/lint/test/drift and
   returns a verdict. It is a **mechanical gate**, not a code review — it does not
-  read your code for bugs.
+  read your code for bugs. Its honest name is the point: an author composing a
+  workflow no longer mistakes it for the review step.
 - **`/specops-review`** (the injected review directive) is where a real code review
   happens: it orchestrates the **agent's own** review — a disciplined, scoped read
   of the diff against the spec's Success Criteria, the plan, and the Constitution —
@@ -483,7 +490,7 @@ review), a static analyzer, or a human — is a **source of findings**, not the 
 During the `REVIEW` phase the `/specops-review` directive orchestrates the flow
 below (you can also run it by hand when not using the workflow):
 
-1. `specops review` — the deterministic gate suite. Reject early; do not read code
+1. `specops preflight` — the deterministic gate suite. Reject early; do not read code
    until it passes.
 2. Review the diff — the built-in `/specops-review` agent read, and/or a stronger
    external reviewer.
@@ -513,7 +520,7 @@ Prints the version and exits. Works anywhere.
 | Key | Purpose | Default |
 |---|---|---|
 | `test_command` | Command run by `complete-task --auto` | `pytest` |
-| `lint_command` | Lint gate run by `specops review` (empty = skipped) | `""` |
+| `lint_command` | Lint gate run by `specops preflight` (empty = skipped) | `""` |
 | `skills_dir` | Directory the review prompt loads skills from | `.specify/skills` |
 
 Unknown keys are preserved on re-init.
@@ -525,7 +532,7 @@ Installed by `specops init` (the name follows the layout's separator, e.g.
 drives the review agent cheapest-rejection-first:
 
 1. Load skills from `skills_dir`.
-2. `specops review` — the CLI runs all deterministic gates (reconcile,
+2. `specops preflight` — the CLI runs all deterministic gates (reconcile,
    lint, test, working tree); any non-zero exit is an immediate REJECTED
    without reading a single line of code.
 3. Surgical review of effective-diff files only.

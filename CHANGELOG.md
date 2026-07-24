@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and could complete without ever running `/specops-review`, so no structured
   findings were recorded and the Feature 011 blocking-approval invariant gated an
   empty set. The corrective `do-while` loop now:
-  - runs the deterministic `specops review` gate as a cheap **fail-closed
+  - runs the deterministic `specops preflight` gate as a cheap **fail-closed
     precondition** and, only when it passes, drives the **semantic
     `command: specops.review`** step (the actual code review) — keeping the
     mechanical gate first for token discipline;
@@ -36,6 +36,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   engine/loop/gate primitive). **No migration required**: no persisted format,
   JSON contract, or CLI surface changed; repositories that record no findings
   behave exactly as before.
+
+- **The deterministic gate `specops review` is renamed to `specops preflight`
+  (Feature 017).** The command only ever ran mechanical checks (reconcile → gate-profile
+  suite → working tree → drift); calling it "review" misled workflow/directive authors
+  into thinking the code review happened there (the exact Feature 016 gap). The new name
+  says what it is. **Behavior is byte-for-byte unchanged** — same gates, verdict, exit
+  codes, `--json`/`--soft`/`--sarif`, and read-only guarantee.
+  - `specops review` is retained as a **deprecated alias**: identical behavior and stdout
+    (byte-identical except the `command` value in `--json`, which mirrors the invoked
+    name — see below), plus a one-line deprecation notice on **stderr** only. It emits on
+    every invocation and cannot be suppressed. **Removal no earlier than the next minor
+    release, never in a patch.**
+  - In `--json` output the `command` value mirrors the invoked name (`preflight` or
+    `review`) — no JSON **key** changed, and no persisted ledger field, phase id, or
+    verdict value changed. So a consumer that parses `specops review --json` stdout keeps
+    working unchanged unless it asserts on the `command` value itself.
+  - The shipped `workflow.yml`, the `/specops-review` directive template, the constitution
+    (amended to 1.8.1), and the EN/PT READMEs now name the gate `preflight`. "review"
+    stays reserved for the REVIEW phase, the `/specops-review` directive, and the verdict.
+  - **Migration**: move CI steps, scripts, and workflow definitions from `specops review`
+    to `specops preflight`. The alias keeps existing invocations working until removal.
 
 ## [0.4.0] - 2026-07-23
 

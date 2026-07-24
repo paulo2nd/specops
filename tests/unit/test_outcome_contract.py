@@ -49,3 +49,23 @@ def test_render_review_verdict_and_gates() -> None:
     assert obj["verdict"] == "REJECTED"
     assert obj["gates"] == gates
     assert obj["outcome"] == "blocked"
+
+
+def test_render_mirrors_invoked_command_name() -> None:
+    """Feature 017 FR-004/SC-005: the `command` value mirrors the invoked name and the
+    object shape (keys) is unchanged — `preflight` and its `review` alias differ only in
+    this value."""
+    gates = [{"name": "reconcile", "status": "PASS"}]
+    pre = json.loads(
+        outcome.render("preflight", outcome.PASS, verdict="APPROVED", gates=gates)
+    )
+    rev = json.loads(
+        outcome.render("review", outcome.PASS, verdict="APPROVED", gates=gates)
+    )
+    assert pre["command"] == "preflight"
+    assert rev["command"] == "review"
+    # Same keys, same shape — only the command value differs (no key renamed).
+    assert pre.keys() == rev.keys()
+    assert {k: v for k, v in pre.items() if k != "command"} == {
+        k: v for k, v in rev.items() if k != "command"
+    }
