@@ -34,7 +34,7 @@ A behavior-identical alias retained for the deprecation window.
 | Output `command` value | `"review"` (mirrors invoked name — byte-stable for existing consumers) |
 | Stderr | **Exactly one** deprecation line per invocation |
 | Suppressible | **No** — no flag, no env var (Clarification Q2) |
-| Help surface | Marked deprecated (`deprecated=True`), `preflight` shown as canonical (FR-014) |
+| Help surface | Help/short_help prefixed `[DEPRECATED — use 'specops preflight']`; `preflight` shown as canonical (FR-014). NOT the Click `deprecated=` flag — it would auto-emit a competing stderr line (finding C1). |
 | Lifecycle | Ships this feature; removed no earlier than next MINOR, never in a PATCH (FR-006) |
 
 **Invariant**: `review`'s stdout and exit code are byte-identical to `preflight`'s for the

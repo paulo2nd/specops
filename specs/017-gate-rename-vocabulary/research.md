@@ -14,8 +14,8 @@ the implementation-level decisions and the conservative-sweep catalogue.
 delegate to it:
 
 - `@app.command("preflight")` → `_run_gate("preflight", …)` (canonical).
-- `@app.command("review", deprecated=True)` → writes the deprecation notice to stderr,
-  then `_run_gate("review", …)`.
+- `@app.command("review", help="[DEPRECATED — use 'specops preflight'] …")` → writes the
+  single custom deprecation notice to stderr, then `_run_gate("review", …)`.
 
 The shared impl passes `command_name` straight into `outcome.render(command_name, …)` so
 the JSON `command` value mirrors the invoked name (FR-004). Every option (`--json`,
@@ -23,9 +23,17 @@ the JSON `command` value mirrors the invoked name (FR-004). Every option (`--jso
 
 **Rationale**: `outcome.render()` already takes `command` as its first parameter
 (`outcome.py:78`); only the CLI's hard-coded `"review"` literal needs to become the
-invoked name. Twin registration is the minimal, idiomatic Typer/Click way to alias a
-command while keeping one behavior source. Click's `deprecated=True` renders a
-`(DEPRECATED)` marker in `--help`, satisfying FR-014 without custom help text.
+invoked name. Twin registration is the minimal, idiomatic Typer way to alias a command
+while keeping one behavior source.
+
+**Do NOT use Click/Typer `deprecated=True`** (empirically verified against the installed
+Typer 0.27.0 / Click 8.4.2): a command with `deprecated=True` **auto-emits its own stderr
+line** on every invocation — `"DeprecationWarning: The command 'review' is deprecated.\n"`
+— which (a) would be a *second* line on top of our custom notice, breaking FR-002/SC-002
+("exactly one deprecation line"), and (b) does not name `specops preflight` or the removal
+window, so it fails FR-002's content requirement on its own. FR-014's help marker is
+therefore satisfied by putting an explicit `[DEPRECATED — use 'specops preflight']` prefix
+in the command's `help`/`short_help` text, not by the `deprecated=` flag.
 
 **Alternatives considered**:
 - *A hidden Click alias group / callback shim* — more machinery than a second
@@ -42,7 +50,10 @@ command while keeping one behavior source. Click's `deprecated=True` renders a
 **Decision**: A single line to **stderr** via `typer.echo(<notice>, err=True)`, emitted
 once per `review` invocation, unconditionally (no flag, no env var — Clarification Q2).
 It is written **before** the gate runs so it appears even when the gate later exits
-non-zero. The canonical `preflight` command emits nothing extra.
+non-zero. The canonical `preflight` command emits nothing extra. This is the **only**
+source of the deprecation line — see D1: the `deprecated=True` flag is deliberately NOT
+used because it would auto-emit a competing second line, so the notice is entirely
+hand-emitted and its wording/content is fully under our control.
 
 Proposed text (implementation may refine wording, not behavior):
 `specops review is deprecated; use 'specops preflight' (this alias will be removed no earlier than the next minor release).`
