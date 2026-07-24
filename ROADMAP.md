@@ -85,7 +85,7 @@ Roadmap status uses four values:
 | 014 | Diagnostics and Machine Reports | PLANNED | 005–016 | Adoption |
 | 015 | External Review Ingestion | PLANNED | 011, 012 | Adoption |
 | 016 | Review Composition in the Workflow | MERGED | 007, 011 | Adoption |
-| 017 | Gate Rename & Vocabulary Pass | PLANNED | — | Adoption |
+| 017 | Gate Rename & Vocabulary Pass | ACTIVE | — | Adoption |
 
 ### Build sequence (dependency review — 2026-07-23)
 
