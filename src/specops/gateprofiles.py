@@ -2,10 +2,10 @@
 
 A stack-neutral, versioned configuration (`.specify/specops/gate-profiles.yaml`,
 sibling of the context map) that declares an **ordered** set of gates, each with a
-command, a single applicability predicate, a timeout, a required-status, failure
-semantics, and an optional artifact to digest. This module owns parsing, read-only
-validation (FR-014), deterministic selection (FR-002/FR-003), and synthesis of the
-implicit default profile from ``specops.json`` when no config exists (FR-005).
+command, a single applicability predicate, a timeout, and a required-status. This
+module owns parsing, read-only validation (FR-014), deterministic selection
+(FR-002/FR-003), fail-closed suite resolution for the review pipeline, and synthesis
+of the implicit default profile from ``specops.json`` when no config exists (FR-005).
 
 It is stack-neutral (Principle V): the command strings stay in configuration, path
 patterns are validated syntactically only (no filesystem access), and risk matches by
@@ -13,14 +13,14 @@ named-key presence/equality — never an ordinal scale.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from specops import config, contextmap, outcome
-from specops.errors import LedgerParseError
+from specops.errors import LedgerParseError, SpecopsError
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -28,7 +28,10 @@ from specops.errors import LedgerParseError
 
 PROFILES_RELPATH = Path(".specify") / "specops" / "gate-profiles.yaml"
 OUTPUT_VERSION = 1
-DEFAULT_TIMEOUT = 600  # seconds; the documented stack-neutral constant (FR-001)
+# Documented default timeout (seconds) for an AUTHORED profile that omits `timeout`.
+# The synthesized default profile uses None (unbounded) so an upgraded repository's
+# lint/test runs are not newly killed (FR-005 — behaves exactly as before).
+DEFAULT_TIMEOUT = 600
 
 # Selection reasons — the closed set (FR-003).
 R_ALWAYS = "always"
@@ -53,7 +56,6 @@ _CLASS_FOR_STATUS = {
     S_USAGE_ERROR: outcome.INFRA_ERROR,
 }
 
-_VALID_ON_NONZERO = {"block", "advise"}
 _VALID_APPLIES_KEYS = {"always", "contexts", "paths", "risk", "gate_ref"}
 
 
@@ -80,10 +82,8 @@ class GateProfile:
     name: str
     command: str
     applies: ApplicabilityPredicate
-    timeout: int = DEFAULT_TIMEOUT
+    timeout: int | None = DEFAULT_TIMEOUT  # None = unbounded (the synthesized default)
     required: bool = True
-    on_nonzero: str = "block"
-    artifact: str | None = None
 
 
 @dataclass(frozen=True)
@@ -95,22 +95,11 @@ class SelectedGate:
     reason: str
 
 
-@dataclass
-class GateCommandResult:
-    """Rendered-agnostic command outcome (mirrors contextmap.CommandResult)."""
+class GateCommandResult(outcome.CommandResult):
+    """A gate command's outcome — the shared :class:`outcome.CommandResult` with this
+    module's status→class map."""
 
-    command: str
-    status: str
-    human: str
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def cls(self) -> str:
-        return _CLASS_FOR_STATUS[self.status]
-
-    @property
-    def exit_code(self) -> int:
-        return outcome.exit_for(self.cls)
+    _CLASS_MAP = _CLASS_FOR_STATUS
 
 
 # ---------------------------------------------------------------------------
@@ -186,14 +175,9 @@ def _parse_profile(raw: Any) -> GateProfile | None:
         timeout = DEFAULT_TIMEOUT
     required = raw.get("required", True)
     required = required if isinstance(required, bool) else True
-    on_nonzero = raw.get("on_nonzero")
-    if on_nonzero not in _VALID_ON_NONZERO:
-        on_nonzero = "block" if required else "advise"
-    artifact = raw.get("artifact")
-    artifact = artifact if isinstance(artifact, str) else None
     return GateProfile(
         name=name, command=command, applies=_parse_predicate(raw.get("applies")),
-        timeout=timeout, required=required, on_nonzero=on_nonzero, artifact=artifact,
+        timeout=timeout, required=required,
     )
 
 
@@ -232,11 +216,13 @@ def default_profile(root: Path) -> list[GateProfile]:
     except config.ConfigError:
         cfg = {}
     always = ApplicabilityPredicate(always=True)
+    # timeout=None (unbounded): the pre-Feature-012 lint/test gates had no timeout, so
+    # an upgraded repo whose suite legitimately runs long is not newly killed (FR-005).
     return [
         GateProfile(name="lint", command=str(cfg.get("lint_command") or ""),
-                    applies=always, timeout=DEFAULT_TIMEOUT, required=True, on_nonzero="block"),
+                    applies=always, timeout=None, required=True),
         GateProfile(name="test", command=str(cfg.get("test_command") or ""),
-                    applies=always, timeout=DEFAULT_TIMEOUT, required=True, on_nonzero="block"),
+                    applies=always, timeout=None, required=True),
     ]
 
 
@@ -250,6 +236,25 @@ def profiles_for(root: Path) -> list[GateProfile]:
     if not profiles:  # None (absent) or [] (empty) → default
         return default_profile(root)
     return profiles
+
+
+def resolve_suite(root: Path) -> list[GateProfile]:
+    """Return the authoritative gate set, failing closed on an INVALID *present* config.
+
+    A malformed `gate-profiles.yaml` MUST NOT silently fall back to the default suite —
+    that would skip declared required gates and yield a false pass. When a config file is
+    present and invalid, this raises SpecopsError so `specops review` rejects (exit 1)
+    instead of degrading. An absent file, or a valid empty `profiles` list, yields the
+    default profile. This is the fail-closed resolution used by the review pipeline;
+    `gate list`/`gate validate` remain lenient inspection surfaces.
+    """
+    result = validate(root)
+    if result.status == S_INVALID:
+        raise SpecopsError(
+            "Invalid gate-profiles.yaml — refusing to fall back to the default suite:\n"
+            + result.human
+        )
+    return profiles_for(root)
 
 
 # ---------------------------------------------------------------------------
@@ -394,8 +399,6 @@ def validate(root: Path) -> GateCommandResult:
             diags.append(f"{name}: `timeout` must be a positive integer of seconds.")
         if "required" in entry and not isinstance(entry["required"], bool):
             diags.append(f"{name}: `required` must be a boolean.")
-        if "on_nonzero" in entry and entry["on_nonzero"] not in _VALID_ON_NONZERO:
-            diags.append(f"{name}: `on_nonzero` must be 'block' or 'advise'.")
         _validate_applies(entry.get("applies"), name, known_ids, diags)
 
     if diags:
@@ -420,6 +423,18 @@ def _validate_applies(
     unknown = set(applies) - _VALID_APPLIES_KEYS
     if unknown:
         diags.append(f"{name}: unknown `applies` key(s): {', '.join(sorted(unknown))}.")
+    if "always" in applies and not isinstance(applies["always"], bool):
+        diags.append(f"{name}: `applies.always` must be a boolean.")
+    # `contexts` MUST be a list — a scalar would otherwise crash/garble the loop below
+    # and (in the parser) silently collapse the predicate to always=True.
+    contexts = applies.get("contexts")
+    if contexts is not None and not isinstance(contexts, list):
+        diags.append(f"{name}: `applies.contexts` must be a list.")
+        contexts = None
+    # `risk` MUST be a mapping (named-key -> value); a list/scalar would be dropped by
+    # the parser and silently widen the gate to always-run.
+    if "risk" in applies and not isinstance(applies["risk"], dict):
+        diags.append(f"{name}: `applies.risk` must be a mapping.")
     paths = applies.get("paths")
     if paths is not None:
         if not isinstance(paths, list):
@@ -429,15 +444,15 @@ def _validate_applies(
                 code = contextmap._classify_pattern(pat)
                 if code:
                     diags.append(f"{name}: {code} in `applies.paths`: {pat!r}.")
-    if known_ids is not None:
-        for c in applies.get("contexts") or []:
+    if known_ids is not None and isinstance(contexts, list):
+        for c in contexts:
             if isinstance(c, str) and c not in known_ids:
                 diags.append(f"{name}: `applies.contexts` references unknown context {c!r}.")
-        ref = applies.get("gate_ref")
-        # gate_ref points at a context's declared gate id; it need not be a context id,
-        # so we do not treat it as dangling here (a gate id lives in the map's `gates`).
-        if ref is not None and not isinstance(ref, str):
-            diags.append(f"{name}: `applies.gate_ref` must be a string.")
+    ref = applies.get("gate_ref")
+    # gate_ref points at a context's declared gate id; it need not be a context id,
+    # so we do not treat it as dangling here (a gate id lives in the map's `gates`).
+    if ref is not None and not isinstance(ref, str):
+        diags.append(f"{name}: `applies.gate_ref` must be a string.")
 
 
 def cmd_list(root: Path, changed_paths: list[str]) -> GateCommandResult:
@@ -472,6 +487,6 @@ def cmd_list(root: Path, changed_paths: list[str]) -> GateCommandResult:
 __all__ = [
     "PROFILES_RELPATH", "OUTPUT_VERSION", "DEFAULT_TIMEOUT",
     "ApplicabilityPredicate", "GateProfile", "SelectedGate", "GateCommandResult",
-    "profiles_path", "parse", "default_profile", "profiles_for",
+    "profiles_path", "parse", "default_profile", "profiles_for", "resolve_suite",
     "select_gates", "validate", "cmd_list",
 ]

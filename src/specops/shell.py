@@ -7,7 +7,11 @@ timeout (Feature 012, FR-010).
 """
 from __future__ import annotations
 
+import contextlib
+import os
+import signal
 import subprocess
+import sys
 from pathlib import Path
 from typing import NamedTuple
 
@@ -23,26 +27,36 @@ class ShellResult(NamedTuple):
     timed_out: bool = False
 
 
-def _decode(value: str | bytes | None) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return value
-
-
 def run_client_command(command: str, cwd: Path, timeout: int | None = None) -> ShellResult:
     """Run *command* from *cwd* with captured, decode-tolerant text output.
 
-    When *timeout* (seconds) is given and exceeded, the process is terminated and a
-    ``timed_out`` result is returned (return code 124, the conventional timeout code)
-    rather than raising — the caller records the timeout deterministically (FR-010).
+    When *timeout* (seconds) is given and exceeded, the process **group** is terminated
+    and a ``timed_out`` result is returned (return code 124, the conventional timeout
+    code) rather than raising — the caller records the timeout deterministically
+    (FR-010). The command runs in its own session/group (POSIX ``start_new_session``) so
+    that a shell wrapper's grandchildren (e.g. the real ``pytest`` process) are killed
+    too, rather than orphaned and left holding the output pipe past the timeout.
     """
+    posix = sys.platform != "win32"
+    proc = subprocess.Popen(
+        command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, errors="replace", cwd=str(cwd),
+        start_new_session=posix,  # POSIX: own process group so we can kill the tree
+    )
     try:
-        cp = subprocess.run(
-            command, shell=True, capture_output=True, text=True,
-            errors="replace", cwd=str(cwd), timeout=timeout,
-        )
-        return ShellResult(cp.returncode, cp.stdout, cp.stderr, timed_out=False)
-    except subprocess.TimeoutExpired as exc:
-        return ShellResult(124, _decode(exc.stdout), _decode(exc.stderr), timed_out=True)
+        out, err = proc.communicate(timeout=timeout)
+        return ShellResult(proc.returncode, out or "", err or "", timed_out=False)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc, posix)
+        out, err = proc.communicate()  # the whole group is dead → does not block
+        return ShellResult(124, out or "", err or "", timed_out=True)
+
+
+def _kill_tree(proc: subprocess.Popen, posix: bool) -> None:
+    """Kill the timed-out process and its descendants (best-effort, never raises)."""
+    if posix:
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            return
+    with contextlib.suppress(ProcessLookupError, OSError):
+        proc.kill()

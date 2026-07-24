@@ -86,10 +86,32 @@ def test_unsupported_output_version_defect(context_map_repo: Path) -> None:
     assert any("output_version" in d for d in res.extra["defects"])
 
 
-def test_bad_on_nonzero_defect(context_map_repo: Path) -> None:
-    write_profiles(context_map_repo, {"profiles": [_valid_entry(on_nonzero="maybe")]})
+def test_scalar_contexts_flagged_not_crashed(context_map_repo: Path) -> None:
+    # A scalar `contexts` must be a distinct diagnostic, never a TypeError/traceback,
+    # even with a resolvable map present (which triggers the reference loop).
+    write_map(context_map_repo, {"schema_version": 1, "contexts": [
+        {"id": "api", "match": ["src/api/**"]},
+    ]})
+    write_profiles(context_map_repo, {"profiles": [_valid_entry(applies={"contexts": "api"})]})
+    res = gateprofiles.validate(context_map_repo)  # must not raise
+    assert res.status == gateprofiles.S_INVALID
+    assert any("`applies.contexts` must be a list" in d for d in res.extra["defects"])
+
+
+def test_risk_not_mapping_defect(context_map_repo: Path) -> None:
+    # A list `risk` (natural mistake) is dropped by the parser and would silently widen
+    # the gate to always-run; validation must flag it.
+    entry = _valid_entry(applies={"risk": ["schema-change"]})
+    write_profiles(context_map_repo, {"profiles": [entry]})
     res = gateprofiles.validate(context_map_repo)
-    assert any("on_nonzero" in d for d in res.extra["defects"])
+    assert res.status == gateprofiles.S_INVALID
+    assert any("`applies.risk` must be a mapping" in d for d in res.extra["defects"])
+
+
+def test_non_bool_always_defect(context_map_repo: Path) -> None:
+    write_profiles(context_map_repo, {"profiles": [_valid_entry(applies={"always": "yes"})]})
+    res = gateprofiles.validate(context_map_repo)
+    assert any("`applies.always` must be a boolean" in d for d in res.extra["defects"])
 
 
 def test_each_defect_is_distinct(context_map_repo: Path) -> None:

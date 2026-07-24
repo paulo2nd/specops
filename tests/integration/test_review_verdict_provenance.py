@@ -9,7 +9,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 from specops import review
+from specops.errors import SpecopsError
 from tests.conftest import write_profiles
 from tests.unit.test_review import _all_pass_setup, _commit_all
 
@@ -38,6 +41,18 @@ def test_required_failure_rejects(fake_speckit_repo: Path) -> None:
     assert not report.passed
     t = _gate(report, "test")
     assert t.status == "FAIL" and t.disposition == "failed"
+
+
+def test_invalid_config_fails_closed_not_false_approve(fake_speckit_repo: Path) -> None:
+    # A malformed gate-profiles.yaml must NOT silently degrade to the default lint/test
+    # suite and return APPROVED — review fails closed (the fail-open bug).
+    _all_pass_setup(fake_speckit_repo)
+    write_profiles(fake_speckit_repo, {"profiles": [
+        {"name": "security", "command": ""},  # required gate with an empty command → invalid
+    ]})
+    _commit_all(fake_speckit_repo, "add invalid gate profile")
+    with pytest.raises(SpecopsError, match="Invalid gate-profiles.yaml"):
+        review.evaluate(fake_speckit_repo)
 
 
 def test_optional_failure_does_not_reject(fake_speckit_repo: Path) -> None:

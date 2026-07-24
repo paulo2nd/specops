@@ -10,10 +10,12 @@ import json
 import os
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from specops import gateprofiles
 from specops.cli import app
+from specops.errors import SpecopsError
 from tests.conftest import write_profiles
 
 runner = CliRunner()
@@ -45,6 +47,29 @@ def test_default_profile_includes_lint_when_set(context_map_repo: Path) -> None:
     _write_config(context_map_repo, test_command="pytest", lint_command="ruff check .")
     gates = gateprofiles.default_profile(context_map_repo)
     assert [g.name for g in gates] == ["lint", "test"]  # declared order lint→test
+
+
+def test_default_profile_gates_are_unbounded(context_map_repo: Path) -> None:
+    # Regression: the pre-012 lint/test gates had no timeout; the default profile must
+    # not newly kill a legitimately-long suite (FR-005).
+    _write_config(context_map_repo, test_command="pytest")
+    gates = gateprofiles.default_profile(context_map_repo)
+    assert all(g.timeout is None for g in gates)
+
+
+def test_resolve_suite_returns_default_when_no_config(context_map_repo: Path) -> None:
+    _write_config(context_map_repo, test_command="pytest")
+    gates = gateprofiles.resolve_suite(context_map_repo)
+    assert [g.name for g in gates] == ["lint", "test"]
+
+
+def test_resolve_suite_fails_closed_on_invalid_config(context_map_repo: Path) -> None:
+    # A malformed present config must NOT silently fall back to the default suite.
+    _write_config(context_map_repo, test_command="pytest")
+    # a required gate with an empty command → invalid
+    write_profiles(context_map_repo, {"profiles": [{"name": "sec", "command": ""}]})
+    with pytest.raises(SpecopsError, match="Invalid gate-profiles.yaml"):
+        gateprofiles.resolve_suite(context_map_repo)
 
 
 def test_empty_profiles_list_falls_back_to_default(context_map_repo: Path) -> None:

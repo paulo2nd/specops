@@ -18,10 +18,8 @@ profiles:                      # ordered list; declared order = execution order
       paths: [<glob>...]       # optional; changed-path match (syntactic validation)
       risk: { <key>: <value?> }# optional; named-key presence/equality on ctx.risk
       gate_ref: <string>       # optional; matches a ctx.gates entry (implicit ctx match)
-    timeout: <int seconds>     # required, > 0
-    required: <bool>           # optional, default true
-    on_nonzero: block|advise   # optional, default block if required else advise
-    artifact: <repo-rel path>  # optional; local file digested at run time
+    timeout: <int seconds>     # optional, > 0; default 600 for an AUTHORED gate
+    required: <bool>           # optional, default true; the single failure-semantics knob
 ```
 
 ## Field rules
@@ -31,13 +29,17 @@ profiles:                      # ordered list; declared order = execution order
 | `output_version` | yes | — | unsupported version |
 | `name` | yes | — | duplicate name |
 | `command` | yes | — | empty/missing command |
-| `applies` | no | `{always:true}` | unknown key / unparseable predicate |
-| `applies.contexts[]`, `applies.gate_ref` | no | — | dangling context/gate reference (when a map exists) |
+| `applies` | no | `{always:true}` | non-mapping; unknown key; `contexts`/`paths` not a list; `risk` not a mapping; `always`/`gate_ref` wrong type |
+| `applies.contexts[]` | no | — | dangling context reference (when a map exists) |
 | `applies.paths[]` | no | — | malformed / unsafe (`..`, absolute) pattern — syntactic only |
-| `timeout` | no | `600` (seconds) | non-positive or non-int |
+| `timeout` | no | `600` (seconds) for an authored gate; **unbounded** for the synthesized default | non-positive or non-int |
 | `required` | no | `true` | non-bool |
-| `on_nonzero` | no | derived | value ∉ {block, advise} |
-| `artifact` | no | — | unsafe path (`..`, absolute) |
+
+`required` alone determines failure semantics (a required gate's non-zero exit blocks;
+an optional one never does); there is no separate `on_nonzero` knob. Artifact digesting
+(`evidence.digest_artifact` / the `artifact_digest` evidence field) is part of the
+deferred gate-evidence persistence (spec FR-009 / research R9a), so no `artifact` config
+key is exposed in this feature.
 
 ## Selection semantics (deterministic — R9)
 
@@ -46,7 +48,10 @@ affected contexts; each declared gate carries a machine-readable `reason`
 (`always | matched context <id> | matched gate-ref <id> | matched path <glob> |
 matched risk key <k> | out-of-scope`). Selected required gates run in declared order;
 first required `FAIL`/`unavailable` stops the run (fail-closed). No map / no baseline
-⇒ only `always` + `paths` predicates can match; the `reason` records the degrade.
+⇒ only `always` + `paths` predicates can match; the `reason` records the degrade. A
+config file that is **present but invalid** makes `specops review` **fail closed**
+(`gateprofiles.resolve_suite` raises) — it never silently falls back to the default
+suite, which would skip declared required gates and pass.
 
 ## Example — default profile (no file present)
 
@@ -55,7 +60,7 @@ Synthesized equivalent when `.specify/specops/gate-profiles.yaml` is absent, fro
 
 ```yaml
 profiles:
-  - { name: test, command: "pytest", applies: {always: true}, timeout: 600, required: true }  # 600s = documented default
-  # lint gate added only when lint_command is non-empty
+  - { name: lint, command: "",       applies: {always: true}, timeout: null, required: true }  # empty → SKIPPED
+  - { name: test, command: "pytest", applies: {always: true}, timeout: null, required: true }  # null = unbounded (as pre-012)
 ```
 </content>

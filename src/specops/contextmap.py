@@ -131,22 +131,11 @@ class ValidateResult:
     contexts: list[Context] | None = None
 
 
-@dataclass
-class CommandResult:
-    """A rendered-agnostic command outcome consumed by the CLI layer."""
+class CommandResult(outcome.CommandResult):
+    """A context command's outcome — the shared :class:`outcome.CommandResult` with this
+    module's status→class map."""
 
-    command: str
-    status: str
-    human: str
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def cls(self) -> str:
-        return _CLASS_FOR_STATUS[self.status]
-
-    @property
-    def exit_code(self) -> int:
-        return outcome.exit_for(self.cls)
+    _CLASS_MAP = _CLASS_FOR_STATUS
 
 
 def _diag(code: str, message: str, *, context_id: str | None = None,

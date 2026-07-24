@@ -35,10 +35,12 @@ profiles:                  # ORDERED list — declared order == execution order
 | `name` | string | Required; unique within the file; stable identity (used as gate name + gate-ref target). |
 | `command` | string | Required; non-empty client shell string. |
 | `applies` | ApplicabilityPredicate | Optional; omitted/empty ⇒ `{always: true}`. |
-| `timeout` | int (seconds) | Optional; `> 0`; default `600` (documented stack-neutral constant). |
-| `required` | bool | Optional; default `true`. |
-| `on_nonzero` | enum `block`\|`advise` | Optional; default `block` when `required`, else `advise`. |
-| `artifact` | string (repo-relative path) | Optional; digested locally at run time (R5). |
+| `timeout` | int (seconds) \| None | Optional; `> 0`; default `600` for an authored gate, **`None` (unbounded)** for the synthesized default profile (preserves pre-012 lint/test behavior). |
+| `required` | bool | Optional; default `true`. The **single** failure-semantics knob — a required gate's non-zero exit blocks, an optional one never does (no separate `on_nonzero`). |
+
+Artifact digesting (`evidence.digest_artifact` + the `artifact_digest` evidence field)
+is the mechanism for the **deferred** gate-evidence persistence (R9a); no `artifact`
+config key is exposed in this feature.
 
 ### `ApplicabilityPredicate` (`applies`)
 

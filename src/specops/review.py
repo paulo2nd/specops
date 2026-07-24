@@ -115,6 +115,9 @@ def _existing_evidence(root: Path) -> list[dict]:
     Used only for the cache-lookup: `specops review` never writes the ledger (the
     Feature 004 read-only contract holds), so a `cached` disposition is reported when a
     matching, non-superseded record already exists (recorded by a state-changing path).
+    NOTE: no production path currently persists a ``gate:<name>@<ver>`` record, so a
+    gate's *own* prior run never cache-hits end-to-end — persisting gate-run evidence
+    from review is deferred (see spec FR-009 + research.md R9a).
     """
     feature_dir = speckit.resolve_feature_dir(root)
     if feature_dir is None:
@@ -205,7 +208,9 @@ def _profile_gates(root: Path, repo: git.Repo, baseline: str) -> list[GateResult
         gitops.name_only_diff(repo, baseline, "HEAD")
         if baseline and gitops.commit_exists(repo, baseline) else []
     )
-    gates = gateprofiles.profiles_for(root)
+    # Fail closed on an invalid *present* config — never silently fall back to the
+    # default suite (which would skip declared required gates and pass, a fail-open).
+    gates = gateprofiles.resolve_suite(root)
     affected = gateprofiles._affected_for(root, changed)
     selection = gateprofiles.select_gates(gates, changed, affected)
     head = gitops.head_sha(repo)

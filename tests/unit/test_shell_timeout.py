@@ -29,3 +29,17 @@ def test_fast_command_not_timed_out(tmp_path: Path) -> None:
 def test_no_timeout_by_default(tmp_path: Path) -> None:
     result = shell.run_client_command(f'"{sys.executable}" -c "print(1)"', tmp_path)
     assert result.timed_out is False and result.returncode == 0
+
+
+def test_timeout_with_grandchild_returns_promptly(tmp_path: Path) -> None:
+    # A shell wrapper whose grandchild is the real long sleeper must still time out
+    # promptly — the process group is killed, so we don't hang on the orphaned child.
+    import time
+
+    # `; true` keeps sh as the parent so the python sleeper is a grandchild of sh.
+    cmd = f'"{sys.executable}" -c "import time; time.sleep(30)" ; true'
+    start = time.monotonic()
+    result = shell.run_client_command(cmd, tmp_path, timeout=1)
+    elapsed = time.monotonic() - start
+    assert result.timed_out is True and result.returncode == 124
+    assert elapsed < 15  # returned near the 1s timeout, did not wait out the 30s sleep
