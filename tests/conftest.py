@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from specops import ledger
+
 
 @pytest.fixture()
 def tmp_git_repo(tmp_path: Path) -> Path:
@@ -159,6 +161,30 @@ def write_map(root: Path, data: object) -> Path:
 def load_map_fixture(name: str) -> str:
     """Return the text of a named fixture under tests/fixtures/context_maps/."""
     return (FIXTURES_DIR / name).read_text(encoding="utf-8")
+
+
+def write_profiles(root: Path, data: object) -> Path:
+    """Write a gate-profile config (dict → YAML, or a raw string) to its path (Feature 012)."""
+    from specops import gateprofiles
+
+    p = gateprofiles.profiles_path(root)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    text = data if isinstance(data, str) else yaml.dump(data)
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def snapshot_tree(root: Path) -> dict[str, bytes]:
+    """Byte-snapshot every file under *root* (excluding `.git`) for read-only assertions.
+
+    Feature 012 T004: shared helper for asserting a read-only command mutates neither
+    the ledger nor the config (before/after byte-compare), reused by US3/polish tests.
+    """
+    snap: dict[str, bytes] = {}
+    for f in sorted(root.rglob("*")):
+        if f.is_file() and ".git" not in f.parts:
+            snap[str(f.relative_to(root))] = f.read_bytes()
+    return snap
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +364,7 @@ def handoff_repo(tmp_git_repo: Path):
             review_cycles=review_cycles if review_cycles is not None else [make_cycle()],
             phase=phase,
         )
-        led["schema_version"] = 5
+        led["schema_version"] = ledger.CURRENT_SCHEMA
         (feature_dir / "status.yaml").write_text(yaml.dump(led))
         return root
 

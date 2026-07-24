@@ -20,6 +20,7 @@ from pathlib import Path
 
 import yaml
 
+from specops import evidence as evidence_mod
 from specops import gitops, speckit
 from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
@@ -29,7 +30,7 @@ from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 LEDGER_FILENAME = "status.yaml"
 
-CURRENT_SCHEMA = 5
+CURRENT_SCHEMA = 6
 OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
 
 # Feature 009 — the no-map context-provenance marker backfilled onto records
@@ -41,6 +42,10 @@ DEFAULT_WORKFLOW_LANE = "full"
 # Feature 010 (v4) — the top-level acknowledgements list. Each record marks a
 # discovered (unplanned) effective-diff path as legitimate; see specops.trace.
 ACK_FIELDS = ("path", "task", "reason")
+
+# Feature 012 (v6) — structured evidence. A top-level `evidence` list holds
+# id-addressable records; tasks carry `evidence_refs` and findings an `evidence_id`
+# into it. The legacy `<CLASS>:<summary>` string is retained; see specops.evidence.
 
 # Feature 011 (v5) — structured corrective handoffs. Each review cycle may carry
 # a nested `handoff` object holding the round's findings; see specops.handoff.
@@ -211,6 +216,7 @@ def migrate_to_current(data: dict) -> dict:
     ensure_workflow_block(out)
     backfill_context_provenance(out)
     backfill_acknowledgements(out)
+    backfill_evidence(out)
     return out
 
 
@@ -228,6 +234,48 @@ def backfill_context_provenance(data: dict) -> None:
     for cycle in data.get("review_cycles") or []:
         if isinstance(cycle, dict):
             cycle.setdefault("context_provenance", dict(NO_MAP_PROVENANCE))
+
+
+def _commit_range_for_task(task: dict) -> str:
+    """Best-effort commit range for a task's migrated evidence (baseline..HEAD-like)."""
+    commits = [str(c) for c in (task.get("commits") or [])]
+    if len(commits) > 1:
+        return f"{commits[0]}..{commits[-1]}"
+    if commits:
+        return commits[-1]
+    started = task.get("started_commit")
+    return str(started) if started else ""
+
+
+def backfill_evidence(data: dict) -> None:
+    """Back-fill the top-level ``evidence`` list (Feature 012, v6). Idempotent.
+
+    A ledger written before v6 has no ``evidence`` list; it gains an explicit empty
+    list (never an omitted key). Each task's legacy ``<CLASS>:<summary>`` string is
+    parsed into structured record(s), appended, and referenced by the task's
+    ``evidence_refs`` — the legacy string is **retained** (never replaced), so
+    Feature 010/011 rendering is unaffected (FR-007). Idempotent: a task that already
+    carries ``evidence_refs`` is left untouched.
+    """
+    ev_list = data.get("evidence")
+    if not isinstance(ev_list, list):
+        ev_list = []
+        data["evidence"] = ev_list
+    fallback_ts = data.get("updated_at") or now_utc()
+    for task in data.get("tasks") or []:
+        if not isinstance(task, dict) or task.get("evidence_refs") is not None:
+            continue
+        refs: list[str] = []
+        legacy = task.get("evidence")
+        if isinstance(legacy, str) and legacy:
+            ts = task.get("completed_at") or fallback_ts
+            commit_range = _commit_range_for_task(task)
+            for rec in evidence_mod.parse_legacy_string(
+                legacy, timestamp=ts, commit_range=commit_range, subject=task.get("id"),
+            ):
+                stored = evidence_mod.append_record(ev_list, rec)
+                refs.append(stored["id"])
+        task["evidence_refs"] = refs
 
 
 def backfill_acknowledgements(data: dict) -> None:
@@ -318,6 +366,7 @@ def validate_invariants(data: dict) -> list[str]:
 
     violations.extend(_acknowledgement_violations(data))
     violations.extend(_finding_violations(data))
+    violations.extend(_evidence_violations(data))
 
     return violations
 
@@ -440,6 +489,49 @@ def _acknowledgement_violations(data: dict) -> list[str]:
             out.append(
                 f"acknowledgement {i} references unknown task '{rec['task']}'"
             )
+    return out
+
+
+def _evidence_violations(data: dict) -> list[str]:
+    """Validate the optional v6 ``evidence`` list + its references (Feature 012).
+
+    Absent is allowed (a pre-v6 or hand-built ledger). When present, each record MUST
+    be a mapping with a non-empty, unique ``id``; every ``task.evidence_refs`` entry and
+    every ``finding.evidence_id`` MUST resolve to a recorded evidence id (no dangling
+    reference).
+    """
+    ev = data.get("evidence")
+    if ev is None:
+        return []
+    if not isinstance(ev, list):
+        return ["evidence is not a list"]
+    out: list[str] = []
+    ids: set[str] = set()
+    for i, rec in enumerate(ev):
+        if not isinstance(rec, dict):
+            out.append(f"evidence[{i}] is not a mapping")
+            continue
+        rid = rec.get("id")
+        if not isinstance(rid, str) or not rid:
+            out.append(f"evidence[{i}] missing id")
+            continue
+        if rid in ids:
+            out.append(f"duplicate evidence id '{rid}'")
+        ids.add(rid)
+    for task in data.get("tasks") or []:
+        if not isinstance(task, dict):
+            continue
+        for ref in task.get("evidence_refs") or []:
+            if ref not in ids:
+                out.append(f"task '{task.get('id')}' references unknown evidence '{ref}'")
+    for cycle in data.get("review_cycles") or []:
+        handoff = cycle.get("handoff") if isinstance(cycle, dict) else None
+        if not isinstance(handoff, dict):
+            continue
+        for f in handoff.get("findings") or []:
+            eid = f.get("evidence_id") if isinstance(f, dict) else None
+            if eid is not None and eid not in ids:
+                out.append(f"finding '{f.get('id')}' references unknown evidence '{eid}'")
     return out
 
 

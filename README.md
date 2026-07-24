@@ -223,8 +223,14 @@ specops reconcile || exit 1   # preflight before review
 ### `specops review`
 
 Read-only gate. Runs the deterministic review gates cheapest-first with early
-stop: **reconcile → lint → test → working tree/effective diff → drift**. The first
-failing gate stops the run and prints its evidence to stderr (exit 1); a full
+stop: **reconcile → the selected gate-profile suite → working tree/effective diff →
+drift**. Since Feature 012 the profile suite replaces the fixed lint/test gates
+(with no config it is the default `lint`/`test` profile — see `specops gate` below);
+each profile gate carries an outcome disposition (`required`/`optional`/`skipped`/
+`cached`/`failed`/`unavailable`), a per-gate timeout, and — in `--json` — its
+disposition, reason, covered inputs, and supporting evidence id. A required
+failure/unavailability blocks; an optional one does not. The first failing gate
+stops the run and prints its evidence to stderr (exit 1); a full
 pass prints a per-gate report to stdout (exit 0) that lists the effective-diff
 files — the exact scope the review agent then reads. Ledger parse errors keep
 exit 2. Runs from any directory inside the repo, never writes to the ledger or
@@ -338,6 +344,54 @@ drift without rejecting legitimate discoveries.
 Acknowledgements live in the ledger (schema **v4**, migrated forward
 automatically). All commands accept `--json` for a stable, versioned surface, and
 map onto the `0`/`1`/`2` exit-code taxonomy with a `status` field.
+
+### `specops gate list | validate | report` (Feature 012)
+
+Read-only inspection of the **gate-profile suite** and **structured evidence**. Gate
+profiles live in a versioned `.specify/specops/gate-profiles.yaml` (a sibling of the
+context map): an ordered list of gates, each with a `command`, a single applicability
+predicate (`always` / `contexts` / `paths` globs / named-key `risk`, matching the
+context map's free-form risk mapping), a `timeout` (seconds; default `600`), a
+`required` flag (default `true`), and failure semantics. When the file is absent — or
+its `profiles` list is empty — SpecOps synthesizes the default `lint`/`test` profile
+from `specops.json`, so an upgraded repository behaves exactly as before until a
+profile is authored (never zero gates).
+
+```yaml
+# .specify/specops/gate-profiles.yaml
+output_version: 1
+profiles:
+  - name: unit-tests
+    command: "pytest -q"
+    applies: { always: true }
+    timeout: 600
+    required: true
+  - name: schema-guard
+    command: "scripts/check-migrations.sh"
+    applies: { paths: ["migrations/**"], risk: { persisted: true } }
+    timeout: 120
+```
+
+- `specops gate list [--json]` — the deterministically selected suite for the current
+  effective diff, with a machine-readable reason per gate.
+- `specops gate validate [--json]` — fails closed (exit `1`) with one distinct
+  diagnostic per config defect (duplicate name, empty command, bad timeout, unparseable
+  predicate, dangling reference, unsupported version).
+- `specops gate report [--json] [--sarif]` — the verdict provenance (each gate's
+  disposition/reason/inputs/evidence id) plus the ledger's structured evidence records.
+
+The suite runs inside `specops review` (there is no standalone runner). Every gate run
+and every task/finding evidence link is recorded as a **structured evidence record** —
+a cache-key-derived id (`EV-<hex12>`), producer, command, exit code, timestamp, commit
+range, affected paths, summary, and an optional local-artifact `sha256` digest — stored
+in the `status.yaml` ledger (schema **v6**), alongside the retained legacy
+`<CLASS>:<summary>` string. A gate whose full cache key still matches a prior record is
+`cached` (not re-run). Opt-in `--sarif` on `review`/`gate report` emits a SARIF 2.1.0
+projection of the review findings.
+
+The ledger migrates **v5 → v6** automatically on the next state-changing command:
+legacy evidence strings are back-filled into structured records without loss (idempotent;
+prior valid ledger preserved on failure).
 
 ### `specops handoff finding … | authorize | close | validate | report | import | render`
 

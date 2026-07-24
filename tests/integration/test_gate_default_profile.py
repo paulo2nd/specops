@@ -1,0 +1,102 @@
+"""Integration tests: default-profile synthesis + gate CLI (Feature 012, US1, T007).
+
+Covers FR-005 / SC-006: no config (or empty list) synthesizes the lint/test default;
+`gate list`/`gate validate` exit 0 in the no-config state; the `test` gate is always
+present (empty test_command still yields the gate, resolved downstream).
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
+
+from specops import gateprofiles
+from specops.cli import app
+from specops.errors import SpecopsError
+from tests.conftest import write_profiles
+
+runner = CliRunner()
+
+
+def _run(root: Path, *args: str):
+    cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        return runner.invoke(app, ["gate", *args])
+    finally:
+        os.chdir(cwd)
+
+
+def _write_config(root: Path, **kv) -> None:
+    (root / "specops.json").write_text(json.dumps(kv))
+
+
+def test_default_profile_from_test_command(context_map_repo: Path) -> None:
+    _write_config(context_map_repo, test_command="pytest", lint_command="")
+    gates = gateprofiles.default_profile(context_map_repo)
+    names = [g.name for g in gates]
+    # both gates always present (empty lint resolves to a benign SKIP downstream)
+    assert names == ["lint", "test"]
+    assert all(g.required and g.applies.always for g in gates)
+
+
+def test_default_profile_includes_lint_when_set(context_map_repo: Path) -> None:
+    _write_config(context_map_repo, test_command="pytest", lint_command="ruff check .")
+    gates = gateprofiles.default_profile(context_map_repo)
+    assert [g.name for g in gates] == ["lint", "test"]  # declared order lint→test
+
+
+def test_default_profile_gates_are_unbounded(context_map_repo: Path) -> None:
+    # Regression: the pre-012 lint/test gates had no timeout; the default profile must
+    # not newly kill a legitimately-long suite (FR-005).
+    _write_config(context_map_repo, test_command="pytest")
+    gates = gateprofiles.default_profile(context_map_repo)
+    assert all(g.timeout is None for g in gates)
+
+
+def test_resolve_suite_returns_default_when_no_config(context_map_repo: Path) -> None:
+    _write_config(context_map_repo, test_command="pytest")
+    gates = gateprofiles.resolve_suite(context_map_repo)
+    assert [g.name for g in gates] == ["lint", "test"]
+
+
+def test_resolve_suite_fails_closed_on_invalid_config(context_map_repo: Path) -> None:
+    # A malformed present config must NOT silently fall back to the default suite.
+    _write_config(context_map_repo, test_command="pytest")
+    # a required gate with an empty command → invalid
+    write_profiles(context_map_repo, {"profiles": [{"name": "sec", "command": ""}]})
+    with pytest.raises(SpecopsError, match="Invalid gate-profiles.yaml"):
+        gateprofiles.resolve_suite(context_map_repo)
+
+
+def test_empty_profiles_list_falls_back_to_default(context_map_repo: Path) -> None:
+    _write_config(context_map_repo, test_command="pytest")
+    write_profiles(context_map_repo, {"output_version": 1, "profiles": []})
+    gates = gateprofiles.profiles_for(context_map_repo)
+    assert [g.name for g in gates] == ["lint", "test"]  # never zero gates (FR-005)
+
+
+def test_cli_gate_list_no_config_exit_zero(context_map_repo: Path) -> None:
+    _write_config(context_map_repo, test_command="pytest")
+    result = _run(context_map_repo, "list", "--json")
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["default_profile"] is True
+    assert payload["output_version"] == gateprofiles.OUTPUT_VERSION
+    assert any(row["name"] == "test" for row in payload["selection"])
+
+
+def test_cli_gate_validate_no_config_exit_zero(context_map_repo: Path) -> None:
+    _write_config(context_map_repo, test_command="pytest")
+    result = _run(context_map_repo, "validate", "--json")
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["status"] == gateprofiles.S_NO_CONFIG
+
+
+def test_cli_gate_validate_defect_exit_one(context_map_repo: Path) -> None:
+    write_profiles(context_map_repo, {"profiles": [{"name": "a", "command": ""}]})
+    result = _run(context_map_repo, "validate")
+    assert result.exit_code == 1

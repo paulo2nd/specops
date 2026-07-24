@@ -9,6 +9,7 @@ import git
 import yaml
 
 from specops import config, contextmap, gitops, ledger, shell, speckit
+from specops import evidence as evidence_mod
 from specops.errors import LedgerParseError, SpecopsError
 from specops.ledger import now_utc
 
@@ -358,6 +359,7 @@ def cmd_complete_task(
         code_diff = f"{len(files)} files across {len(commits)} commit(s): {', '.join(files[:5])}"
 
         evidence_str = f"TEST_REPORT:{test_line}; CODE_DIFF:{code_diff}"
+        evidence_command = test_cmd
         task["commits"] = commits
         if commits:
             data["recovery"]["last_commit"] = commits[0]
@@ -368,6 +370,7 @@ def cmd_complete_task(
                 f"with class in {sorted(EVIDENCE_CLASSES)}."
             )
         evidence_str = evidence
+        evidence_command = "(evidence)"
         commits = gitops.commits_in_range(repo, started)
         task["commits"] = commits
         if commits:
@@ -381,6 +384,20 @@ def cmd_complete_task(
     task["status"] = "DONE"
     task["completed_at"] = now_utc()
     data["recovery"]["active_task"] = None
+
+    # Feature 012 (v6): record the structured evidence object + task reference,
+    # alongside the retained legacy `<CLASS>:<summary>` string (FR-006/FR-007).
+    task_commits = task.get("commits") or []
+    head = task_commits[0] if task_commits else started
+    commit_range = f"{started}..{head}" if head != started else str(started)
+    ev_record = evidence_mod.build_record(
+        producer="auto", command=evidence_command, exit_code=0,
+        timestamp=task["completed_at"], commit_range=commit_range,
+        affected_paths=list(changed_files), summary=evidence_str,
+        context_map_digest=contextmap.map_digest(root), subject=task_id,
+    )
+    stored = evidence_mod.append_record(data.setdefault("evidence", []), ev_record)
+    task["evidence_refs"] = [stored["id"]]
 
     _finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' completed. Evidence: {evidence_str}"

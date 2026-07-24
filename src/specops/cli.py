@@ -102,6 +102,13 @@ finding_app = typer.Typer(
 )
 handoff_app.add_typer(finding_app, name="finding")
 
+gate_app = typer.Typer(
+    name="gate",
+    help="Gate profiles: list, validate (read-only inspection) (Feature 012).",
+    no_args_is_help=True,
+)
+app.add_typer(gate_app, name="gate")
+
 # ---------------------------------------------------------------------------
 # Error boundary: single exit-code mapper (contracts/errors.md)
 # ---------------------------------------------------------------------------
@@ -241,29 +248,38 @@ def review(
              "do-while loop body so a REJECTED verdict drives the loop instead of "
              "aborting the run (Feature 007).",
     ),
+    sarif: bool = typer.Option(
+        False, "--sarif",
+        help="Emit a SARIF 2.1.0 projection of the review findings and exit 0 "
+             "(a read-only findings export, opt-in; Feature 012).",
+    ),
 ) -> None:
-    """Run the deterministic review gates (reconcile → lint → test → working tree)."""
+    """Run the deterministic review gates (reconcile → profile suite → working tree)."""
     repo = _require_git(Path("."))
-    from specops import outcome
+    from specops import gateprofiles, outcome
     from specops import review as review_mod
     # Contract: usable from any directory inside the repo — resolve the root.
     if repo.working_tree_dir is None:  # bare repository — no tree to review
         typer.echo("Not a work tree (bare repository).", err=True)
         raise typer.Exit(1)
     root = Path(repo.working_tree_dir)
+    if sarif:
+        _emit_sarif(root)
+        return
+    _ov = gateprofiles.OUTPUT_VERSION
     if json_out:
         try:
             report = review_mod.evaluate(root)
         except (LedgerParseError, SpecopsError) as exc:
             typer.echo(outcome.render("review", outcome.INFRA_ERROR, detail=exc.message))
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
-        gates = [{"name": r.name, "status": r.status} for r in report.results]
+        gates = [_gate_json(r) for r in report.results]
         if report.passed:
-            typer.echo(outcome.render("review", outcome.PASS, verdict="APPROVED", gates=gates))
+            typer.echo(outcome.render(
+                "review", outcome.PASS, verdict="APPROVED", gates=gates, output_version=_ov))
             return
-        typer.echo(
-            outcome.render("review", outcome.GATE_REJECTION, verdict="REJECTED", gates=gates)
-        )
+        typer.echo(outcome.render(
+            "review", outcome.GATE_REJECTION, verdict="REJECTED", gates=gates, output_version=_ov))
         # --soft keeps exit 0 so a do-while body can branch on the verdict; the
         # terminal gate (hard `specops review`) is what fails closed on REJECTED.
         if not soft:
@@ -808,6 +824,132 @@ def handoff_render(
     """Project the round's handoff to revisions/revision-<round>.md (structured -> Markdown)."""
     from specops import handoff
     _emit_handoff(handoff.render_revision(Path("."), round), json_out)
+
+
+# ---------------------------------------------------------------------------
+# gate subcommands (Feature 012 — read-only inspection; profiles run in review)
+# ---------------------------------------------------------------------------
+
+
+def _emit_sarif(root: Path) -> None:
+    """Emit a SARIF 2.1.0 projection of the ledger's findings (read-only, exit 0)."""
+    import json as _json
+
+    from specops import ledger, sarif, speckit
+    feature_dir = speckit.resolve_feature_dir(root)
+    data: dict[str, Any] = {}
+    if feature_dir is not None:
+        try:
+            data = ledger.load_raw(feature_dir)
+        except SpecopsError:
+            data = {}
+    version = "0.0.0"
+    with contextlib.suppress(importlib.metadata.PackageNotFoundError):
+        version = importlib.metadata.version("speckit-specops")
+    typer.echo(_json.dumps(sarif.from_ledger(data, tool_version=version)))
+
+
+def _gate_json(r: Any) -> dict[str, Any]:
+    """Provenance object for one gate in a verdict (Feature 012, FR-011/FR-012)."""
+    obj: dict[str, Any] = {"name": r.name, "status": r.status}
+    for field_name in ("disposition", "reason", "evidence_id", "commit_range"):
+        value = getattr(r, field_name, None)
+        if value is not None:
+            obj[field_name] = value
+    if getattr(r, "affected_paths", None):
+        obj["affected_paths"] = r.affected_paths
+    return obj
+
+
+def _emit_gate(result: Any, json_out: bool) -> None:
+    """Render a gateprofiles.GateCommandResult and exit with its mapped code."""
+    from specops import gateprofiles, outcome
+    if json_out:
+        typer.echo(outcome.render(
+            result.command, result.cls,
+            status=result.status, output_version=gateprofiles.OUTPUT_VERSION,
+            **result.extra,
+        ))
+    else:
+        typer.echo(result.human, err=result.cls != outcome.PASS)
+    raise typer.Exit(result.exit_code)
+
+
+def _effective_diff_paths(root: Path) -> list[str]:
+    """Best-effort effective-diff paths for selection; [] when undeterminable."""
+    from specops import gitops, status
+    repo = gitops.find_repo(root)
+    if repo is None:
+        return []
+    try:
+        baseline = status.read_baseline(root)
+    except Exception:
+        baseline = ""
+    if not baseline or not gitops.commit_exists(repo, baseline):
+        return []
+    return gitops.name_only_diff(repo, baseline, "HEAD")
+
+
+@gate_app.command("list")
+@_handle_errors
+def gate_list(
+    path: list[str] = typer.Option(None, "--path", help="Changed path (repeatable); else Git."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Resolve and display the selected gate suite for the effective diff (read-only)."""
+    from specops import gateprofiles
+    root = Path(".")
+    changed = list(path) if path else _effective_diff_paths(root)
+    _emit_gate(gateprofiles.cmd_list(root, changed), json_out)
+
+
+@gate_app.command("validate")
+@_handle_errors
+def gate_validate(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Validate the gate-profile config; report every defect in one pass (FR-014)."""
+    from specops import gateprofiles
+    _emit_gate(gateprofiles.validate(Path(".")), json_out)
+
+
+@gate_app.command("report")
+@_handle_errors
+def gate_report(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+    sarif: bool = typer.Option(
+        False, "--sarif", help="Emit a SARIF 2.1.0 findings projection and exit 0 (opt-in)."),
+) -> None:
+    """Report the verdict's provenance: each gate's disposition/reason/inputs/evidence
+    plus the ledger's structured evidence records (read-only, FR-011/FR-012)."""
+    from specops import gateprofiles, review
+    root = Path(".")
+    repo = _require_git(root)
+    if repo.working_tree_dir is None:
+        typer.echo("Not a work tree (bare repository).", err=True)
+        raise typer.Exit(1)
+    root = Path(repo.working_tree_dir)
+    if sarif:
+        _emit_sarif(root)
+        return
+    try:
+        report = review.evaluate(root)
+    except (LedgerParseError, SpecopsError) as exc:
+        typer.echo(f"gate-report: cannot evaluate: {exc.message}", err=True)
+        raise typer.Exit(2) from None
+    from specops import evidence as evidence_mod
+    gates = [_gate_json(r) for r in report.results]
+    ev = evidence_mod.canonical_sort(review._existing_evidence(root))  # FR-021 ordering
+    if json_out:
+        import json as _json
+        typer.echo(_json.dumps({
+            "command": "gate-report", "output_version": gateprofiles.OUTPUT_VERSION,
+            "verdict": "APPROVED" if report.passed else "REJECTED",
+            "gates": gates, "evidence": ev,
+        }))
+    else:
+        typer.echo(report.render())
+        typer.echo(f"[evidence] {len(ev)} structured record(s) in the ledger.")
 
 
 if __name__ == "__main__":

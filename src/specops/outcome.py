@@ -18,7 +18,8 @@ contract: it is a Spec Kit engine abort (execution failure) recovered via
 from __future__ import annotations
 
 import json
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, ClassVar
 
 # --- Exit codes (mirror specops.errors) ------------------------------------
 EXIT_OK = 0
@@ -37,6 +38,31 @@ INFRA_ERROR = "infra-error"
 
 _STATUS_FOR_CLASS = {PASS: OK, GATE_REJECTION: BLOCKED, INFRA_ERROR: ERROR}
 _EXIT_FOR_CLASS = {PASS: EXIT_OK, GATE_REJECTION: EXIT_BLOCKED, INFRA_ERROR: EXIT_ERROR}
+
+
+@dataclass
+class CommandResult:
+    """A rendered-agnostic command outcome consumed by the CLI layer.
+
+    The shared base for every ``specops`` command result. A subclass sets the
+    ``_CLASS_MAP`` ClassVar to map its module-local statuses to an outcome class; the
+    ``cls``/``exit_code`` derivation then lives in exactly one place.
+    """
+
+    command: str
+    status: str
+    human: str
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    _CLASS_MAP: ClassVar[dict[str, str]] = {}
+
+    @property
+    def cls(self) -> str:
+        return self._CLASS_MAP[self.status]
+
+    @property
+    def exit_code(self) -> int:
+        return exit_for(self.cls)
 
 
 def status_for(cls: str) -> str:

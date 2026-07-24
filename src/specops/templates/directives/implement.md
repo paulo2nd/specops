@@ -28,6 +28,10 @@ For each task:
    - **If this IS the final task of the user story**: commit all accumulated work first, then:
      `specops status complete-task <task-id> --auto`
 
+   Either close records both the legacy `<CLASS>:<summary>` string and a **structured
+   evidence record** (Feature 012, Ledger v6) referenced by the task's `evidence_refs` —
+   automatically, via the CLI. Do not construct evidence records by hand.
+
 Never edit `status.yaml` or `tasks.md` checkboxes by hand.
 The ledger is the authority; the agent is the executor.
 

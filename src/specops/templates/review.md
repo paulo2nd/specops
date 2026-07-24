@@ -11,7 +11,7 @@ Check `skills_dir` (from `specops.json`). If the directory contains skill files,
 Run `specops review`.
 
 - Exit code ≠ 0 → **REJECTED**. Report the command's output. Stop here. Do not read any code.
-- Exit code 0 → all gates passed (reconcile, lint, test, working tree, drift). If the report shows any gate as `SKIPPED`, remember it for the revision report (Step 4). Continue.
+- Exit code 0 → all gates passed (reconcile, the selected gate-profile suite, working tree, drift). The profile suite (Feature 012) replaces the fixed lint/test gates: with no `.specify/specops/gate-profiles.yaml` it is the default `lint`/`test` profile. Each profile gate carries a disposition (`required`|`optional`|`skipped`|`cached`|`failed`|`unavailable`) — a required failure/unavailability blocks, an optional one does not. If the report shows any gate as `SKIPPED`, remember it for the revision report (Step 4). Continue.
 
 The **drift gate** (Feature 010) blocks the review when the effective diff contains any
 `unexplained` path — one that is neither declared in `plan.md` nor recorded as a
