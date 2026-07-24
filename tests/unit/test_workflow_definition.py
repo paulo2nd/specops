@@ -152,8 +152,14 @@ def test_loop_condition_reacts_to_unverified_blocking() -> None:
     REJECTED OR any unverified blocking finding, read from the existing handoff
     report surface (`remaining_blocking`)."""
     loop = _loop()
-    assert "REJECTED" in loop["condition"]
-    assert "remaining_blocking" in loop["condition"]
+    # Assert the exact disjunction — not two independent substring checks. This
+    # catches a regression that flips `or` to `and` (which would only re-iterate
+    # when a mechanical reject AND an unverified finding both hold, silently
+    # dropping the findings-aware behavior on a mechanical-pass round).
+    assert loop["condition"] == (
+        "{{ steps.review-soft.output.data.verdict == 'REJECTED'"
+        " or steps.handoff-report.output.data.remaining_blocking }}"
+    )
 
     report = {s["id"]: s for s in _flatten(_load()["steps"])}["handoff-report"]
     assert report["run"] == "specops handoff report --json"
