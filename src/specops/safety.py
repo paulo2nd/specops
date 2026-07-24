@@ -87,14 +87,18 @@ def detect(
     category to *additional* globs (never fewer than the floor). Detection is a pure
     function of its inputs — no I/O — so it is deterministic and unit-testable.
 
-    ``destructive`` is flagged on any deletion (git status ``D``): a file removal is
-    less trivially reversible, so the lane fails closed and asks a human.
+    ``destructive`` is flagged on a genuine deletion (git status ``D``): a file removal is
+    less trivially reversible, so the lane fails closed and asks a human. Callers must pass
+    a **rename-aware** diff (renames as ``R``, not decomposed into delete+add) so an ordinary
+    file move — a small reversible change the lane exists for — is not flagged destructive.
     """
+    # Precompute the floor+override pattern list once per category (not per path).
+    patterns = {c: _patterns_for(c, overrides) for c in _PATTERN_CATEGORIES}
     detections: list[Detection] = []
     seen: set[tuple[str, str]] = set()
     for status, path in diff_status:
         for category in _PATTERN_CATEGORIES:
-            if _matches(path, _patterns_for(category, overrides)):
+            if _matches(path, patterns[category]):
                 key = (category, path)
                 if key not in seen:
                     seen.add(key)

@@ -259,6 +259,27 @@ def synthesize_ledger_at_plan(feature_dir: Path, repo: git.Repo, lane_data: dict
     data["current_phase"] = "PLAN"
     ledger.attach_lane_provenance(data, lane_data)
     ledger.write_new(feature_dir, data)
+    # The lite lane never runs /speckit-specify, so no spec.md exists — but a ledger at
+    # PLAN and the before_plan directive expect one. Seed a minimal specification stub from
+    # the lane's context so the resumed full workflow has an artifact to plan against; the
+    # human refines it before continuing (Feature 013 promotion, finding 7).
+    spec_path = feature_dir / "spec.md"
+    if not spec_path.is_file():
+        elig = lane_data.get("eligibility") or {}
+        answers = ", ".join(a.get("key", "") for a in elig.get("answers") or []) or "—"
+        stub = (
+            f"# Feature Specification: {feature_dir.name}\n\n"
+            "**Status**: Promoted from the lightweight lane — refine before planning.\n\n"
+            "## Context\n\n"
+            "This feature began in the SpecOps lightweight lane and was promoted to the full "
+            "workflow because its scope or risk grew beyond a small reversible change. The lane "
+            f"baseline was `{baseline[:7]}`; eligibility was confirmed for: {answers}. The lane's "
+            "stop-and-ask decisions are recorded under `lane_provenance` in `status.yaml`.\n\n"
+            "## Next step\n\n"
+            "Replace this stub with a real specification (run `/speckit-specify` to regenerate, "
+            "or edit directly), then proceed with `/speckit-plan`.\n"
+        )
+        ledger.atomic_write(spec_path, stub)
     return ledger_path
 
 

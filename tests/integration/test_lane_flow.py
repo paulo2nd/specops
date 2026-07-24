@@ -103,6 +103,21 @@ def test_destructive_deletion_halts(tmp_git_repo: Path):
     assert "destructive" in json.loads(res.stdout)["categories"]
 
 
+def test_soft_keeps_exit_zero_for_workflow_conditions(tmp_git_repo: Path):
+    """The specops-lite workflow branches on `check`/`attest` JSON: --soft must exit 0
+    (class in the JSON) so a detection/flag drives the condition, not aborts the step."""
+    root = _feature(tmp_git_repo)
+    assert _run(root, "start", "--answers", _ELIG).exit_code == 0
+    _commit(root, "db/migrations/1.sql", "ALTER TABLE t ADD c int;\n", "risky")
+    res = _run(root, "check", "--json", "--soft")
+    assert res.exit_code == 0  # soft: never aborts the shell step
+    assert json.loads(res.stdout)["class"] == "gate-rejection"
+    att = _run(root, "attest", "--root-cause", "flag", "--public-contract", "clear",
+               "--json", "--soft")
+    assert att.exit_code == 0
+    assert json.loads(att.stdout)["class"] == "gate-rejection"
+
+
 def test_flagged_attestation_halts(tmp_git_repo: Path):
     """US2: a flagged attestation (root-cause or public-contract) exits 1."""
     root = _feature(tmp_git_repo)

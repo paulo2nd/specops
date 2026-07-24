@@ -206,6 +206,99 @@ def test_promote_twice_blocks(feat: Path):
     assert res.cls == outcome.GATE_REJECTION
 
 
+# --- review-fix regressions -------------------------------------------------
+
+def test_close_blocks_on_dirty_product_tree(feat: Path):
+    """Findings 1/2: an uncommitted product change must block close (fail-closed)."""
+    _start(feat)
+    _commit(feat, "src/util.py", "u = 1\n", "tweak")
+    lane.cmd_attest(feat, root_cause="clear", public_contract="clear")
+    (feat / "src" / "leftover.py").write_text("secret = 1\n")  # uncommitted product file
+    res = lane.cmd_close(feat)
+    assert res.cls == outcome.GATE_REJECTION
+    assert res.extra["uncommitted"] >= 1
+
+
+def test_close_ignores_untracked_methodology_dir(feat: Path):
+    """Findings 1/2 fix must not false-block: an untracked specs/<feature>/ (the lane's own
+    lane.yaml, reported by git as a collapsed '?? specs/') is methodology state, not a dirty
+    product tree. Commit only the product file so methodology files stay untracked."""
+    _start(feat)
+    (feat / "src").mkdir(exist_ok=True)
+    (feat / "src" / "x.py").write_text("x = 1\n")
+    _git(feat, "add", "src/x.py")  # selective add — do NOT sweep specs/ or specops.json
+    _git(feat, "commit", "-m", "product only")
+    lane.cmd_attest(feat, root_cause="clear", public_contract="clear")
+    res = lane.cmd_close(feat)
+    assert res.cls == outcome.PASS, res.human
+
+
+def test_check_fails_closed_on_unresolvable_baseline(feat: Path):
+    """Finding 3: an orphaned baseline must fail closed, not report 'nothing detected'."""
+    _start(feat)
+    feature_dir = feat / "specs" / "013-lane"
+    data = lane.load(feature_dir)
+    data["baseline"] = "deadbeef" * 5  # a SHA that does not resolve
+    lane.save(feature_dir, data)
+    with pytest.raises(LedgerParseError):
+        lane.cmd_check(feat, staged=False)
+
+
+def test_promote_fails_closed_on_diverged_baseline(feat: Path):
+    """Finding 4: a baseline that is not an ancestor of HEAD must not promote silently."""
+    _start(feat)
+    _commit(feat, "src/a.py", "a = 1\n", "c1")
+    feature_dir = feat / "specs" / "013-lane"
+    data = lane.load(feature_dir)
+    data["baseline"] = "deadbeef" * 5
+    lane.save(feature_dir, data)
+    with pytest.raises(LedgerParseError):
+        lane.cmd_promote(feat, reason="scope-growth")
+    assert not (feature_dir / "status.yaml").exists()  # no partial ledger
+
+
+def test_check_does_not_flag_a_rename_as_destructive(feat: Path):
+    """Finding 5: an ordinary file rename must not trip the destructive category."""
+    _commit(feat, "src/old_name.py", "value = 1\n", "seed")
+    _start(feat)
+    _git(feat, "mv", "src/old_name.py", "src/new_name.py")
+    _git(feat, "commit", "-m", "rename")
+    res = lane.cmd_check(feat, staged=False)
+    assert res.cls == outcome.PASS, res.extra
+
+
+def test_promote_rejects_invalid_reason(feat: Path):
+    """Finding 9: --reason must be validated against the documented enum."""
+    _start(feat)
+    with pytest.raises(SpecopsError):
+        lane.cmd_promote(feat, reason="because")
+
+
+def test_promote_creates_spec_stub(feat: Path):
+    """Finding 7: promotion lands at PLAN and must leave a spec.md for the plan phase."""
+    _start(feat)
+    _commit(feat, "src/a.py", "a = 1\n", "c1")
+    lane.cmd_promote(feat, reason="scope-growth")
+    spec = feat / "specs" / "013-lane" / "spec.md"
+    assert spec.is_file()
+    assert "Promoted from the lightweight lane" in spec.read_text()
+
+
+def test_flag_then_clear_supersedes_but_flag_only_blocks(feat: Path):
+    """Finding 6: the latest attestation per category governs; a lone flag still blocks."""
+    _start(feat)
+    _commit(feat, "src/util.py", "u = 1\n", "tweak")
+    # A lone flag blocks close.
+    lane.cmd_attest(feat, root_cause="flag", public_contract="clear")
+    blocked = lane.cmd_close(feat)
+    assert blocked.cls == outcome.GATE_REJECTION
+    assert "root-cause" in blocked.extra["unresolved_attestations"]
+    # Re-attesting clear (after addressing it) supersedes and allows close.
+    lane.cmd_attest(feat, root_cause="clear", public_contract="clear")
+    ok = lane.cmd_close(feat)
+    assert ok.cls == outcome.PASS, ok.human
+
+
 # --- US4: closure evidence taxonomy + retrospective render -----------------
 
 def test_closure_records_gate_evidence_taxonomy(feat: Path):

@@ -177,17 +177,18 @@ def attach_lane_provenance(data: dict, lane_data: dict) -> dict:
 
     Feature 013: a promoted lane synthesizes a full ledger (this dict) that records it
     came from the lite lane. The keys are additive on the v6 schema (no schema bump):
-    ``promoted_from_lane`` and a ``lane_provenance`` block carrying the lane's
-    eligibility answers, stop-and-ask decisions, and any gathered closure evidence, so
-    the full workflow continues with populated context rather than an empty ledger (P-2).
+    ``promoted_from_lane`` and a ``lane_provenance`` block carrying the lane's identity,
+    baseline, eligibility answers, and stop-and-ask decisions, so the full workflow
+    continues with populated context rather than an empty ledger (P-2). Promotion runs from
+    an OPEN lane (INV-2 ⇒ no closure block), so there is no closure gate-evidence to carry;
+    the deterministic gate evidence is produced later by the full review pipeline.
     """
     data["promoted_from_lane"] = True
-    closure = lane_data.get("closure") or {}
     data["lane_provenance"] = {
         "lane_id": lane_data.get("lane_id"),
+        "baseline": lane_data.get("baseline"),
         "eligibility": lane_data.get("eligibility"),
         "decisions": lane_data.get("decisions") or [],
-        "evidence": (closure.get("gate_evidence") or {}).get("gates", []),
     }
     return data
 

@@ -72,11 +72,16 @@ Fail-closed closure. Requires both attestations recorded `clear` (`--root-cause 
 records Feature 012 evidence, writes the retrospective, sets `state: CLOSED`, renders
 `retrospective.md`.
 
+Preconditions (all fail-closed): the **product working tree must be clean** (SpecOps/Speckit
+methodology artifacts — the lane's own `lane.yaml`/`retrospective.md` under `specs/<feature>/`,
+`specops.json`, `.specify/**` — are excluded, as in the drift gate), so no staged/uncommitted
+high-risk change escapes the safety scan by sitting outside `baseline..HEAD`.
+
 | Outcome | Condition | Exit | class |
 |---------|-----------|------|-------|
 | ok | preflight APPROVED; closure + retrospective written | 0 | pass |
-| blocked | required gate FAIL/unavailable, OR a missing/`flag` attestation, OR an unresolved detection | 1 | gate-rejection |
-| error | lane not open / infra failure | 2 | infra-error |
+| blocked | an unclean product working tree, OR required gate FAIL/unavailable, OR a missing/`flag` attestation, OR an unresolved detection | 1 | gate-rejection |
+| error | lane not open, OR the lane baseline no longer resolves in the clone | 2 | infra-error |
 
 `--json` extra keys: `verdict`, `gates` (disposition list), `retrospective_path`.
 
@@ -87,11 +92,13 @@ records Feature 012 evidence, writes the retrospective, sets `state: CLOSED`, re
 Lossless promotion. Synthesizes `status.yaml` (schema v6) at `current_phase: PLAN`, imports
 `baseline..HEAD` commits, copies lane context into `lane_provenance`, sets `state: PROMOTED`.
 
+`--reason` is validated against the enum `{safety-trip, scope-growth}` (usage error otherwise).
+
 | Outcome | Condition | Exit | class |
 |---------|-----------|------|-------|
-| ok | ledger synthesized at PLAN; all commits reachable; lane marked PROMOTED | 0 | pass |
+| ok | ledger synthesized at PLAN (+ a `spec.md` stub); commits imported; lane marked PROMOTED | 0 | pass |
 | blocked | `status.yaml` already exists (already promoted) | 1 | gate-rejection |
-| error | a recorded commit is unreachable (history diverged → `status rebaseline` guidance), not a git repo | 2 | infra-error |
+| error | the lane baseline is not an ancestor of HEAD (history diverged → `status rebaseline` guidance), an invalid `--reason`, or not a git repo | 2 | infra-error |
 
 `--json` extra keys: `synthesized_ledger`, `imported_commits` (count), `resumed_phase` (`PLAN`).
 

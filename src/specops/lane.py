@@ -14,6 +14,7 @@ arrive as arguments supplied by the ``specops-lite`` workflow's native gate/prom
 """
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -141,20 +142,69 @@ def _overrides(root: Path) -> dict[str, list[str]]:
     return config.lane_safety_overrides(cfg)
 
 
+def _parse_name_status(raw: str) -> list[tuple[str, str]]:
+    """Parse `git diff --name-status -M` lines into (status, path) pairs.
+
+    Rename-aware (``-M``): a rename is a single ``R`` on the NEW path, not a
+    delete+add, so an ordinary file move is not mis-flagged destructive (safety.detect).
+    """
+    out: list[tuple[str, str]] = []
+    for line in raw.splitlines():
+        if line.strip():
+            parts = line.split("\t")
+            out.append((parts[0][:1], parts[-1]))
+    return out
+
+
+def _unmanaged_dirty(repo: Any, feature_name: str) -> list[str]:
+    """Return uncommitted PRODUCT paths, excluding SpecOps/Speckit methodology artifacts.
+
+    Reuses :func:`specops.trace._is_managed` (the single definition of methodology state:
+    ``.specify/**``, ``specops.json``, and the active feature's ``specs/<name>/`` dir) so the
+    lane's own ``lane.yaml``/``retrospective.md`` never count as a dirty tree at close.
+    """
+    from specops import trace
+    # `-uall` expands untracked directories to individual files, so a wholly-untracked
+    # `specs/<feature>/` is not collapsed to `specs/` (which would miss the managed-path
+    # prefix and be mis-counted as a dirty product path).
+    raw = repo.git.status("--porcelain", "-uall")
+    out: list[str] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].strip() if len(line) > 3 else line.strip()
+        if " -> " in path:  # rename: report the destination path
+            path = path.split(" -> ", 1)[1]
+        path = path.strip().strip('"')
+        if path and not trace._is_managed(path, feature_name):
+            out.append(path)
+    return out
+
+
+def _require_resolvable_baseline(repo: Any, data: dict) -> None:
+    """Fail closed (exit 2) when the lane baseline no longer resolves in this clone.
+
+    A shallow clone or a history rewrite can orphan the stored baseline; scanning an
+    empty diff would then fail *open* ("nothing detected"). The full review pipeline's
+    working-tree gate fails closed here, and the lane must match (findings: fail-open diff).
+    """
+    baseline = str(data.get("baseline") or "")
+    if baseline and not gitops.commit_exists(repo, baseline):
+        raise LedgerParseError(
+            f"Lane baseline {baseline[:7]} cannot be resolved in this clone "
+            "(history rewritten or shallow). Reconcile the branch before continuing."
+        )
+
+
 def _diff_status(repo: Any, baseline: str, staged: bool) -> list[tuple[str, str]]:
-    """Return (status, path) pairs for baseline..HEAD, plus staged changes when asked."""
+    """Return rename-aware (status, path) pairs for baseline..HEAD, plus staged when asked."""
     pairs: list[tuple[str, str]] = []
     if baseline and gitops.commit_exists(repo, baseline):
-        pairs.extend(gitops.effective_diff_status(repo, baseline, "HEAD"))
+        with contextlib.suppress(Exception):  # git errors degrade to "no committed diff"
+            pairs.extend(_parse_name_status(repo.git.diff("--name-status", "-M", baseline, "HEAD")))
     if staged:
-        try:
-            raw = repo.git.diff("--cached", "--name-status", "--no-renames")
-        except Exception:  # noqa: BLE001 - git errors degrade to "no staged diff"
-            raw = ""
-        for line in raw.splitlines():
-            if line.strip():
-                parts = line.split("\t")
-                pairs.append((parts[0][:1], parts[-1]))
+        with contextlib.suppress(Exception):  # git errors degrade to "no staged diff"
+            pairs.extend(_parse_name_status(repo.git.diff("--cached", "--name-status", "-M")))
     return pairs
 
 
@@ -244,6 +294,7 @@ def cmd_check(root: Path, *, staged: bool) -> LaneResult:
     data = load(feature_dir)
     if data["state"] != "OPEN":
         raise SpecopsError(f"Lane is {data['state']}, not OPEN.")
+    _require_resolvable_baseline(repo, data)
     detections = safety.detect(_diff_status(repo, data["baseline"], staged), _overrides(root))
     if not detections:
         return _ok("Safety check: no high-risk category detected.", detections=[])
@@ -267,10 +318,13 @@ def cmd_attest(root: Path, *, root_cause: str, public_contract: str) -> LaneResu
     ts = ledger.now_utc()
     pairs = ((safety.ROOT_CAUSE, root_cause), (safety.PUBLIC_CONTRACT, public_contract))
     for category, answer in pairs:
+        # Attestations record the CURRENT state of the change per category; the latest
+        # answer governs closure (a flag blocks unless a later clear supersedes it —
+        # after the human addresses it and re-attests). No standalone "resolution" field:
+        # it never got updated and read as a permanent-pending audit artifact (finding 6).
         data.setdefault("decisions", []).append({
             "seq": _next_seq(data), "kind": "attestation", "category": category,
-            "signal": "always-on", "answer": answer,
-            "resolution": None if answer == ATTEST_CLEAR else "pending", "at": ts,
+            "signal": "always-on", "answer": answer, "at": ts,
         })
     save(feature_dir, data)
     flagged = [c for c, v in (("root-cause", root_cause), ("public-contract", public_contract))
@@ -291,8 +345,22 @@ def cmd_close(root: Path) -> LaneResult:
     data = load(feature_dir)
     if data["state"] != "OPEN":
         raise SpecopsError(f"Lane is {data['state']}, not OPEN.")
+    _require_resolvable_baseline(repo, data)
 
-    # 1. attestations must both be recorded clear (D-2).
+    # 1. the PRODUCT working tree must be clean — mirror the full pipeline's working-tree
+    #    gate so staged/uncommitted high-risk changes cannot escape the safety scan and gates
+    #    by sitting outside baseline..HEAD (findings: dirty-tree / staged-file fail-open).
+    #    SpecOps/Speckit methodology artifacts (the lane's own lane.yaml/retrospective under
+    #    specs/<feature>/, specops.json, .specify/**) are excluded, exactly as the drift gate.
+    dirty = _unmanaged_dirty(repo, feature_dir.name)
+    if dirty:
+        return _blocked(
+            f"Cannot close: working tree not clean ({len(dirty)} uncommitted change(s): "
+            + ", ".join(dirty[:5]) + "). Commit or discard them so the lane's safety check "
+            "and gates cover every change.",
+            uncommitted=len(dirty),
+        )
+    # 2. attestations must both be recorded clear (D-2).
     att = _latest_attestations(data)
     not_clear = [c for c in safety.ATTESTED_CATEGORIES if att.get(c) != ATTEST_CLEAR]
     if not_clear:
@@ -301,7 +369,7 @@ def cmd_close(root: Path) -> LaneResult:
             + " (run 'specops lane attest').",
             unresolved_attestations=not_clear,
         )
-    # 2. no diff-detectable category may remain (re-check, read-only).
+    # 3. no diff-detectable category may remain (re-check, read-only).
     detections = safety.detect(_diff_status(repo, data["baseline"], False), _overrides(root))
     if detections:
         cats = safety.categories(detections)
@@ -309,7 +377,7 @@ def cmd_close(root: Path) -> LaneResult:
             "Cannot close: unresolved safety detection (" + ", ".join(cats)
             + "). Halt or promote.", categories=cats,
         )
-    # 3. run the deterministic gate-profile suite (fail-closed on a required gate).
+    # 4. run the deterministic gate-profile suite (fail-closed on a required gate).
     report = review_mod.GateReport()
     report.results.extend(review_mod._profile_gates(root, repo, data["baseline"]))
     gates = [_gate_evidence(r) for r in report.results]
@@ -341,10 +409,17 @@ def cmd_close(root: Path) -> LaneResult:
     )
 
 
+PROMOTE_REASONS = ("safety-trip", "scope-growth")
+
+
 def cmd_promote(root: Path, *, reason: str) -> LaneResult:
     """Lossless promotion: synthesize a full ledger at PLAN, zero commit loss (FR-014/15)."""
     from specops import status as status_mod
 
+    if reason not in PROMOTE_REASONS:
+        raise SpecopsError(
+            f"--reason must be one of {', '.join(PROMOTE_REASONS)}, got {reason!r}."
+        )
     feature_dir, repo = _resolve(root)
     data = load(feature_dir)
     if data["state"] == "PROMOTED":
@@ -354,15 +429,20 @@ def cmd_promote(root: Path, *, reason: str) -> LaneResult:
     if ledger._ledger_path(feature_dir).is_file():
         return _blocked("A full ledger (status.yaml) already exists; nothing to promote.")
 
+    # P-1 (zero commit loss): the baseline must still resolve AND be an ancestor of HEAD.
+    # `commits_in_range` only yields commits already reachable, so per-commit is_ancestor
+    # can never fail — the real guard is on the *baseline* (a rewrite orphans it, which
+    # would otherwise promote silently with 0 imported commits).
+    baseline = str(data.get("baseline") or "")
     head = gitops.head_sha(repo)
-    imported = gitops.commits_in_range(repo, data["baseline"], head)
-    # P-1: every recorded commit must remain reachable (Principle II).
-    for sha in imported:
-        if not gitops.is_ancestor(repo, sha):
-            raise LedgerParseError(
-                f"Commit {sha[:7]} is not reachable from HEAD (history diverged); "
-                "run 'specops status rebaseline' after reconciling."
-            )
+    if baseline and (not gitops.commit_exists(repo, baseline)
+                     or not gitops.is_ancestor(repo, baseline)):
+        raise LedgerParseError(
+            f"Lane baseline {baseline[:7]} is not an ancestor of HEAD (history diverged); "
+            "reconcile the branch (e.g. 'specops status rebaseline') before promoting — "
+            "promoting now would lose the lane's commit history."
+        )
+    imported = gitops.commits_in_range(repo, baseline, head)
     status_mod.synthesize_ledger_at_plan(feature_dir, repo, data)
     data["state"] = "PROMOTED"
     data["promotion"] = {
