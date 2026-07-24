@@ -115,22 +115,42 @@ steps:
           args: "{{ inputs.spec }}"
 
   # --- Corrective loop: implement → review, repeating while REJECTED ----------
-  # Native `do-while` (FR-015): SpecOps builds no loop. The in-loop review is
-  # `--soft` (always exit 0; verdict in JSON) so a REJECTED verdict DRIVES the loop
-  # instead of aborting the run — a non-zero shell exit would fail the step and
-  # abort. `reconcile --json` is the fail-closed precondition (FR-010) of the
-  # corrective transition. On REJECTED, the workflow opens a corrective round
-  # (REVIEW→IMPLEMENT -r REJECTED — a transition no directive owns, C1/FR-017);
-  # `max_iterations` bounds the loop.
+  # Native `do-while` (FR-015): SpecOps builds no loop. Each round runs, in order:
+  #   1. `reconcile --json` — fail-closed precondition (FR-010) of the corrective
+  #      transition.
+  #   2. `implement` — the lifecycle command.
+  #   3. `review-soft` (`specops review --json --soft`) — the DETERMINISTIC gate,
+  #      kept as the cheap fail-closed PRECONDITION (Feature 016 FR-002, Principle
+  #      IV §18 token discipline). `--soft` always exits 0 (verdict in JSON) so a
+  #      REJECTED verdict DRIVES the loop instead of aborting the run.
+  #   4. `semantic-review` (`command: specops.review`) — the SEMANTIC agent review
+  #      (Feature 016 FR-001), run ONLY when the mechanical gate passes. It reads
+  #      the effective diff, records structured findings (Feature 011), verifies
+  #      fixed ones, and executes its OWN owned outcome transition (DONE on
+  #      approval / IMPLEMENT -r REJECTED on a blocking finding) — this feature
+  #      adds no transition of its own (FR-009). It is a HARD command step: if the
+  #      review command is unavailable the engine aborts the run (fail closed,
+  #      FR-016) — it is never treated as a no-findings degrade.
+  #   5. `handoff-report` (`specops handoff report --json`) — read-only; exposes
+  #      `remaining_blocking` (the unverified blocking finding ids, Feature 011)
+  #      to the loop condition (FR-003/FR-008). No handoff-CLI change.
+  # The loop re-iterates while the mechanical verdict is REJECTED OR any blocking
+  # finding is unverified. An empty `remaining_blocking` (no findings / legacy
+  # repo) leaves completion to the mechanical verdict — automatic degrade
+  # (FR-006/FR-015, no config toggle). On a MECHANICAL reject the workflow opens a
+  # corrective round (REVIEW→IMPLEMENT -r REJECTED — a transition no directive
+  # owns, C1/FR-017) and skips the semantic review that round; `max_iterations`
+  # bounds the loop.
   #
   # NOTE (runtime verification): the loop's end-to-end behavior interacts with the
   # injected Principle IV directive transitions and requires a live integration to
   # validate — it is not CI-reproducible (command steps need an agent/LLM). The
   # step structure is verified against Spec Kit's engine; the CLI primitives it
-  # composes (soft/hard review, corrective transition) are unit/integration-tested.
+  # composes (soft/hard review, semantic review, handoff report, terminal
+  # blocking-approval gate, corrective transition) are unit/integration-tested.
   - id: corrective-loop
     type: do-while
-    condition: "{{ steps.review-soft.output.data.verdict == 'REJECTED' }}"
+    condition: "{{ steps.review-soft.output.data.verdict == 'REJECTED' or steps.handoff-report.output.data.remaining_blocking }}"
     max_iterations: 3
     steps:
       - id: reconcile-pre-impl
@@ -144,6 +164,21 @@ steps:
       - id: review-soft
         type: shell
         run: "specops review --json --soft"
+        output_format: json
+      # Semantic agent review — only when the mechanical gate passes (FR-002).
+      - id: semantic-review-round
+        type: if
+        condition: "{{ steps.review-soft.output.data.verdict != 'REJECTED' }}"
+        then:
+          - id: semantic-review
+            command: specops.review
+            integration: "{{ inputs.integration }}"
+            input:
+              args: "{{ inputs.spec }}"
+      # Findings-aware signal for the loop condition (read-only; FR-003/FR-008).
+      - id: handoff-report
+        type: shell
+        run: "specops handoff report --json"
         output_format: json
       - id: corrective-round
         type: if

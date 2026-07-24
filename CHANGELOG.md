@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The shipped `specops` workflow now performs and enforces the semantic review
+  (Feature 016).** Previously a workflow-driven run passed the deterministic gates
+  and could complete without ever running `/specops-review`, so no structured
+  findings were recorded and the Feature 011 blocking-approval invariant gated an
+  empty set. The corrective `do-while` loop now:
+  - runs the deterministic `specops review` gate as a cheap **fail-closed
+    precondition** and, only when it passes, drives the **semantic
+    `command: specops.review`** step (the actual code review) — keeping the
+    mechanical gate first for token discipline;
+  - re-iterates while the gate is `REJECTED` **or** any **blocking finding** is
+    still unverified (read from the existing `specops handoff report --json`
+    `remaining_blocking` set — no CLI change), and cannot reach `DONE` while a
+    blocking finding is unverified;
+  - **degrades automatically** to the prior deterministic-only behavior when a run
+    records no findings (legacy repos included) — enforcement is always-on with no
+    opt-in/opt-out flag;
+  - **fails closed** if the review cannot be performed (the `specops.review`
+    command is unavailable), rather than completing silently.
+
+  Composed from Spec Kit native steps and the existing handoff CLI only (no new
+  engine/loop/gate primitive). **No migration required**: no persisted format,
+  JSON contract, or CLI surface changed; repositories that record no findings
+  behave exactly as before.
+
 ## [0.4.0] - 2026-07-23
 
 ### Added

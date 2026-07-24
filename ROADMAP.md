@@ -84,7 +84,7 @@ Roadmap status uses four values:
 | 013 | Lightweight Workflow Lane | PLANNED | 007, 011, 012 | Adoption |
 | 014 | Diagnostics and Machine Reports | PLANNED | 005–016 | Adoption |
 | 015 | External Review Ingestion | PLANNED | 011, 012 | Adoption |
-| 016 | Review Composition in the Workflow | PLANNED | 007, 011 | Adoption |
+| 016 | Review Composition in the Workflow | MERGED | 007, 011 | Adoption |
 | 017 | Gate Rename & Vocabulary Pass | PLANNED | — | Adoption |
 
 ### Build sequence (dependency review — 2026-07-23)

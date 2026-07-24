@@ -150,11 +150,21 @@ specify workflow run specops
 
 It drives specify → clarify/checklist (human skip gates, recorded in the ledger)
 → plan → **human planning-readiness gate** (no tasks until approved) → tasks →
-analyze → a bounded **corrective `do-while` loop** (implement → review, repeating
-while the deterministic review verdict is `REJECTED`) → a **terminal review gate**
+analyze → a bounded **corrective `do-while` loop** → a **terminal review gate**
 that fails closed unless the verdict is `APPROVED`. Forward-seam phase transitions
 stay owned by the injected directives; the workflow never double-issues them, and
 a fail-closed `specops reconcile` precondition keeps the ledger authoritative.
+
+Each corrective round (Feature 016) runs the deterministic `specops review` gate
+as a cheap **fail-closed precondition** and then — only when it passes — drives the
+**semantic `/specops-review`** so the workflow performs and enforces the *actual*
+code review, not just the mechanical gates. The loop re-iterates while the gate is
+`REJECTED` **or** any **blocking finding** is still unverified, and completion is
+blocked while a blocking finding remains unverified (Feature 011). Enforcement is
+always-on: a run whose review records no findings **degrades automatically** to the
+prior deterministic-only behavior (no toggle), and a run that cannot perform the
+review (the `specops.review` command unavailable) **fails closed** rather than
+completing silently.
 
 ### `specops status show`
 

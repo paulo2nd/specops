@@ -106,3 +106,80 @@ def test_in_loop_review_is_soft_terminal_gate_is_hard() -> None:
 def test_terminal_gate_between_loop_and_done() -> None:
     ids = [s["id"] for s in _load()["steps"]]
     assert ids.index("corrective-loop") < ids.index("terminal-gate") < ids.index("done")
+
+
+# --- Feature 016: semantic review composed into the corrective loop -----------
+
+def _loop() -> dict:
+    return {s["id"]: s for s in _load()["steps"]}["corrective-loop"]
+
+
+def _loop_body_ids() -> list[str]:
+    """Direct child step ids of the corrective loop, in order."""
+    return [s["id"] for s in _loop()["steps"]]
+
+
+def test_semantic_review_is_composed_and_guarded_by_mechanical_pass() -> None:
+    """FR-001/FR-002 (US1): the loop invokes the semantic `specops.review` command,
+    wrapped in an `if` gated on the mechanical gate passing, positioned after the
+    deterministic `review-soft` gate."""
+    all_steps = {s["id"]: s for s in _flatten(_load()["steps"])}
+
+    # The semantic review is the registered agent command, not a shell gate.
+    review = all_steps["semantic-review"]
+    assert review.get("command") == "specops.review"
+    assert "type" not in review or review["type"] == "command"  # native command step
+
+    # It lives inside a guard that only runs when the mechanical gate did NOT reject.
+    guard = all_steps["semantic-review-round"]
+    assert guard["type"] == "if"
+    assert "semantic-review" in [s["id"] for s in guard["then"]]
+
+    # Ordering (mechanical-first): review-soft precedes the semantic review round.
+    body = _loop_body_ids()
+    assert body.index("review-soft") < body.index("semantic-review-round")
+
+
+def test_semantic_review_guard_is_exact_mechanical_pass() -> None:
+    """FR-002 (US4): the guard runs the semantic review only when the mechanical
+    verdict is not REJECTED — a mechanical reject skips the review that round."""
+    guard = {s["id"]: s for s in _flatten(_load()["steps"])}["semantic-review-round"]
+    assert guard["condition"] == "{{ steps.review-soft.output.data.verdict != 'REJECTED' }}"
+
+
+def test_loop_condition_reacts_to_unverified_blocking() -> None:
+    """FR-003/FR-008 (US2): the do-while condition re-iterates on a mechanical
+    REJECTED OR any unverified blocking finding, read from the existing handoff
+    report surface (`remaining_blocking`)."""
+    loop = _loop()
+    # Assert the exact disjunction — not two independent substring checks. This
+    # catches a regression that flips `or` to `and` (which would only re-iterate
+    # when a mechanical reject AND an unverified finding both hold, silently
+    # dropping the findings-aware behavior on a mechanical-pass round).
+    assert loop["condition"] == (
+        "{{ steps.review-soft.output.data.verdict == 'REJECTED'"
+        " or steps.handoff-report.output.data.remaining_blocking }}"
+    )
+
+    report = {s["id"]: s for s in _flatten(_load()["steps"])}["handoff-report"]
+    assert report["run"] == "specops handoff report --json"
+    assert report.get("output_format") == "json"
+    # The findings signal is produced after the semantic review, still inside the loop.
+    body = _loop_body_ids()
+    assert body.index("semantic-review-round") < body.index("handoff-report")
+
+
+def test_loop_bound_is_unchanged() -> None:
+    """FR-010: composing the review does not remove/weaken the iteration bound."""
+    assert _loop()["max_iterations"] == 3
+
+
+def test_enforcement_is_not_gated_by_configuration() -> None:
+    """FR-015 (US3): enforcement is always-on with auto-degrade — no config/inputs
+    flag gates the semantic review or the loop condition. Degrade is by absence of
+    findings only (empty `remaining_blocking`)."""
+    loop = _loop()
+    guard = {s["id"]: s for s in _flatten(_load()["steps"])}["semantic-review-round"]
+    for expr in (loop["condition"], guard["condition"]):
+        assert "inputs." not in expr
+        assert "config" not in expr.lower()

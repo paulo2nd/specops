@@ -161,11 +161,22 @@ specify workflow run specops
 Ele conduz specify → clarify/checklist (gates de skip humanos, registrados no
 ledger) → plan → **gate humano de prontidão do planejamento** (nenhuma task antes
 da aprovação) → tasks → analyze → um **loop corretivo `do-while`** limitado
-(implement → review, repetindo enquanto o veredito determinístico for `REJECTED`)
 → um **gate terminal de review** que falha fechado a menos que o veredito seja
 `APPROVED`. As transições de fase forward permanecem de propriedade dos directives
 injetados; o workflow nunca as duplica, e uma precondição `specops reconcile`
 fail-closed mantém o ledger como autoridade.
+
+Cada rodada corretiva (Feature 016) executa o gate determinístico `specops review`
+como uma **precondição fail-closed** barata e então — apenas quando ela passa —
+conduz o **review semântico `/specops-review`**, de modo que o workflow realiza e
+impõe a revisão de código *de fato*, não apenas os gates mecânicos. O loop repete
+enquanto o gate for `REJECTED` **ou** houver qualquer **achado bloqueante** ainda
+não verificado, e a conclusão fica bloqueada enquanto um achado bloqueante
+permanecer não verificado (Feature 011). A imposição é sempre ativa: uma execução
+cujo review não registra achados **degrada automaticamente** para o comportamento
+anterior somente-determinístico (sem toggle), e uma execução que não consegue
+realizar o review (comando `specops.review` indisponível) **falha fechado** em vez
+de concluir silenciosamente.
 
 ### `specops status show`
 
