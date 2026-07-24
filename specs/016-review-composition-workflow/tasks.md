@@ -33,7 +33,7 @@ description: "Task list for Feature 016 — Review Composition in the Workflow"
 
 **Purpose**: Establish a green baseline and capture the current loop structure before editing.
 
-- [ ] T001 Run `conda run -n specops pytest tests/unit/test_workflow_definition.py tests/integration/test_workflow_orchestration.py -q` and confirm all pass; record the current corrective-loop step ids/order in `src/specops/templates/workflows/specops/workflow.yml` (`reconcile-pre-impl → implement → review-soft → corrective-round`, terminal `terminal-gate → done`) as the modification baseline. [SC-006]
+- [X] T001 Run `conda run -n specops pytest tests/unit/test_workflow_definition.py tests/integration/test_workflow_orchestration.py -q` and confirm all pass; record the current corrective-loop step ids/order in `src/specops/templates/workflows/specops/workflow.yml` (`reconcile-pre-impl → implement → review-soft → corrective-round`, terminal `terminal-gate → done`) as the modification baseline. [SC-006]
 
 ---
 
@@ -55,11 +55,11 @@ description: "Task list for Feature 016 — Review Composition in the Workflow"
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T002 [US1] Add unit assertions in `tests/unit/test_workflow_definition.py`: the corrective-loop body contains a `command: specops.review` step wrapped in a `type: if` guard on `review-soft.output.data.verdict != 'REJECTED'`, positioned after `review-soft`; extend `test_all_steps_are_native_types` and `test_no_duplicate_step_ids` to cover the new steps. [SC-001][SC-005]
+- [X] T002 [US1] Add unit assertions in `tests/unit/test_workflow_definition.py`: the corrective-loop body contains a `command: specops.review` step wrapped in a `type: if` guard on `review-soft.output.data.verdict != 'REJECTED'`, positioned after `review-soft`; extend `test_all_steps_are_native_types` and `test_no_duplicate_step_ids` to cover the new steps. [SC-001][SC-005]
 
 ### Implementation for User Story 1
 
-- [ ] T003 [US1] Edit `src/specops/templates/workflows/specops/workflow.yml`: inside `corrective-loop.steps`, after `review-soft`, add a `type: if` step `semantic-review-round` (condition `{{ steps.review-soft.output.data.verdict != 'REJECTED' }}`) whose `then` contains `semantic-review` — a hard `command: specops.review` step with `integration: "{{ inputs.integration }}"`. Do not wrap it in any error-tolerance. [SC-001][SC-005]
+- [X] T003 [US1] Edit `src/specops/templates/workflows/specops/workflow.yml`: inside `corrective-loop.steps`, after `review-soft`, add a `type: if` step `semantic-review-round` (condition `{{ steps.review-soft.output.data.verdict != 'REJECTED' }}`) whose `then` contains `semantic-review` — a hard `command: specops.review` step with `integration: "{{ inputs.integration }}"`. Do not wrap it in any error-tolerance. [SC-001][SC-005]
 
 **Checkpoint**: The workflow drives the semantic review after a passing mechanical gate; T002 passes.
 
@@ -73,14 +73,14 @@ description: "Task list for Feature 016 — Review Composition in the Workflow"
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T004 [US2] Add unit assertions in `tests/unit/test_workflow_definition.py`: `corrective-loop.condition` contains both `REJECTED` and `remaining_blocking`; a `handoff-report` step runs `specops handoff report --json` with `output_format: json`; `terminal-gate.run == "specops review"`; order `corrective-loop < terminal-gate < done`; `corrective-loop.max_iterations` equals the Feature-007 value. [SC-002][SC-003]
-- [ ] T005 [US2] Extend `tests/integration/test_workflow_orchestration.py::test_workflow_has_no_forward_transition_or_initspec_steps` to confirm the only workflow-issued transition remains the corrective `IMPLEMENT -r REJECTED` (the `semantic-review` command issues its owned transitions at runtime, not in the yaml), asserting FR-009. [SC-002]
-- [ ] T018 [US2] Add an integration test in `tests/integration/test_workflow_orchestration.py` that evidences the terminal fail-closed guarantee in CI (no live agent): in a fixture repo with an open review cycle, record one unverified blocking finding (`specops handoff finding add --severity blocking …`), assert `specops status transition-phase DONE -r APPROVED` exits non-zero and the ledger phase does **not** become `DONE`; then `specops handoff finding verify <id>` and assert the same transition now succeeds. This is the CI evidence for SC-002/FR-004/FR-005 (the `command:`-driven halt itself stays manual, quickstart Scenario B). [SC-002]
-- [ ] T019 [US2] Add an integration test in `tests/integration/test_workflow_orchestration.py` that the findings-aware condition input is re-derived from **persisted** ledger state (FR-011, resumability): with an unverified blocking finding present, invoke `specops handoff report --json` from a fresh process/root (simulating `specify workflow resume`) and assert `data.remaining_blocking` is non-empty and byte-identical to a prior invocation — proving the loop condition reads persisted state, not in-memory step context. [SC-002][SC-006]
+- [X] T004 [US2] Add unit assertions in `tests/unit/test_workflow_definition.py`: `corrective-loop.condition` contains both `REJECTED` and `remaining_blocking`; a `handoff-report` step runs `specops handoff report --json` with `output_format: json`; `terminal-gate.run == "specops review"`; order `corrective-loop < terminal-gate < done`; `corrective-loop.max_iterations` equals the Feature-007 value. [SC-002][SC-003]
+- [X] T005 [US2] Extend `tests/integration/test_workflow_orchestration.py::test_workflow_has_no_forward_transition_or_initspec_steps` to confirm the only workflow-issued transition remains the corrective `IMPLEMENT -r REJECTED` (the `semantic-review` command issues its owned transitions at runtime, not in the yaml), asserting FR-009. [SC-002]
+- [X] T018 [US2] Add an integration test in `tests/integration/test_workflow_orchestration.py` that evidences the terminal fail-closed guarantee in CI (no live agent): in a fixture repo with an open review cycle, record one unverified blocking finding (`specops handoff finding add --severity blocking …`), assert `specops status transition-phase DONE -r APPROVED` exits non-zero and the ledger phase does **not** become `DONE`; then `specops handoff finding verify <id>` and assert the same transition now succeeds. This is the CI evidence for SC-002/FR-004/FR-005 (the `command:`-driven halt itself stays manual, quickstart Scenario B). [SC-002]
+- [X] T019 [US2] Add an integration test in `tests/integration/test_workflow_orchestration.py` that the findings-aware condition input is re-derived from **persisted** ledger state (FR-011, resumability): with an unverified blocking finding present, invoke `specops handoff report --json` from a fresh process/root (simulating `specify workflow resume`) and assert `data.remaining_blocking` is non-empty and byte-identical to a prior invocation — proving the loop condition reads persisted state, not in-memory step context. [SC-002][SC-006]
 
 ### Implementation for User Story 2
 
-- [ ] T006 [US2] Edit `src/specops/templates/workflows/specops/workflow.yml`: after `semantic-review-round`, add a read-only `handoff-report` step (`shell: specops handoff report --json`, `output_format: json`); extend `corrective-loop.condition` to `{{ steps.review-soft.output.data.verdict == 'REJECTED' or steps.handoff-report.output.data.remaining_blocking }}`. Leave `open-corrective-round` guarded on the mechanical `REJECTED`, and leave `terminal-gate`/`done` unchanged. [SC-002][SC-003]
+- [X] T006 [US2] Edit `src/specops/templates/workflows/specops/workflow.yml`: after `semantic-review-round`, add a read-only `handoff-report` step (`shell: specops handoff report --json`, `output_format: json`); extend `corrective-loop.condition` to `{{ steps.review-soft.output.data.verdict == 'REJECTED' or steps.handoff-report.output.data.remaining_blocking }}`. Leave `open-corrective-round` guarded on the mechanical `REJECTED`, and leave `terminal-gate`/`done` unchanged. [SC-002][SC-003]
 
 **Checkpoint**: The loop re-iterates on unverified blocking findings; completion stays fail-closed via the existing `transition-phase DONE` (evidenced by T018) and the condition survives resume (T019); T004/T005 pass.
 
@@ -94,8 +94,8 @@ description: "Task list for Feature 016 — Review Composition in the Workflow"
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T007 [US3] Add an integration test in `tests/integration/test_workflow_orchestration.py`: in a fixture repo with no handoff findings, `specops handoff report --json` returns `data.remaining_blocking == []` and running the read-only gates (`review --json`, `handoff report --json`) does not mutate `status.yaml` — proving the auto-degrade path leaves completion to the mechanical verdict. [SC-004]
-- [ ] T008 [US3] Add a unit assertion in `tests/unit/test_workflow_definition.py` that no step gates the `semantic-review` or the loop on any configuration/`inputs` flag (only on `review-soft` verdict / `remaining_blocking`), encoding FR-015 (no opt-in/opt-out). [SC-009]
+- [X] T007 [US3] Add an integration test in `tests/integration/test_workflow_orchestration.py`: in a fixture repo with no handoff findings, `specops handoff report --json` returns `data.remaining_blocking == []` and running the read-only gates (`review --json`, `handoff report --json`) does not mutate `status.yaml` — proving the auto-degrade path leaves completion to the mechanical verdict. [SC-004]
+- [X] T008 [US3] Add a unit assertion in `tests/unit/test_workflow_definition.py` that no step gates the `semantic-review` or the loop on any configuration/`inputs` flag (only on `review-soft` verdict / `remaining_blocking`), encoding FR-015 (no opt-in/opt-out). [SC-009]
 
 **Checkpoint**: Zero-finding and legacy runs complete unchanged; T007/T008 pass.
 
@@ -109,8 +109,8 @@ description: "Task list for Feature 016 — Review Composition in the Workflow"
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T009 [US4] Add a unit assertion in `tests/unit/test_workflow_definition.py` that the `semantic-review-round` guard condition is `review-soft.output.data.verdict != 'REJECTED'` and that `review-soft` precedes `semantic-review` in the loop body (mechanical-first, FR-002/Story 4). [SC-005]
-- [ ] T010 [US4] Add an integration test in `tests/integration/test_workflow_orchestration.py` asserting the co-installation invariant: after `extension.install()`, both `.specify/workflows/specops/workflow.yml` and the per-integration `/specops-review` command file exist — so the hard `command: specops.review` step fails closed (aborts) rather than degrading if the review is ever unavailable (FR-016). [SC-008]
+- [X] T009 [US4] Add a unit assertion in `tests/unit/test_workflow_definition.py` that the `semantic-review-round` guard condition is `review-soft.output.data.verdict != 'REJECTED'` and that `review-soft` precedes `semantic-review` in the loop body (mechanical-first, FR-002/Story 4). [SC-005]
+- [X] T010 [US4] Add an integration test in `tests/integration/test_workflow_orchestration.py` asserting the co-installation invariant: after `extension.install()`, both `.specify/workflows/specops/workflow.yml` and the per-integration `/specops-review` command file exist — so the hard `command: specops.review` step fails closed (aborts) rather than degrading if the review is ever unavailable (FR-016). [SC-008]
 
 **Checkpoint**: Mechanical-first ordering and fail-closed-on-unavailable are both asserted; T009/T010 pass.
 
@@ -120,12 +120,12 @@ description: "Task list for Feature 016 — Review Composition in the Workflow"
 
 **Purpose**: Documentation, the in-file rationale comment, and full-suite validation.
 
-- [ ] T011 [P] Update `README.md`: the shipped workflow now performs and enforces the semantic review (not only the deterministic gates); enforcement is always-on with automatic degrade when a review records no findings; no persisted-format or CLI change. [SC-007]
-- [ ] T012 [P] Update `README.pt-br.md` with the behaviorally-equivalent Portuguese text for the same section. [SC-007]
-- [ ] T013 [P] Add a `[Unreleased]` entry to `CHANGELOG.md` describing the user-visible behavior (workflow performs+enforces review; always-on/auto-degrade; fail-closed when review unavailable) and noting no migration is required. [SC-007]
-- [ ] T014 Update the corrective-loop rationale comment block in `src/specops/templates/workflows/specops/workflow.yml` to describe the composed semantic review, the mechanical-first guard, and the findings-aware condition, preserving the existing non-CI-reproducible verification caveat. [SC-001]
-- [ ] T015 Run full gates: `conda run -n specops ruff check src tests`, `conda run -n specops mypy src`, `conda run -n specops pytest -q`; confirm `test_definition_parses_in_real_speckit_engine` passes or skips (engine absent) and there are no regressions. [SC-006]
-- [ ] T016 Walk `quickstart.md` CI-reproducible checks (steps 1–3) against the edited template and confirm the structural + co-installation assertions match the delivered `workflow.yml`. [SC-006]
+- [X] T011 [P] Update `README.md`: the shipped workflow now performs and enforces the semantic review (not only the deterministic gates); enforcement is always-on with automatic degrade when a review records no findings; no persisted-format or CLI change. [SC-007]
+- [X] T012 [P] Update `README.pt-br.md` with the behaviorally-equivalent Portuguese text for the same section. [SC-007]
+- [X] T013 [P] Add a `[Unreleased]` entry to `CHANGELOG.md` describing the user-visible behavior (workflow performs+enforces review; always-on/auto-degrade; fail-closed when review unavailable) and noting no migration is required. [SC-007]
+- [X] T014 Update the corrective-loop rationale comment block in `src/specops/templates/workflows/specops/workflow.yml` to describe the composed semantic review, the mechanical-first guard, and the findings-aware condition, preserving the existing non-CI-reproducible verification caveat. [SC-001]
+- [X] T015 Run full gates: `conda run -n specops ruff check src tests`, `conda run -n specops mypy src`, `conda run -n specops pytest -q`; confirm `test_definition_parses_in_real_speckit_engine` passes or skips (engine absent) and there are no regressions. [SC-006]
+- [X] T016 Walk `quickstart.md` CI-reproducible checks (steps 1–3) against the edited template and confirm the structural + co-installation assertions match the delivered `workflow.yml`. [SC-006]
 - [ ] T017 In the feature's own PR commit, flip the ROADMAP.md row 016 from `ACTIVE` to `MERGED` (repo policy: MERGED flip lands inside the feature PR, not a separate chore PR). [SC-007]
 
 ---
