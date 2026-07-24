@@ -14,8 +14,9 @@
 
 - Q: Where should the lane's minimal execution state live? → A: A dedicated lightweight lane record (its own file/schema, e.g. `lane.yaml`), NOT `status.yaml`. No full ledger is created during the lane; promotion synthesizes a full `status.yaml` from the lane record plus branch history.
 - Q: When a lane is promoted to the full workflow, at which phase does the full `specops` lifecycle resume? → A: At PLAN. The promoted change receives real spec/plan/review; the lane's branch commits are imported as already-existing work and the retrospective seeds context, so nothing is lost and the now-non-trivial change gets full scrutiny before it can reach DONE.
-- Q: 'Ambiguous/unconfirmed root cause' is not mechanically detectable from a diff — how is that safety category enforced? → A: Hybrid. SpecOps deterministically flags the five diff-detectable categories (schema/migration, secrets, dependency manifests, public-contract surfaces, destructive operations) AND the lane always presents one explicit human attestation checkpoint for root-cause ambiguity; an "ambiguous" attestation halts (promote/stop). Nothing safety-critical rests solely on mechanical detection.
-- Q: How is the lane operated — who drives the `specops lane` CLI, and how is the lane entered? → A: The human NEVER drives the `specops` CLI. The lane is delivered via BOTH a Principle IV **injected directive** and the `specops-lite` **workflow**: the injected directive makes the agent recognize a small/reversible change and PROPOSE the lane through a human-confirmed stop-and-ask (never auto-classifying); on confirmation the agent/workflow engine drives every `specops lane *` command as native `shell`/`command` steps. The human's only interactions are the native stop-and-ask gates — eligibility confirmation, root-cause attestation, and the halt/promote choice. The `specops lane` CLI is an agent/workflow-facing deterministic surface, not a human workflow.
+- Q: 'Ambiguous/unconfirmed root cause' is not mechanically detectable from a diff — how is that safety category enforced? → A: Hybrid. SpecOps deterministically flags the five diff-detectable categories (schema/migration, secrets, dependency manifests, public-contract surfaces, destructive operations) AND the lane always presents one explicit human attestation checkpoint for root-cause ambiguity; an "ambiguous" attestation halts (promote/stop). Nothing safety-critical rests solely on mechanical detection. *(Refined by the analysis C1 clarification below: public-contract is not reliably diff-detectable and moves to the attestation side — the split becomes four diff-detectable categories + two always-on attestations.)*
+- Q: How is the lane operated — who drives the `specops lane` CLI, and how is the lane entered? → A: The human NEVER drives the `specops` CLI. The lane is delivered via BOTH a Principle IV **injected directive** and the `specops-lite` **workflow**: the injected directive makes the agent recognize a small/reversible change and PROPOSE the lane through a human-confirmed stop-and-ask (never auto-classifying); on confirmation the agent/workflow engine drives every `specops lane *` command as native `shell`/`command` steps. The human's only interactions are the native stop-and-ask gates — eligibility confirmation, the attestation checkpoints, and the halt/promote choice. The `specops lane` CLI is an agent/workflow-facing deterministic surface, not a human workflow.
+- Q: (analysis C1) Is a public-contract break reliably diff-detectable for zero-config safety enforcement? → A: No — public API surface is language-specific and not generically diff-detectable. Public-contract is moved to the always-on attestation side alongside root-cause. The hybrid split is now **four diff-detectable categories** (schema/migration, secrets, dependency manifests, destructive operations) **plus two always-on human attestations** (root-cause, public-contract); nothing safety-critical rests solely on mechanical detection and no category is silently undetected in a zero-config repository.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -55,11 +56,11 @@ small work is not forced through full-feature ceremony (the adoption thesis), dr
 agent so the human is not conducting a CLI. It is the minimum viable slice: without it there is
 no lane. Every other story protects or extends this one.
 
-**Independent Test**: Run the `specops-lite` workflow against a fixture repository for a small
-change; confirm eligibility at the gate; let the agent/engine drive the lane through one or more
-commits to closure. Verify the run completes without creating spec/plan/tasks phase artifacts or
-opening an independent review cycle, that no human-issued `specops` command was required, and
-that a closure retrospective plus deterministic gate evidence is produced.
+**Independent Test**: Drive the lane's **CLI primitives** (`lane start` → commits → `lane close`)
+against a fixture repository for a small change — the composed `specops-lite` workflow is
+validated separately in the Operating-Model phase. Confirm the run creates no spec/plan/tasks
+phase artifacts, opens no independent review cycle, requires no human-issued `specops` command,
+and produces a closure retrospective plus deterministic gate evidence.
 
 **Acceptance Scenarios**:
 
@@ -92,23 +93,25 @@ silently absorbs safety-critical work.
 work slip through with reduced scrutiny. This is the guarantee that makes proportional
 ceremony safe; it is co-equal P1 with the lane itself.
 
-**Independent Test**: In a fixture repository, introduce a change in each of the five
+**Independent Test**: In a fixture repository, introduce a change in each of the four
 diff-detectable high-risk categories one at a time inside the lane and confirm each triggers a
 stop-and-ask that halts and offers halt-or-promote; separately confirm the lane always presents
-the root-cause attestation checkpoint and that an "ambiguous" answer halts the same way — with
-no record-a-reason path allowing the lane to continue past any of them unchanged.
+the two attestation checkpoints (root-cause, public-contract) and that a flag answer ("ambiguous"
+root cause, or contract "breaks") halts the same way — with no record-a-reason path allowing the
+lane to continue past any of them unchanged.
 
 **Acceptance Scenarios**:
 
-1. **Given** a lane in progress, **When** a change touches any of the five diff-detectable
+1. **Given** a lane in progress, **When** a change touches any of the four diff-detectable
    high-risk categories, **Then** SpecOps deterministically flags it and the lane halts at a
    stop-and-ask checkpoint, not proceeding to closure until a human resolves it.
 2. **Given** a lane reaching a stop-and-ask, **When** the human is offered options, **Then** the
    offered resolutions are halt or promote to the full workflow — never a "record reason and
    continue in the lane" bypass.
-3. **Given** a change whose root cause is not mechanically detectable, **When** the lane presents
-   its always-on root-cause attestation checkpoint and the human answers "ambiguous", **Then**
-   the lane halts exactly as a detected category does.
+3. **Given** a change whose root-cause or public-contract impact is not mechanically detectable,
+   **When** the lane presents its always-on attestation checkpoints and the human answers
+   "ambiguous" (root cause) or "breaks" (public contract), **Then** the lane halts exactly as a
+   detected category does.
 4. **Given** the same high-risk detection, **When** the deterministic gate profiles are
    applicable, **Then** they are still executed (the lane grants no gate-profile bypass).
 
@@ -154,8 +157,11 @@ gate-profile evidence for the change. A reviewer or auditor can later understand
 lightweight change and see that its applicable gates passed, without the change having gone
 through full-feature artifacts.
 
-**Why this priority**: Auditability of the lighter lane. It extends US1's closure into a
-durable, inspectable record. Independent of the lane mechanics themselves, so P2.
+**Why this priority**: Auditability of the lighter lane. US1 already *produces* a closure
+retrospective + evidence on the happy path; US4 *hardens* that record — full per-gate evidence
+taxonomy (skipped/unavailable dispositions) and the rendered `retrospective.md` projection. It
+extends US1's closure into a durable, inspectable record. Independent of the lane mechanics
+themselves, so P2.
 
 **Independent Test**: Close a lane and inspect the produced retrospective and evidence;
 confirm both are present, machine-readable where applicable, and reference the change's
@@ -275,11 +281,14 @@ evaluates the combined set, and closure produces one retrospective covering the 
   touches any of the safety-critical categories: persisted-schema/data migration, secrets,
   public-contract break, dependency change, destructive/irreversible action, or a fix on an
   ambiguous/unconfirmed root cause. Enforcement is **hybrid**: SpecOps MUST deterministically
-  flag the five diff-detectable categories (schema/migration, secrets, dependency manifests,
-  public-contract surfaces, destructive operations) from the change, AND the lane MUST always
-  present one explicit human attestation checkpoint for root-cause ambiguity — which cannot be
-  detected from a diff. An "ambiguous" attestation halts exactly as a detected category does. No
-  safety-critical category may rest solely on mechanical detection.
+  flag the **four** diff-detectable categories (schema/migration, secrets, dependency manifests,
+  destructive operations) from the change, AND the lane MUST always present explicit human
+  attestation checkpoints for the **two** categories that cannot be reliably detected from a
+  diff — a fix on an ambiguous/unconfirmed root cause, **and a public-contract break** (public
+  API surface is language-specific, not generically diff-detectable). A "flag" answer at either
+  attestation (ambiguous root cause, or contract breaks) halts exactly as a detected category
+  does. No safety-critical category may rest solely on mechanical detection, and none may be
+  silently undetected in a zero-config repository.
 - **FR-008**: These stop-and-ask checkpoints MUST NOT be satisfiable by recording a bypass
   reason. The only resolutions offered MUST be halt or promote to the full workflow — the
   checkpoint is part of the minimal non-pierceable core, not the recordable paved road.
@@ -364,10 +373,10 @@ evaluates the combined set, and closure produces one retrospective covering the 
   required process artifacts than the full workflow — zero of {spec.md, plan.md, tasks.md} and
   no opened review cycle are required for a lane change, versus all of them in the full
   lifecycle.
-- **SC-002**: 100% of changes touching any of the five diff-detectable safety-critical
-  categories are flagged and halt the lane; the always-on root-cause attestation checkpoint is
-  presented on 100% of lane passes and an "ambiguous" answer halts in 100% of cases; 0% of any
-  safety-critical trigger can proceed to lane closure by recording a bypass reason.
+- **SC-002**: 100% of changes touching any of the four diff-detectable safety-critical
+  categories are flagged and halt the lane; the two always-on attestation checkpoints (root-cause,
+  public-contract) are presented on 100% of lane passes and a flag answer halts in 100% of cases;
+  0% of any safety-critical trigger can proceed to lane closure by recording a bypass reason.
 - **SC-003**: Promotion preserves 100% of pre-promotion branch commits (zero commit loss) and
   results in a full feature ledger populated with the lane's recorded context in 100% of
   promotions.
@@ -409,15 +418,15 @@ evaluates the combined set, and closure produces one retrospective covering the 
   ledger, and no `status.yaml` is created while the lane is open. The branch's commit history is
   the authoritative record of the work itself; promotion synthesizes a full `status.yaml` from
   the lane record plus that history.
-- **Safety-core detection** *(resolved in Clarifications — Session 2026-07-24)*: Enforcement is
-  hybrid. The five diff-detectable categories (migrations, secrets, dependency manifests,
-  public-contract surfaces, destructive operations) are flagged deterministically from the change
-  via paths/patterns; the one non-detectable category (ambiguous/unconfirmed root cause) is
-  enforced by an always-on human attestation checkpoint. Both are surfaced to native
-  `gate`/`prompt` steps and the human makes the halt-or-promote call. SpecOps records the
-  decision but does not judge whether a given category truly applies beyond its deterministic
-  signal — "record, do not validate" applies to the paved road, while the safety categories
-  themselves are the non-pierceable core.
+- **Safety-core detection** *(resolved in Clarifications — Session 2026-07-24; refined by analysis
+  C1)*: Enforcement is hybrid. The **four** diff-detectable categories (migrations, secrets,
+  dependency manifests, destructive operations) are flagged deterministically from the change via
+  paths/patterns; the **two** categories that are not reliably diff-detectable (ambiguous/
+  unconfirmed root cause, and public-contract break) are enforced by always-on human attestation
+  checkpoints. Both kinds are surfaced to native `gate`/`prompt` steps and the human makes the
+  halt-or-promote call. SpecOps records the decision but does not judge whether a given category
+  truly applies beyond its deterministic signal — "record, do not validate" applies to the paved
+  road, while the safety categories themselves are the non-pierceable core.
 - **Promotion target** *(resolved in Clarifications — Session 2026-07-24)*: Promotion synthesizes
   the full feature ledger and hands the change to the full `specops` workflow **at the PLAN
   phase**, preserving the branch and its commits as existing work. A promoted change thus receives

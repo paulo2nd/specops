@@ -20,8 +20,9 @@ deterministic CLI surface (a `specops lane` sub-app, agent/workflow-facing) plus
 lightweight record (`lane.yaml`, its own schema — never the full `status.yaml`, per the Session
 2026-07-24 clarification). The lane's working state is the
 branch's Git commit history; SpecOps keeps one minimal `lane.yaml` (open → resolved). Safety
-enforcement is **hybrid**: five diff-detectable categories are flagged deterministically from
-the effective diff, and an always-on human attestation checkpoint covers ambiguous root cause.
+enforcement is **hybrid**: four diff-detectable categories are flagged deterministically from
+the effective diff, and two always-on human attestation checkpoints cover the categories that are
+not reliably diff-detectable (ambiguous root cause, public-contract break — analysis C1).
 Closure runs the existing `specops preflight` gate-profile suite and records a concise
 retrospective plus Feature 012 structured evidence. **Promotion** synthesizes a full
 `status.yaml` positioned at the **PLAN** phase from the lane record plus branch history, so a
@@ -175,7 +176,7 @@ is reuse. No new top-level packages or runtime dependencies.
 
 | Decision | Why needed | Simpler alternative rejected because |
 |----------|------------|--------------------------------------|
-| Built-in generic safety-core heuristics (path/pattern set) in `safety.py` | The non-pierceable core must flag the five diff-detectable categories out of the box, or SC-002 cannot hold for a zero-config repo | "Client must configure all detection patterns" rejected: it would let a repo silently disable the safety core by omitting config, piercing the non-pierceable core (Principle I/Design Philosophy). Heuristics stay generic + overridable, so Principle V holds. |
+| Built-in generic safety-core heuristics (path/pattern set) in `safety.py` | The non-pierceable core must flag the four diff-detectable categories out of the box, or SC-002 cannot hold for a zero-config repo | "Client must configure all detection patterns" rejected: it would let a repo silently disable the safety core by omitting config, piercing the non-pierceable core (Principle I/Design Philosophy). Heuristics stay generic + overridable, so Principle V holds. The two non-diff-detectable categories (root-cause, public-contract) are attested, not detected (analysis C1). |
 | New `lane.py` + `safety.py` modules (vs. folding into `status.py`) | Lane state is a *distinct* record (`lane.yaml`) with its own schema and lifecycle; safety detection is reused by both `lane check` and closure | Folding into `status.py` rejected: it would couple the lite record to the full-ledger module and blur the Q1 "dedicated record, not status.yaml" boundary. One-concern-per-module matches the existing codebase. |
 
 ## Post-Design Constitution Re-Check

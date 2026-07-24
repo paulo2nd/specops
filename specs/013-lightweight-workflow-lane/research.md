@@ -97,30 +97,40 @@ those shas; `gitops.is_ancestor` verifies each recorded commit remains reachable
 
 ## R5 — Hybrid safety-core detection
 
-**Decision**: `safety.py` exposes a deterministic detector over the effective diff
-(`gitops.effective_diff_status`, baseline→HEAD or staged) that flags the five diff-detectable
-categories, plus a model for the always-on attestation:
+**Decision** (refined by analysis C1): `safety.py` exposes a deterministic detector over the
+effective diff (`gitops.effective_diff_status`, baseline→HEAD or staged) that flags the **four**
+diff-detectable categories, plus a model for **two always-on attestations**:
 
 | Category | Signal (generic, built-in defaults; overridable in `specops.json`) |
 |----------|--------------------------------------------------------------------|
 | persisted-schema / migration | path globs (`**/migrations/**`, `**/*.sql`, `**/alembic/**`, `**/schema.*`) |
 | secrets | filename/patterns (`**/.env*`, `**/*secret*`, `**/*.pem`, `**/id_rsa*`, high-entropy add heuristics) |
 | dependency change | manifest/lock paths (`**/requirements*.txt`, `**/pyproject.toml`, `**/package.json`, `**/*.lock`, `**/go.mod`, `**/Cargo.toml`, …) |
-| public-contract surface | configurable path set (defaults to none until configured) + generic markers |
 | destructive / irreversible | diff status `D` on non-trivial paths, deletions of whole modules/data dirs |
 
-The sixth category — **ambiguous / unconfirmed root cause** — is *not* diff-detectable and is
-enforced by an **always-on** attestation checkpoint the lane presents on every pass (a native
-`prompt`/`gate` step recorded via `specops lane attest`).
+The two categories that are **not** reliably diff-detectable are enforced by **always-on
+attestation checkpoints** the lane presents on every pass (native `prompt`/`gate` steps recorded
+via `specops lane attest`):
 
-**Rationale**: Q3 chose hybrid. Built-in generic defaults ensure SC-002 holds for a zero-config
-repo (a repo cannot silently disable the core by omitting config); `specops.json` overrides keep
-it tunable without stack coupling (Principle V). Detection is a pure function of the diff → fully
-unit-testable per category. The attestation is a deterministic step → testable that it is always
-presented and that "ambiguous" halts.
+- **ambiguous / unconfirmed root cause** — a semantic judgment, never in a diff.
+- **public-contract break** — public API surface is language-specific (a Python `def`, a REST
+  route, a gRPC message, an exported TS symbol …); a generic path/pattern detector cannot
+  reliably flag it, and a config-based path floor would be stack-coupling. So it is attested, not
+  detected (analysis C1: otherwise a zero-config repo silently misses public-contract breaks,
+  piercing the non-pierceable core).
+
+**Rationale**: Q3 chose hybrid; C1 corrects the split to *four detectable + two attested*.
+Built-in generic defaults ensure SC-002 holds for a zero-config repo for the four detectable
+categories (a repo cannot silently disable them by omitting config); `specops.json` overrides
+keep them tunable without stack coupling (Principle V). Detection is a pure function of the diff →
+fully unit-testable per category. Each attestation is a deterministic always-present step →
+testable that it is shown and that a flag answer halts.
 
 **Alternatives considered**:
-- *Deterministic-only (drop the attestation)* — rejected by Q3: a real hole in the guarantee.
+- *Keep public-contract as a diff-detected category with a config path floor* — rejected (C1):
+  language-specific, so either it silently misses breaks in a zero-config repo (pierces the core)
+  or forces stack-specific config (Principle V friction). Attestation is the honest model.
+- *Deterministic-only (drop the attestations)* — rejected by Q3: a real hole in the guarantee.
 - *Always-ask full six-category checklist on every close* — rejected by Q3: reintroduces the
   ceremony the lane exists to remove.
 - *Entropy/AST content analysis for secrets/contracts* — deferred: heavier and stack-adjacent;

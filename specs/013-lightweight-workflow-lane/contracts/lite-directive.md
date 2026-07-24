@@ -26,9 +26,9 @@ lifecycle directives (`specify.md`, `plan.md`, `tasks.md`, `implement.md`, `revi
   `specops-lite` workflow and issues the `specops lane *` commands itself; it MUST NOT ask the
   human to run any `specops` command.
 - **B-4 (defer to the safety core)**: the directive does not itself judge the safety categories —
-  it relies on `specops lane check` (diff-detectable) plus the always-on root-cause attestation
-  gate. A change that trips the core is halted/promoted via the native gate, not rationalized by
-  the agent.
+  it relies on `specops lane check` (four diff-detectable categories) plus the two always-on
+  attestation gates (root-cause, public-contract). A change that trips the core is
+  halted/promoted via the native gate, not rationalized by the agent.
 - **B-5 (escalate on growth)**: if the change outgrows "small/reversible" mid-work, the agent
   proposes promotion (the native halt/promote gate) rather than silently continuing.
 

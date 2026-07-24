@@ -61,25 +61,26 @@ One entry per safety-core checkpoint that fired or per always-on attestation ans
 
 ```yaml
 - seq: 1
-  kind: "detected" | "attestation"          # detected = diff-flagged category; attestation = root-cause
-  category: "migration"                      # one of the six categories; "root-cause" for attestation
+  kind: "detected" | "attestation"          # detected = diff-flagged category; attestation = root-cause | public-contract
+  category: "migration"                      # detected category, or "root-cause" | "public-contract" for attestation
   signal: "path:db/migrations/003.sql"       # what triggered it (detected) | "always-on" (attestation)
-  answer: "promote" | "halt" | "confirmed" | "ambiguous"
-  resolution: "promote" | "halt"             # the terminal action taken (attestation "ambiguous" ⇒ halt-or-promote)
+  answer: "promote" | "halt" | "clear" | "flag"   # detected ⇒ promote|halt; attestation ⇒ clear|flag
+  resolution: "promote" | "halt"             # the terminal action taken (a "flag" ⇒ halt-or-promote)
   at: "2026-07-24T12:20:00+00:00"
 ```
 
 ### Rules
 
-- **D-1** (FR-008, non-pierceable): a `detected` or `ambiguous` checkpoint offers **only**
+- **D-1** (FR-008, non-pierceable): a `detected` category or a `flag` attestation offers **only**
   `halt` or `promote` — there is no "record reason and continue" resolution. The schema has no
   bypass field by construction.
-- **D-2** (FR-007 hybrid): `kind: attestation, category: root-cause` MUST be present on every
-  lane pass before closure (always-on). `answer: confirmed` allows closure to proceed;
-  `answer: ambiguous` forces a `halt`/`promote` resolution.
-- **D-3**: the five detected categories (`migration`, `secret`, `dependency`,
-  `public-contract`, `destructive`) are produced by `safety.py` from the diff, never
-  hand-entered.
+- **D-2** (FR-007 hybrid): **both** attestations — `kind: attestation` with `category: root-cause`
+  and with `category: public-contract` — MUST be present on every lane pass before closure
+  (always-on). `answer: clear` allows closure to proceed; `answer: flag` (ambiguous root cause, or
+  contract breaks) forces a `halt`/`promote` resolution.
+- **D-3**: the four detected categories (`migration`, `secret`, `dependency`, `destructive`) are
+  produced by `safety.py` from the diff, never hand-entered. `public-contract` is **not**
+  diff-detected — it is an attestation (analysis C1).
 
 ---
 
@@ -186,11 +187,13 @@ safety core independently re-checks the diff-detectable categories continuously 
 ## 6. Safety-core detection model (`safety.py`)
 
 Pure function `detect(diff_status: list[(status, path)], overrides: dict) -> list[Detection]`,
-where each `Detection` is `(category, signal_path, status_code)`. Categories and their generic
-default signals are enumerated in research R5. `overrides` comes from an optional `lane` block in
-`specops.json` (adds/replaces globs per category; never removes the built-in floor for a
-category unless explicitly disabled with an audited flag — TBD in tasks, defaulting to
-non-removable to protect the core).
+where each `Detection` is `(category, signal_path, status_code)`. It covers the **four**
+diff-detectable categories (migration, secret, dependency, destructive); their generic default
+signals are enumerated in research R5. `public-contract` and `root-cause` are **not** detected
+here — they are the two always-on attestations (§2). `overrides` comes from an optional `lane`
+block in `specops.json` (adds/replaces globs per detected category; never removes the built-in
+floor for a category unless explicitly disabled with an audited flag — TBD in tasks, defaulting
+to non-removable to protect the core).
 
 State transition (lane lifecycle):
 
@@ -198,15 +201,15 @@ State transition (lane lifecycle):
                  lane start (eligibility ✓)
    (no lane) ───────────────────────────────▶ OPEN
                                                 │
-             lane check / attest (per pass)     │  detected category OR attestation=ambiguous
-                                                ▼
+             lane check / attest (per pass)     │  detected category OR an attestation flagged
+                                                ▼                (root-cause=ambiguous OR public-contract=breaks)
                                         stop-and-ask (halt | promote)
                                           │              │
                               halt        │              │  promote
                           (stay OPEN,     │              ▼
                            human acts)    │        PROMOTED  ──▶ full `specops` @ PLAN
                                           │
-                            lane close (preflight APPROVED + attestation=confirmed)
+                            lane close (preflight APPROVED + both attestations = clear)
                                           ▼
                                         CLOSED  (retrospective + evidence)
 ```

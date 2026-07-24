@@ -8,7 +8,7 @@ Self-Application, run everything against a **fixture repo**, never this reposito
 > **Operating model (how it is really used).** In production the human does not run any
 > `specops` command. The injected lite-lane directive makes the agent *recognize and propose*
 > the lane; on confirmation the agent/workflow engine drives every `specops lane *` step, and the
-> human answers only native gates (eligibility, root-cause attestation, halt/promote). The `specops
+> human answers only native gates (eligibility, the two attestations, halt/promote). The `specops
 > lane` commands are shown **directly** below because this is a validation guide exercising the
 > deterministic primitives — that is the agent's job at runtime, not the human's. Scenario F
 > validates the directive/operating-model itself.
@@ -35,7 +35,7 @@ specify workflow catalog           # expect: both 'specops' and 'specops-lite' l
 2. `specops lane start --answers small,reversible,no-high-risk-category` → exit 0; `lane.yaml`
    at `state: OPEN`; **no** `spec.md`/`plan.md`/`tasks.md` and **no** `status.yaml` created.
 3. `specops lane check --json` → exit 0, `detections: []`.
-4. `specops lane attest --root-cause confirmed` → exit 0.
+4. `specops lane attest --root-cause clear --public-contract clear` → exit 0.
 5. `specops lane close --json` → exit 0; `verdict: APPROVED`; `lane.yaml` `state: CLOSED` with a
    `closure` block; `retrospective.md` rendered.
 
@@ -46,8 +46,7 @@ full-lifecycle artifacts were required (SC-001). See [contracts/cli-lane.md](./c
 
 ## Scenario B — Safety core halts high-risk work (US2, SC-002, SC-005)
 
-Run once per diff-detectable category (migration, secret, dependency, public-contract,
-destructive):
+Run once per diff-detectable category (migration, secret, dependency, destructive):
 
 1. `specops lane start …` on a small change, then introduce a change matching the category
    (e.g. add `db/migrations/003.sql`).
@@ -55,15 +54,17 @@ destructive):
 3. The workflow's `stop-and-ask` gate offers exactly `[halt, promote]` — assert no third
    "continue with reason" path exists (G-1 / INV-3).
 
-Then the non-detectable category:
+Then the two non-detectable categories (attestations):
 
-4. On an otherwise clean change, `specops lane attest --root-cause ambiguous` → **exit 1**;
-   closure is blocked until halt-or-promote (D-2).
-5. Assert the attestation checkpoint is presented on **every** pass (SC-002), and that
-   `specops lane close` refuses without a `confirmed` attestation (SC-005 fail-closed).
+4. On an otherwise clean change, `specops lane attest --root-cause flag …` → **exit 1**, and
+   separately `specops lane attest … --public-contract flag` → **exit 1**; closure is blocked
+   until halt-or-promote (D-2).
+5. Assert **both** attestation checkpoints (root-cause, public-contract) are presented on
+   **every** pass (SC-002), and that `specops lane close` refuses unless both are `clear`
+   (SC-005 fail-closed).
 
-**Expected**: 100% of the six categories force a halt; 0% can reach closure by recording a
-reason. See [data-model.md §2](./data-model.md).
+**Expected**: 100% of the six categories force a halt (four via detection, two via attestation);
+0% can reach closure by recording a reason. See [data-model.md §2](./data-model.md).
 
 ---
 

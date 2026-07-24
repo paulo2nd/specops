@@ -43,37 +43,39 @@ This is the deterministic gate the workflow branches on.
 | Outcome | Condition | Exit | class |
 |---------|-----------|------|-------|
 | ok | no diff-detectable category flagged | 0 | pass |
-| blocked | one or more of the five categories detected | 1 | gate-rejection |
+| blocked | one or more of the four detectable categories detected | 1 | gate-rejection |
 | error | cannot read diff / lane not open | 2 | infra-error |
 
 `--json` extra keys: `detections` (list of `{category, path, status}`), `categories` (deduped
-set). Does **not** cover root-cause ambiguity (that is the always-on attestation, not
-diff-detectable).
+set). Does **not** cover root-cause ambiguity or public-contract breaks (those are the two
+always-on attestations, not diff-detectable — see `lane attest`).
 
 ---
 
-## `specops lane attest --root-cause {confirmed|ambiguous} [--json]`
+## `specops lane attest --root-cause {clear|flag} --public-contract {clear|flag} [--json]`
 
-Record the always-on root-cause attestation (FR-007 hybrid). Appends an `attestation` decision.
+Record the two always-on attestations (FR-007 hybrid: root-cause and public-contract). Appends an
+`attestation` decision per dimension. Both MUST be answered before `lane close`.
 
 | Outcome | Condition | Exit | class |
 |---------|-----------|------|-------|
-| ok | `confirmed` recorded | 0 | pass |
-| blocked | `ambiguous` recorded (caller must then halt or promote) | 1 | gate-rejection |
+| ok | both dimensions `clear` recorded | 0 | pass |
+| blocked | either dimension `flag` recorded (caller must then halt or promote) | 1 | gate-rejection |
 | error | lane not open | 2 | infra-error |
 
 ---
 
 ## `specops lane close [--json]`
 
-Fail-closed closure. Requires a prior `attest --root-cause confirmed` and no unresolved
-detection. Runs the `preflight` gate-profile suite, records Feature 012 evidence, writes the
-retrospective, sets `state: CLOSED`, renders `retrospective.md`.
+Fail-closed closure. Requires both attestations recorded `clear` (`--root-cause clear
+--public-contract clear`) and no unresolved detection. Runs the `preflight` gate-profile suite,
+records Feature 012 evidence, writes the retrospective, sets `state: CLOSED`, renders
+`retrospective.md`.
 
 | Outcome | Condition | Exit | class |
 |---------|-----------|------|-------|
 | ok | preflight APPROVED; closure + retrospective written | 0 | pass |
-| blocked | required gate FAIL/unavailable, OR missing `confirmed` attestation, OR an unresolved detection | 1 | gate-rejection |
+| blocked | required gate FAIL/unavailable, OR a missing/`flag` attestation, OR an unresolved detection | 1 | gate-rejection |
 | error | lane not open / infra failure | 2 | infra-error |
 
 `--json` extra keys: `verdict`, `gates` (disposition list), `retrospective_path`.

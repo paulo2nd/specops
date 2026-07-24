@@ -14,7 +14,8 @@ the existing `specops/workflow.yml`). SpecOps contributes only the `specops lane
   `specops` command.
 - **Who drives what**: every `specops lane *` step is a native `shell`/`command` step executed by
   the agent/workflow engine. The human meets ONLY native `gate`/`prompt` steps — eligibility
-  confirmation, root-cause attestation, and (on a trip) the halt/promote choice.
+  confirmation, the two attestations (root-cause, public-contract), and (on a trip) the
+  halt/promote choice.
 - **No auto-entry**: recognition never auto-classifies; `lane-start` runs only after the human
   confirms the `eligibility-gate` (spec non-goal).
 
@@ -33,9 +34,9 @@ the existing `specops/workflow.yml`). SpecOps contributes only the `specops lane
 | `eligibility-gate` | gate | present the versioned eligibility checklist; options `[confirm, cancel]`; `on_reject: abort`. |
 | `lane-start` | shell | `specops lane start --answers … --json` — writes `lane.yaml`; fail-closed on ineligible. |
 | `work` | command | `speckit.implement` (or the human's own edits) — commits are the working record (FR-005). |
-| `safety-check` | shell | `specops lane check --json` (`output_format: json`) — flags diff-detectable categories. |
-| `root-cause-attest` | prompt | always-on (FR-007 hybrid): "root cause confirmed or ambiguous?" → `specops lane attest --root-cause …`. |
-| `stop-and-ask` | if / gate | when `safety-check` flags a category **or** attestation is `ambiguous`: gate with options `[halt, promote]` **only** (no bypass, FR-008). |
+| `safety-check` | shell | `specops lane check --json` (`output_format: json`) — flags the four diff-detectable categories. |
+| `attestations` | prompt | always-on (FR-007 hybrid): "root cause clear or ambiguous?" and "public contract clear or breaks?" → `specops lane attest --root-cause … --public-contract …`. |
+| `stop-and-ask` | if / gate | when `safety-check` flags a category **or** either attestation is flagged: gate with options `[halt, promote]` **only** (no bypass, FR-008). |
 | `promote` | shell (guarded) | on `promote` choice: `specops lane promote --reason … --json` → hands off to the `specops` workflow at PLAN. |
 | `close` | shell (guarded) | on a clean pass: `specops lane close --json` — fail-closed preflight + retrospective + evidence. |
 
@@ -43,7 +44,7 @@ the existing `specops/workflow.yml`). SpecOps contributes only the `specops lane
 
 - **G-1** (FR-008 non-pierceable): the `stop-and-ask` gate exposes exactly `halt` and `promote`.
   There is no option, input, or downstream shell step that records a reason and continues the
-  lane past a detected category or an `ambiguous` attestation.
+  lane past a detected category or a flagged attestation.
 - **G-2** (FR-009 no gate bypass): the `close` path always invokes `specops lane close`, which
   runs the applicable `preflight` gate-profile suite; there is no lane branch that reaches a
   completed state without it.
