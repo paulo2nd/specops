@@ -1,4 +1,7 @@
-"""specops review: deterministic review gates, cheapest-first (004, FR-001..FR-009).
+"""specops preflight: deterministic gate suite, cheapest-first (004, FR-001..FR-009).
+
+(The command was named `specops review` through Feature 016; renamed to `preflight`
+in Feature 017. This module keeps its internal name.)
 
 Gate order is fixed: reconcile → lint → test → working-tree. The first FAIL
 stops the run. Evaluation is read-only — the command never writes to the
@@ -112,7 +115,7 @@ def _cli_version() -> str:
 def _existing_evidence(root: Path) -> list[dict]:
     """Read the active ledger's structured evidence list (read-only; [] when absent).
 
-    Used only for the cache-lookup: `specops review` never writes the ledger (the
+    Used only for the cache-lookup: `specops preflight` never writes the ledger (the
     Feature 004 read-only contract holds), so a `cached` disposition is reported when a
     matching, non-superseded record already exists (recorded by a state-changing path).
     NOTE: no production path currently persists a ``gate:<name>@<ver>`` record, so a

@@ -243,7 +243,7 @@ def resolve_suite(root: Path) -> list[GateProfile]:
 
     A malformed `gate-profiles.yaml` MUST NOT silently fall back to the default suite —
     that would skip declared required gates and yield a false pass. When a config file is
-    present and invalid, this raises SpecopsError so `specops review` rejects (exit 1)
+    present and invalid, this raises SpecopsError so `specops preflight` rejects (exit 1)
     instead of degrading. An absent file, or a valid empty `profiles` list, yields the
     default profile. This is the fail-closed resolution used by the review pipeline;
     `gate list`/`gate validate` remain lenient inspection surfaces.

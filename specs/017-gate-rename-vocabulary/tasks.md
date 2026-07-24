@@ -112,7 +112,7 @@ Single Python project: `src/specops/`, `tests/` at repo root. Installable extens
 
 **Independent Test**: Review the sweep catalogue — exactly one renamed entry (`review → preflight`), every other examined term has a "keep/document" disposition with a rationale, and no other living surface term was renamed.
 
-- [ ] T017 [US4] Finalize and verify the sweep catalogue in `specs/017-gate-rename-vocabulary/research.md` §D8: confirm exactly one rename and that every other user-facing overloaded term (`gate`, `reconcile`, `consistency`, `handoff`, the reserved "review" senses) is documented "keep" with a rationale; run a grep over `src/specops/` living surfaces to confirm no additional term was renamed. (SC-008)
+- [X] T017 [US4] Finalize and verify the sweep catalogue in `specs/017-gate-rename-vocabulary/research.md` §D8: confirm exactly one rename and that every other user-facing overloaded term (`gate`, `reconcile`, `consistency`, `handoff`, the reserved "review" senses) is documented "keep" with a rationale; run a grep over `src/specops/` living surfaces to confirm no additional term was renamed. (SC-008)
 
 **Checkpoint**: sweep complete and provably conservative.
 
@@ -120,10 +120,10 @@ Single Python project: `src/specops/`, `tests/` at repo root. Installable extens
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T018 Add a `CHANGELOG.md` entry under `[Unreleased]`: the `review → preflight` rename, `specops review` retained as a deprecated alias, the removal window (no earlier than next MINOR, never in a patch), "behavior unchanged", and the one-line migration ("move callers to `specops preflight`"). Do not rewrite historical entries. (FR-006/FR-015)
-- [ ] T019 [P] Optional internal-comment refresh (no behavior, no user-facing surface): update gate-name mentions in `src/specops/cli.py` (≈ line 284), `src/specops/review.py`, `src/specops/gateprofiles.py` (≈ line 246), and `src/specops/shell.py` for accuracy. Skippable without affecting acceptance.
-- [ ] T020 Run the grep guards: no `specops review` remains as a gate reference in `src/specops/templates/` or the living text of `.specify/memory/constitution.md`; confirm `specops.review` (semantic directive) still present in `workflow.yml`. (SC-006/FR-013)
-- [ ] T021 Run the full quality gate — `conda run -n specops ruff check . && conda run -n specops mypy src && conda run -n specops pytest -q` (zero regressions, SC-004) — and execute the `quickstart.md` validation scenarios 1–6.
+- [X] T018 Add a `CHANGELOG.md` entry under `[Unreleased]`: the `review → preflight` rename, `specops review` retained as a deprecated alias, the removal window (no earlier than next MINOR, never in a patch), "behavior unchanged", and the one-line migration ("move callers to `specops preflight`"). Do not rewrite historical entries. (FR-006/FR-015)
+- [X] T019 [P] Optional internal-comment refresh (no behavior, no user-facing surface): update gate-name mentions in `src/specops/cli.py` (≈ line 284), `src/specops/review.py`, `src/specops/gateprofiles.py` (≈ line 246), and `src/specops/shell.py` for accuracy. Skippable without affecting acceptance.
+- [X] T020 Run the grep guards: no `specops review` remains as a gate reference in `src/specops/templates/` or the living text of `.specify/memory/constitution.md`; confirm `specops.review` (semantic directive) still present in `workflow.yml`. (SC-006/FR-013)
+- [X] T021 Run the full quality gate — `conda run -n specops ruff check . && conda run -n specops mypy src && conda run -n specops pytest -q` (zero regressions, SC-004) — and execute the `quickstart.md` validation scenarios 1–6. (ruff ✓, mypy ✓, 755 passed, 87.9% cov)
 
 ---
 
