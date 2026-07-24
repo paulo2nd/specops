@@ -1,0 +1,119 @@
+schema_version: "1.0"
+workflow:
+  id: "specops-lite"
+  name: "SpecOps Lightweight Lane"
+  version: "1.0.0"
+  author: "SpecOps"
+  description: >
+    A proportional lane for small, reversible changes (Feature 013). Composes Spec Kit
+    native steps only — SpecOps adds no engine, loop, resume, or gate; it contributes the
+    deterministic `specops lane *` shell steps. The human never drives the CLI: the
+    agent/engine runs every lane command; the human answers only native gate/prompt steps
+    (eligibility, the two attestations, halt/promote). Entry is proposed by the injected
+    lite-lane directive (before_specify) and confirmed here at the eligibility gate.
+
+requires:
+  speckit_version: ">=0.8.5"
+  integrations:
+    any:
+      - "claude"
+      - "copilot"
+      - "gemini"
+      - "opencode"
+
+inputs:
+  change:
+    type: string
+    required: true
+    prompt: "Describe the small, reversible change"
+  integration:
+    type: string
+    default: "auto"
+    prompt: "Integration to use ('auto' uses the project's initialized integration)"
+
+steps:
+  # --- Eligibility (human-confirmed; no auto-classification, FR-003) ----------
+  - id: eligibility-gate
+    type: gate
+    message: >
+      Use the lightweight lane for this change? Confirm it is small, reversible, and touches
+      no safety-critical category. Choose 'confirm' or 'cancel'.
+    options: [confirm, cancel]
+    on_reject: abort
+  - id: lane-start
+    type: shell
+    run: "specops lane start --answers small,reversible,no-high-risk-category --json"
+    output_format: json
+
+  # --- Work: ordinary commits are the working record (FR-005) -----------------
+  - id: work
+    command: speckit.implement
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.change }}"
+
+  # --- Safety core: four diff-detectable categories (read-only) ---------------
+  - id: safety-check
+    type: shell
+    run: "specops lane check --json --soft"
+    output_format: json
+
+  # --- Attestations: the two always-on human checkpoints (FR-007 hybrid) ------
+  - id: attest-root-cause
+    type: gate
+    message: "Is the root cause confirmed (not ambiguous)? Choose 'clear' or 'flag'."
+    options: [clear, flag]
+  - id: attest-public-contract
+    type: gate
+    message: "Does this avoid any public-contract break? Choose 'clear' or 'flag'."
+    options: [clear, flag]
+  - id: lane-attest
+    type: shell
+    run: >
+      specops lane attest
+      --root-cause {{ steps.attest-root-cause.output.choice }}
+      --public-contract {{ steps.attest-public-contract.output.choice }}
+      --json --soft
+    output_format: json
+
+  # --- Stop-and-ask: on a detection OR a flagged attestation, halt|promote ONLY.
+  #     No third "record a reason and continue" path exists (G-1 / FR-008). -----
+  - id: stop-and-ask
+    type: if
+    condition: >
+      {{ steps.safety-check.output.data.class == 'gate-rejection'
+         or steps.lane-attest.output.data.class == 'gate-rejection' }}
+    then:
+      - id: halt-or-promote
+        type: gate
+        message: >
+          A safety-critical category was flagged. Halt to address it, or promote to the full
+          workflow (lossless). Choose 'halt' or 'promote'.
+        options: [halt, promote]
+        on_reject: abort
+      - id: promote-branch
+        type: if
+        condition: "{{ steps.halt-or-promote.output.choice == 'promote' }}"
+        then:
+          - id: lane-promote
+            type: shell
+            run: "specops lane promote --reason safety-trip"
+      - id: halt-branch
+        type: if
+        condition: "{{ steps.halt-or-promote.output.choice == 'halt' }}"
+        then:
+          - id: lane-halt
+            type: shell
+            run: "specops lane status"
+
+  # --- Close: fail-closed gate suite + retrospective + evidence (only on a clean
+  #     pass; there is no lane path to a completed state without it, G-2). ------
+  - id: close-clean
+    type: if
+    condition: >
+      {{ steps.safety-check.output.data.class != 'gate-rejection'
+         and steps.lane-attest.output.data.class != 'gate-rejection' }}
+    then:
+      - id: lane-close
+        type: shell
+        run: "specops lane close"

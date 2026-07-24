@@ -204,3 +204,44 @@ def test_promote_twice_blocks(feat: Path):
     lane.cmd_promote(feat, reason="scope-growth")
     res = lane.cmd_promote(feat, reason="scope-growth")
     assert res.cls == outcome.GATE_REJECTION
+
+
+# --- US4: closure evidence taxonomy + retrospective render -----------------
+
+def test_closure_records_gate_evidence_taxonomy(feat: Path):
+    _start(feat)
+    _commit(feat, "src/util.py", "u = 1\n", "tweak")
+    lane.cmd_attest(feat, root_cause="clear", public_contract="clear")
+    lane.cmd_close(feat)
+    data = lane.load(feat / "specs" / "013-lane")
+    gates = data["closure"]["gate_evidence"]["gates"]
+    # Every gate carries the Feature 012 disposition taxonomy.
+    for g in gates:
+        assert "name" in g and "status" in g
+        assert g.get("disposition") in {
+            "required", "optional", "skipped", "cached", "failed", "unavailable", None,
+        }
+
+
+def test_retrospective_md_is_rendered_projection(feat: Path):
+    _start(feat)
+    _commit(feat, "src/util.py", "u = 2\n", "tweak")
+    lane.cmd_attest(feat, root_cause="clear", public_contract="clear")
+    lane.cmd_close(feat)
+    retro = (feat / "specs" / "013-lane" / "retrospective.md").read_text()
+    assert "# Retrospective: 013-lane" in retro
+    assert "APPROVED" in retro
+    # Authoritative state stays in lane.yaml; retrospective is a projection.
+    assert "small" in retro  # eligibility basis rendered
+
+
+# --- US5: bundling combined-set evaluation ---------------------------------
+
+def test_bundle_combined_set_halts_when_one_change_is_risky(feat: Path):
+    _start(feat, bundle="two adjacent tweaks")
+    _commit(feat, "src/copy.py", "TEXT = 'hi'\n", "tweak one")
+    _commit(feat, "db/migrations/9.sql", "ALTER TABLE t ADD c int;\n", "risky tweak two")
+    # The whole bundle is evaluated together — the risky change halts it.
+    res = lane.cmd_check(feat, staged=False)
+    assert res.cls == outcome.GATE_REJECTION
+    assert "migration" in res.extra["categories"]

@@ -178,6 +178,33 @@ anterior somente-determinístico (sem toggle), e uma execução que não consegu
 realizar o review (comando `specops.review` indisponível) **falha fechado** em vez
 de concluir silenciosamente.
 
+### O workflow `specops-lite` (lane leve)
+
+Para mudanças pequenas e reversíveis que não justificam o ciclo completo, o `specops
+extension install` também registra um segundo workflow, o `specops-lite`. **Você nunca
+conduz a CLI do `specops` na lane** — uma diretiva Princípio IV injetada faz o agente
+reconhecer uma mudança pequena/reversível, *propor* a lane (com confirmação humana, sem
+autoclassificar) e então conduzir cada comando `specops lane *` sozinho. Suas únicas
+interações são gates nativos: elegibilidade, duas atestações e — se algo disparar — halt
+ou promote.
+
+A lane mantém um registro dedicado `lane.yaml` (esquema próprio, nunca `status.yaml`); os
+seus commits normais no branch são o registro de trabalho. Seu núcleo de segurança
+não-perfurável é **híbrido**: quatro categorias são detectadas do diff (migração, segredo,
+dependência, destrutiva — por um piso genérico não-removível, extensível via `lane.safety`
+no `specops.json`), e duas que não são detectáveis genericamente do diff (root-cause,
+public-contract) são impostas por atestação humana sempre presente. Um disparo oferece
+apenas **halt** ou **promote** — não há bypass gravável.
+
+O fechamento roda a suíte determinística de gate-profiles (fail-closed) e registra
+evidência estruturada mais um `retrospective.md` renderizado. Se a mudança crescer além da
+lane, a **promoção é lossless**: sintetiza um ledger completo na fase `PLAN`, preservando
+todos os commits e carregando o contexto da lane para revisão e planejamento completos.
+
+Os comandos `specops lane` (`start`, `status`, `check`, `attest`, `close`, `promote`) são
+voltados ao agente/workflow, não-interativos, e expõem o contrato estável `--json` — compõem
+como gates, exatamente como o `specops preflight`.
+
 ### `specops status show`
 
 Somente leitura. Imprime o estado do ledger: feature, branch, fase, tarefa

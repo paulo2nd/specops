@@ -272,6 +272,7 @@ def test_init_block_removal_restores_specify_tasks(fake_speckit_repo: Path) -> N
 
     from specops.initializer import remove_block
     remove_block(specify_path, "specify")
+    remove_block(specify_path, "lite")  # Feature 013: also injected into the specify prompt
     remove_block(tasks_path, "tasks")
     assert specify_path.read_text() == orig_specify
     assert tasks_path.read_text() == orig_tasks

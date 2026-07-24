@@ -119,16 +119,16 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 ### Tests
 
-- [ ] T021 [P] Unit test additive install/unregister of the `specops-lite` workflow with registry preservation in `tests/unit/test_extension_lite.py`
-- [ ] T022 [P] Unit test the `lite.md` directive install/update/no-op (native + legacy marker paths) in `tests/unit/test_lite_directive.py`
+- [X] T021 [P] Unit test additive install/unregister of the `specops-lite` workflow with registry preservation in `tests/unit/test_extension_lite.py`
+- [X] T022 [P] Unit test the `lite.md` directive install/update/no-op (native + legacy marker paths) in `tests/unit/test_lite_directive.py`
 
 ### Implementation
 
-- [ ] T023 Create `src/specops/templates/workflows/specops-lite/workflow.yml` — native steps composing `eligibility-gate` → `lane start` → work → `lane check` + `root-cause-attest` → `stop-and-ask` (halt|promote only) → `lane close`/`lane promote`, encoding guarantees G-1…G-5 (no bypass, no review cycle, minimal state, safe degrade)
-- [ ] T024 [P] Create `src/specops/templates/directives/lite.md` — Principle IV directive: recognize → propose (never auto-classify) → drive the lane, deferring safety to the core, escalating on growth (B-1…B-5, D-1…D-2)
-- [ ] T025 Generalize `install_workflow`/`unregister_workflow` in `src/specops/extension.py` to iterate `("specops", "specops-lite")`, each with its own template + registry entry (preserve foreign entries; never touch the bundled `speckit`)
-- [ ] T026 Inject the `lite.md` directive on the native path in `src/specops/extension.py` and the legacy marker-block path in `src/specops/initializer.py`, additively and idempotently (parity with existing directives)
-- [ ] T027 Amend `.specify/memory/constitution.md` — extend the Principle IV directive list with the lite-lane recognition directive, update the Sync Impact Report, MINOR bump (no principle removed/redefined) — in the same change set as T024/T026 (governance rule)
+- [X] T023 Create `src/specops/templates/workflows/specops-lite/workflow.yml` — native steps composing `eligibility-gate` → `lane start` → work → `lane check` + `root-cause-attest` → `stop-and-ask` (halt|promote only) → `lane close`/`lane promote`, encoding guarantees G-1…G-5 (no bypass, no review cycle, minimal state, safe degrade)
+- [X] T024 [P] Create `src/specops/templates/directives/lite.md` — Principle IV directive: recognize → propose (never auto-classify) → drive the lane, deferring safety to the core, escalating on growth (B-1…B-5, D-1…D-2)
+- [X] T025 Generalize `install_workflow`/`unregister_workflow` in `src/specops/extension.py` to iterate `("specops", "specops-lite")`, each with its own template + registry entry (preserve foreign entries; never touch the bundled `speckit`)
+- [X] T026 Inject the `lite.md` directive on the native path in `src/specops/extension.py` and the legacy marker-block path in `src/specops/initializer.py`, additively and idempotently (parity with existing directives)
+- [X] T027 Amend `.specify/memory/constitution.md` — extend the Principle IV directive list with the lite-lane recognition directive, update the Sync Impact Report, MINOR bump (no principle removed/redefined) — in the same change set as T024/T026 (governance rule)
 
 **Checkpoint**: The lane is agent-driven end-to-end; both workflows install cleanly.
 
@@ -142,12 +142,12 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T028 [P] [US4] Unit tests for per-gate evidence taxonomy (disposition/reason, skipped/unavailable) and the `retrospective.md` render/projection in `tests/unit/test_lane.py`
+- [X] T028 [P] [US4] Unit tests for per-gate evidence taxonomy (disposition/reason, skipped/unavailable) and the `retrospective.md` render/projection in `tests/unit/test_lane.py`
 
 ### Implementation for User Story 4
 
-- [ ] T029 [US4] Record the full Feature-012 structured evidence per gate at closure (reusing `evidence`/`gateprofiles`) in `src/specops/lane.py`, including optional-gate skipped/unavailable dispositions
-- [ ] T030 [US4] Render the `retrospective.md` projection under `specs/<feature>/` from `closure.retrospective` (authoritative state stays in `lane.yaml`; mirrors `handoff render`) in `src/specops/lane.py`
+- [X] T029 [US4] Record the full Feature-012 structured evidence per gate at closure (reusing `evidence`/`gateprofiles`) in `src/specops/lane.py`, including optional-gate skipped/unavailable dispositions
+- [X] T030 [US4] Render the `retrospective.md` projection under `specs/<feature>/` from `closure.retrospective` (authoritative state stays in `lane.yaml`; mirrors `handoff render`) in `src/specops/lane.py`
 
 **Checkpoint**: A lightweight change is fully auditable from its closure record.
 
@@ -161,11 +161,11 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T031 [P] [US5] Integration test of bundling (combined-set evaluation; one high-risk change halts the whole bundle) in `tests/integration/test_lane_flow.py`
+- [X] T031 [P] [US5] Integration test of bundling (combined-set evaluation; one high-risk change halts the whole bundle) in `tests/integration/test_lane_flow.py`
 
 ### Implementation for User Story 5
 
-- [ ] T032 [US5] Implement `--bundle NOTE` on `specops lane start` and combined-change-set evaluation across `src/specops/lane.py`, `src/specops/cli.py`, and `src/specops/safety.py` (`eligibility.bundled: true`; safety `detect` runs over the union diff)
+- [X] T032 [US5] Implement `--bundle NOTE` on `specops lane start` and combined-change-set evaluation across `src/specops/lane.py`, `src/specops/cli.py`, and `src/specops/safety.py` (`eligibility.bundled: true`; safety `detect` runs over the union diff)
 
 **Checkpoint**: All user stories independently functional.
 
@@ -173,10 +173,10 @@ CLI primitives directly (that is the agent's job at runtime, not the human's).
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T033 [P] Document the lightweight lane (usage = agent-driven; human only at gates) in `README.md` and `README.pt-br.md`, standardizing wording ("lightweight lane" concept, `specops-lite` workflow id) (L2)
-- [ ] T034 [P] Add a Feature 013 entry under `[Unreleased]` in `CHANGELOG.md`
-- [ ] T035 Run the `quickstart.md` scenarios A–F against a fixture repo (never this repository — No Self-Application)
-- [ ] T036 Run the full quality gates — `conda run -n specops ruff check`, `conda run -n specops mypy src`, `conda run -n specops pytest` — and resolve findings; assert no `lane` command or `specops-lite` step names a gate "review" (FR-021 vocabulary guard, L1)
+- [X] T033 [P] Document the lightweight lane (usage = agent-driven; human only at gates) in `README.md` and `README.pt-br.md`, standardizing wording ("lightweight lane" concept, `specops-lite` workflow id) (L2)
+- [X] T034 [P] Add a Feature 013 entry under `[Unreleased]` in `CHANGELOG.md`
+- [X] T035 Run the `quickstart.md` scenarios A–F against a fixture repo (never this repository — No Self-Application)
+- [X] T036 Run the full quality gates — `conda run -n specops ruff check`, `conda run -n specops mypy src`, `conda run -n specops pytest` — and resolve findings; assert no `lane` command or `specops-lite` step names a gate "review" (FR-021 vocabulary guard, L1)
 - [X] T037 [P] Integration test: safe degradation (no context map present) and offline operation for `lane check`/`close`/`promote` in `tests/integration/test_lane_flow.py` (FR-019/SC-006, G1)
 
 ---
