@@ -86,6 +86,10 @@ Roadmap status uses four values:
 | 015 | External Review Ingestion | MERGED | 011, 012 | Adoption |
 | 016 | Review Composition in the Workflow | MERGED | 007, 011 | Adoption |
 | 017 | Gate Rename & Vocabulary Pass | MERGED | — | Adoption |
+| 018 | Internal Hardening | ACTIVE | — | 1.0 Readiness |
+| 019 | Hardening II — API & State Robustness | PLANNED | 018 | 1.0 Readiness |
+| 020 | GitPython Removal | PLANNED | 018 | 1.0 Readiness |
+| 021 | Contract Freeze for 1.0 | PLANNED | 018, 019, 020 | 1.0 Readiness |
 
 ### Build sequence (dependency review — 2026-07-23)
 
@@ -110,6 +114,71 @@ remaining (PLANNED) features:
 The 016/017 micro-order is flexible (both are small, buildable now, and both touch
 `workflow.yml`); 017-first minimizes churn, 016-first ships the correctness fix
 sooner.
+
+### Build sequence (dependency review — 2026-07-25)
+
+The Adoption milestone is complete (005–017 MERGED). The 1.0 Readiness cycle,
+seeded by the 2026-07-25 code/process review (bug-sized findings went to issues
+#23–#28; process items to #29/#30 — never to this roadmap, per the Dependency and
+Replanning Policy), builds strictly in order:
+
+> **018 → 019 → 020 → 021**
+
+- **018** first and already ACTIVE — the consolidation every later feature edits
+  through; running anything in parallel with it guarantees same-file conflicts
+  (`trace.py`, `handoff.py`, `cli.py`, `status.py`).
+- **019** second — finishes the internal robustness work 018 deliberately excluded;
+  several of its items get cheaper after 018 (e.g. the handoff loader's union
+  return collapses naturally once result types are unified).
+- **020** third — swapping the git layer is safest after the internal API is public
+  and stable (018) and the state paths are hardened (019); it also requires a
+  constitution amendment to the named dependency list.
+- **021** last — freezing contracts only makes sense over the final internals and
+  the final dependency set.
+
+### Open-issue alignment (2026-07-25)
+
+Per the Dependency and Replanning Policy, defect fixes are **never** roadmap
+features — they land as dedicated fix PRs that close their issue (`Fixes #NN`).
+This section only sequences them against the active cycle so fixes and Feature
+018's rewrite of the same files do not collide. Feature 018's scope guard (task
+T035) verifies none of these is silently absorbed.
+
+| Issue | Files touched | Resolve | Why this timing |
+|---|---|---|---|
+| [#23](https://github.com/paulo2nd/specops/issues/23) config data loss | `config.py` | **Before 018 implementation** | Outside 018's blast radius; data-loss class, should not wait |
+| [#24](https://github.com/paulo2nd/specops/issues/24) PEP 440 comparison | `compat.py` | **Before 018 implementation** | Outside 018's blast radius. Requires a constitution PATCH amendment: the Technical Constraints dependency list must add `packaging` with the fix's justification |
+| [#28](https://github.com/paulo2nd/specops/issues/28) missing utf-8 | `config.py`, `speckit.py` | **Before 018 implementation** | Outside 018's blast radius; mechanical |
+| [#27](https://github.com/paulo2nd/specops/issues/27) path-prefix check | `lane.py` | **After 018 merges** | One line, but inside a file US1/US2 rewrite — avoid rebase noise |
+| [#26](https://github.com/paulo2nd/specops/issues/26) broad excepts | `cli.py`, `trace.py`, `lane.py`, `consistency.py` | **After 018 merges** | Same files US1/US2 restructure; the narrowed handlers should target the final shape |
+| [#25](https://github.com/paulo2nd/specops/issues/25) atomic writes | `initializer.py`, `extension.py`, `ledger.py` (+ new `fsutil.py`) | **After 018 merges** | The shared helper should be built against 018's promoted public API |
+| [#29](https://github.com/paulo2nd/specops/issues/29) CI/release hardening | `.github/` only | **Anytime** | No production code; independent of the cycle |
+| [#30](https://github.com/paulo2nd/specops/issues/30) repo hygiene | docs/metadata only | **Anytime** | No production code; independent of the cycle |
+
+When a fix PR closes one of these, no roadmap update is needed (issues are not
+roadmap rows); this table is refreshed only if the sequencing itself changes.
+
+### Execution plan — waves and release points (2026-07-25)
+
+The agreed order of everything open (features and issues), grouped by what lands
+together. GitHub milestones `0.5.1` and `0.6.0` mirror the release points.
+
+| Wave | Work | Vehicle | Release point |
+|---|---|---|---|
+| 1 | #23 + #28 (config robustness + utf-8) | one fix PR off `main` | — |
+| 1 | #24 (PEP 440 via `packaging`) + constitution PATCH amendment (dependency list) | own fix PR off `main` | **0.5.1** after both merge |
+| 2 | Feature 018 (US1 → US2 → US3 → US4, one commit per story) | feature PR (branch `018-internal-hardening`) | — |
+| 2∥ | #29 (CI/release) and #30 (hygiene) — no production code, zero conflict with 018 | one PR each, anytime during wave 2 | — |
+| 3 | #26 + #27 (narrowed handlers + `is_relative_to` in the files 018 rewrote) | one fix PR after 018 merges | — |
+| 3 | #25 (single `atomic_write` in a new `fsutil`, built on 018's public API) | own fix PR | **0.6.0** — all review issues closed |
+| 4 | Feature 019 — Hardening II | feature PR | — |
+| 5 | Feature 020 — GitPython Removal (+ constitution amendment) | feature PR | — |
+| 6 | Feature 021 — Contract Freeze | feature PR | **1.0.0-rc**; `1.0.0` once the real-usage criterion is met |
+
+Rationale for the intermediate releases: #23/#24 are user-facing defects in
+0.5.0 (config loss, wrong version gate) — they warrant a patch release ahead of
+the long cycle; 0.6.0 marks the point where the 2026-07-25 review is fully
+discharged (Feature 018 + every issue closed).
 
 ## Standard Spec Kit Execution Protocol
 
@@ -812,6 +881,188 @@ contract, test) breaks on the rename.
 > docs, and sweep for other overloaded terms as a pre-1.0 vocabulary pass — behavior
 > unchanged, no breaking removal in this feature.
 
+## Feature 018 — Internal Hardening
+
+### Objective
+
+Consolidate the internal infrastructure duplicated across Features 008–013 into
+single definition sites, with byte-identical CLI behavior throughout. Feature
+artifacts exist at `specs/018-internal-hardening/` (ACTIVE — consult them for
+authoritative detail).
+
+### Required outcomes
+
+- One command-result abstraction (`outcome.CommandResult`) serves all five command
+  families; the two mirrored result dataclasses are eliminated.
+- One output-emission function replaces the five per-family emit helpers; the lane
+  JSON envelope gains the standard fields it was missing — the feature's **single
+  sanctioned behavior delta**, additive only.
+- Zero cross-module references to underscore-prefixed helpers in production code
+  (39 verified sites promoted to documented public names, no aliases).
+- One ledger-loading path, one evidence-grammar owner, one finding-record factory
+  with a co-located, round-trip-tested line parser/renderer.
+- Test harness consolidated: one git helper, shared parametrized ledger builders,
+  in-process integration tests by default with an explicit subprocess smoke set.
+- A golden-capture harness proves the behavior freeze mechanically at every story
+  checkpoint.
+
+### Explicit non-goals
+
+- No new runtime dependencies; no ledger schema bump (stays v7).
+- No overlap with issues #23–#28 (tracked separately) and no dependency changes
+  (GitPython is Feature 020).
+- No reimplementation of anything Spec Kit provides (Rule 8).
+
+### Acceptance gate
+
+Golden replay is byte-identical across all command families except the lane JSON
+envelope addition; the cross-module privacy scan reports zero; every consolidated
+artifact has exactly one definition site; the full suite passes at the repository
+thresholds with integration wall-clock reduced ≥30%.
+
+### `/speckit.specify` brief
+
+> Consolidate the duplicated internal infrastructure that accumulated across
+> features 008–013 — result types, output emission, cross-module private API,
+> ledger reads, evidence grammar, finding records, test harness — without changing
+> any user-facing CLI behavior or output contract, except the acknowledged lane
+> JSON envelope omission, which is fixed. (Executed 2026-07-25; artifacts at
+> `specs/018-internal-hardening/`.)
+
+## Feature 019 — Hardening II: API & State Robustness
+
+### Objective
+
+Finish the internal robustness work Feature 018 deliberately excluded: decompose
+the remaining long state-transition functions, replace fragile internal signatures
+and duplicated parsing, type the ledger records, and fix the known ledger-lock
+race — all behavior-preserving.
+
+### Required outcomes
+
+- Decompose `status` phase-transition and task-completion flows into named
+  sub-steps with a single DONE-gate implementation (today duplicated verbatim).
+- Replace the handoff loader's union return with a typed error path, removing the
+  repeated isinstance boilerplate at every caller.
+- Single `git diff --name-status` parser (rename-awareness as a parameter) shared
+  by the lane and gitops paths; the `"(human)"` ledger sentinel no longer leaks
+  into generic git helpers (callers filter).
+- Ledger template rendering asserts placeholder completeness (no silent `{{...}}`
+  residue on template drift).
+- `TypedDict` schema for ledger records (tasks, findings, review cycles, evidence)
+  giving mypy key-level checking with zero serialization change.
+- Gate-profile field knowledge single-sourced between lenient parse and validate
+  (declarative field table); doctor's error path no longer threads exceptions as
+  arguments.
+- Fix the ledger-lock stale-reclaim race (TOCTOU): either harden the in-tree lock
+  or adopt a locking dependency — the decision and its Complexity Tracking
+  justification belong to this feature's plan (a new runtime dependency requires
+  constitutional justification).
+
+### Explicit non-goals
+
+- No user-visible behavior, output, or exit-code change; no schema bump.
+- No new CLI surfaces.
+- Not the GitPython replacement (Feature 020).
+
+### Acceptance gate
+
+Full suite green with byte-identical CLI behavior; the lock race is covered by a
+concurrency test that fails on the old implementation; mypy passes with the typed
+ledger records; the duplicated DONE gate, diff parser, and sentinel special-case
+each have exactly one implementation.
+
+### `/speckit.specify` brief
+
+> Complete the internal robustness pass deferred from Feature 018: decompose the
+> long status transitions, type the ledger records, single-source the remaining
+> duplicated parsers and gates, remove domain sentinels from generic git helpers,
+> assert template-rendering completeness, simplify doctor's error flow, and fix
+> the ledger-lock stale-reclaim race — all with zero user-visible behavior change.
+
+## Feature 020 — GitPython Removal
+
+### Objective
+
+Replace GitPython with direct git plumbing invocations behind the existing gitops
+seam, removing three runtime dependencies (gitpython, gitdb, smmap — the library
+is in maintenance mode) and the associated mypy override, while keeping every
+git-dependent behavior byte-identical.
+
+### Required outcomes
+
+- `gitops` becomes the single git access layer, exposing a minimal repository
+  abstraction (root discovery, branch, HEAD, commit ranges, ancestry, blob/tree
+  lookup, porcelain status/diff) implemented over `git` plumbing commands.
+- GitPython's error taxonomy is mapped to the existing SpecOps error contract;
+  exit codes and diagnostics are preserved.
+- The constitution's Technical Constraints dependency list is amended in the same
+  change set (GitPython is currently named there).
+- The mypy `git.*` override is removed from `pyproject.toml`; type annotations
+  move to the new abstraction.
+- Behavior verified against the Feature 018 golden-capture harness plus the
+  subprocess smoke set (real repositories, real encodings, Windows-class paths).
+
+### Explicit non-goals
+
+- No new git capabilities or performance work beyond the mechanical replacement.
+- No change to what is recorded in the ledger.
+- No CLI surface change.
+
+### Acceptance gate
+
+The dependency tree contains no gitpython/gitdb/smmap; all git-dependent commands
+replay byte-identical on the golden fixtures; the full suite passes on all CI
+platforms; the constitution amendment lands in the same change set.
+
+### `/speckit.specify` brief
+
+> Replace GitPython with direct git plumbing behind the gitops seam: a minimal
+> typed repository abstraction, an error-taxonomy mapping preserving today's
+> diagnostics and exit codes, removal of the gitpython/gitdb/smmap dependencies
+> and the mypy override, and a constitution amendment to the named dependency
+> list — behavior byte-identical, verified against the golden-capture harness.
+
+## Feature 021 — Contract Freeze for 1.0
+
+### Objective
+
+Declare and enforce the stability of every surface adopters bind to —
+`specops.json`, `status.yaml`, `lane.yaml`, gate-profile files, JSON output
+envelopes, exit codes, and the findings-input contract — so a 1.0.0-rc can be cut
+per the milestone-based release strategy.
+
+### Required outcomes
+
+- A published stability policy: which surfaces are frozen, what additive change
+  means for each, and the deprecation discipline for anything else (extending the
+  Feature 017 alias precedent).
+- Contract tests that lock the frozen shapes (schema-level assertions over the
+  persisted formats and output envelopes), failing on any unversioned change.
+- Versioning policy for post-1.0 evolution of persisted formats (migration
+  obligations per ledger schema bump, envelope `output_version` semantics).
+- CHANGELOG and EN/PT documentation state the freeze; the 1.0.0-rc is cut when
+  the real-usage criterion of the release strategy is satisfied.
+
+### Explicit non-goals
+
+- No new capabilities; freezing is the feature.
+- No removal of deprecated aliases inside this feature.
+
+### Acceptance gate
+
+Every frozen surface has a contract test and documented stability class; a
+1.0.0-rc can be tagged with the stability policy published, and any breaking
+change afterward is mechanically detected by the contract tests.
+
+### `/speckit.specify` brief
+
+> Freeze the adopter-facing contracts for 1.0: publish the stability policy for
+> persisted formats, JSON envelopes, and exit codes; add contract tests that lock
+> the frozen shapes; define the post-1.0 versioning and migration obligations; and
+> cut 1.0.0-rc once the real-usage criterion is met — no new capabilities, no
+> alias removals.
+
 ## Dependency and Replanning Policy
 
 - A feature may be split when `/speckit.clarify` or `/speckit.plan` proves that
@@ -851,3 +1102,12 @@ actually performs and enforces the semantic review (not just the deterministic
 gates), any external reviewer's findings — LLM, static analyzer, or human — feed the
 structured handoff through a stable input contract, and the deterministic gate is
 honestly named (`preflight`).
+
+### 1.0 Readiness complete
+
+Features 018–021 are merged. The internals are single-sourced behind documented
+public contracts (018), the remaining state-handling and locking debt is retired
+(019), the dependency footprint is minimal with git access behind an owned seam
+(020), and every adopter-facing contract is frozen, tested, and documented (021).
+With the real-usage criterion of the release strategy satisfied, `1.0.0-rc` is
+cut; `1.0.0` follows per the milestone-based release policy.
