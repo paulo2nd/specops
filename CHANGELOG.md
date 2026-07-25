@@ -13,6 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Diagnostics and Machine Reports (Feature 014).** Two read-only surfaces that turn a
+  scattered, expert-only health investigation into a single command.
+  - New `specops doctor [--json]` — a read-only diagnostic over ten SpecOps-specific
+    domains for the **active feature only** (environment readiness, CLI/extension
+    compatibility, integration, legacy artifacts, configuration, feature identity,
+    ledger schema + integrity, context-map health, workflow/ledger divergence, preflight
+    gate availability). Each finding carries a severity (`ok` / `warning` / `blocking` /
+    `execution-error`), a human message, and — when not `ok` — both a stable
+    `next_action_code` and human next-action text. The overall verdict is the most severe
+    finding; the exit code follows the outcome contract (**0** ok/warning, **1** blocking,
+    **2** execution-error). `--json` emits a stable, versioned document
+    (`output_version: 1`) that is byte-identical across runs.
+  - New `specops report [--json]` — a compact, read-only status of the active feature
+    (identity, branch, phase, task counts, active task, review cycles + open blocking
+    findings, workflow lane), complementing the human-only `specops status show` with a
+    stable machine surface.
+  - Both are strictly read-only (mutate nothing), run fully offline, perform no
+    telemetry or auto-repair, and never execute `specify` or any gate command — they
+    *defer* to native `specify check` / `specify workflow status` by pointing at them,
+    which keeps the machine output deterministic. Consumers must tolerate unknown domains
+    and `next_action_code` values (additive growth without a version bump).
 - **External Review Ingestion (Feature 015).** Any external reviewer — an LLM bug
   hunt, a static analyzer (CodeQL, semgrep), or a human — can now feed the structured
   corrective handoff (Feature 011) through a stable, versioned, stack-neutral input

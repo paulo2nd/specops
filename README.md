@@ -314,6 +314,37 @@ Read-only gate. Verifies every `SC-\d+` in the spec has ≥ 1 task with a matchi
 `[SC-xxx]` tag, and every `plan.md` path declaration carries a valid action
 suffix (`(create)`/`(modify)`/`(remove)`). Exit 1 on violation.
 
+### `specops doctor [--json]`
+
+Read-only diagnostic (Feature 014). Inspects every SpecOps-specific surface for the
+**active feature only** and reports a per-domain, severity-classified result with a
+deterministic next action. Ten domains: environment readiness, CLI/extension
+compatibility, integration, legacy artifacts, configuration, feature identity, ledger
+schema + integrity, context-map health, workflow/ledger divergence, and preflight gate
+availability. It mutates nothing, runs fully offline, and never executes `specify` or a
+gate command — it *defers* to the native `specify check` / `specify workflow status` by
+pointing at them.
+
+Each finding carries a severity (`ok` / `warning` / `blocking` / `execution-error`), a
+human message, and — when not `ok` — both a stable `next_action_code` and human text.
+The overall verdict is the most severe finding; the exit code follows the outcome
+contract: **0** (ok/warning), **1** (blocking), **2** (execution-error). `--json` emits
+a stable, versioned document (`output_version: 1`; consumers must tolerate unknown
+domains and codes).
+
+```bash
+specops doctor            # human-readable health report
+specops doctor --json     # stable JSON for CI (gate on the exit code)
+```
+
+### `specops report [--json]`
+
+Read-only compact status of the active feature (Feature 014): identity, branch, phase,
+task counts (pending / in progress / done / orphaned / total), active task, review
+cycles + open blocking findings, and workflow lane. Complements the human-only
+`specops status show` by adding a stable machine surface; mutates nothing. Exit **0**
+normally (a missing active feature yields null fields), **2** on an unreadable ledger.
+
 ### `specops context init | validate | resolve | explain`
 
 The **context map** (`.specify/specops/context-map.yaml`) is a versioned,
