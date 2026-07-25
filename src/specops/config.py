@@ -38,7 +38,7 @@ def load(root: Path) -> dict[str, Any]:
             f"{CONFIG_FILENAME} not found in {root}. Run 'specops init' first."
         )
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ConfigError(f"Cannot parse {path}: {exc}") from exc
 
@@ -84,13 +84,15 @@ def create_or_merge(root: Path) -> tuple[dict[str, Any], bool]:
     """
     path = config_path(root)
     if path.is_file():
-        try:
-            existing = json.loads(path.read_text())
-        except (json.JSONDecodeError, OSError):
-            existing = {}
+        # Reuse load() so a corrupted file raises ConfigError instead of being
+        # silently discarded — honors the unknown-keys-are-preserved contract (R10, #23).
+        existing = load(root)
         merged = merge_preserve(existing, _DEFAULTS)
-        path.write_text(json.dumps(merged, indent=2) + "\n")
+        # Skip the write when nothing changed: preserves the user's exact bytes
+        # and keeps install byte-for-byte idempotent ("unchanged", #23).
+        if merged != existing:
+            path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
         return merged, False
     else:
-        path.write_text(json.dumps(_DEFAULTS, indent=2) + "\n")
+        path.write_text(json.dumps(_DEFAULTS, indent=2) + "\n", encoding="utf-8")
         return dict(_DEFAULTS), True

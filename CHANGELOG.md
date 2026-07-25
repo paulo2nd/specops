@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Config robustness ([#23]).** `config.create_or_merge` no longer silently
+  discards a corrupted `specops.json` and overwrites it with defaults. It now
+  reuses `config.load`, so a corrupted file raises `ConfigError` (same contract
+  as `load`, honoring the unknown-keys-are-preserved guarantee), and it skips the
+  write entirely when the merge produces no change — keeping the user's exact
+  bytes and byte-for-byte install idempotence.
+- **UTF-8 file reads ([#28]).** Pinned `encoding="utf-8"` on the five remaining
+  `read_text()` calls in `config.py` and `speckit.py` that fell back to the
+  platform locale, preventing cp1252 divergence on Windows.
+
+[#23]: https://github.com/paulo2nd/specops/issues/23
+[#28]: https://github.com/paulo2nd/specops/issues/28
+
 ## [0.5.0] - 2026-07-25
 
 Adoption milestone (Features 013–017) — and the completion of the SpecOps evolution
