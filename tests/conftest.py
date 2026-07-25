@@ -377,6 +377,65 @@ def head_commit(root: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Diagnostics and Machine Reports (Feature 014) fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def doctor_healthy_repo(fake_speckit_repo: Path) -> Path:
+    """A fully-healthy repo where every `specops doctor` domain reports `ok`.
+
+    Builds on the fake Speckit layout (git + Spec Kit + resolvable claude integration)
+    and adds: a native extension manifest, valid specops.json, a valid gate-profile
+    whose command (`git`) is always resolvable on PATH, and a current-schema ledger whose
+    identity is anchored to HEAD (so reconcile and identity checks pass).
+    """
+    root = fake_speckit_repo
+    (root / ".specify" / "extensions.yml").write_text(
+        "commands:\n  - extension: specops\n    name: specops-review\n"
+    )
+    (root / "specops.json").write_text(
+        json.dumps({"test_command": "git --version", "lint_command": ""})
+    )
+    (root / ".specify" / "specops").mkdir(parents=True, exist_ok=True)
+    (root / ".specify" / "specops" / "gate-profiles.yaml").write_text(
+        "output_version: 1\n"
+        "profiles:\n"
+        "  - name: smoke\n"
+        "    command: git --version\n"
+        "    applies: {always: true}\n"
+        "    timeout: 60\n"
+    )
+    feature_dir = root / "specs" / "001-demo"
+    (feature_dir / "spec.md").write_text("# Spec\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "scaffold")
+    baseline = _git(root, "rev-parse", "HEAD")
+    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    led = make_trace_ledger(
+        feature="001-demo", branch=branch, baseline=baseline, phase="IMPLEMENT"
+    )
+    led["schema_version"] = ledger.CURRENT_SCHEMA
+    (feature_dir / "status.yaml").write_text(yaml.dump(led))
+    return root
+
+
+def write_second_feature(root: Path, *, schema_version: int = 99) -> Path:
+    """Add a SECOND, deliberately-broken feature ledger (default: too-new schema).
+
+    Used to prove `specops doctor` is scoped to the active feature only (FR-012a): the
+    active feature stays `specs/001-demo`; this ledger must never be inspected.
+    """
+    other = root / "specs" / "002-other"
+    other.mkdir(parents=True, exist_ok=True)
+    (other / "status.yaml").write_text(
+        yaml.dump({"schema_version": schema_version, "feature": "002-other",
+                   "branch": "main", "current_phase": "PLAN", "tasks": [], "review_cycles": []})
+    )
+    return other
+
+
+# ---------------------------------------------------------------------------
 # Ledger v2 (Feature 006) synthetic ledger factories
 # ---------------------------------------------------------------------------
 
