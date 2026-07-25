@@ -72,7 +72,11 @@ def compact_status(root: Path) -> dict:
         }
 
     data = ledger.load_raw(feature_dir)
-    tasks = data.get("tasks") or []
+    # A hand-edited but YAML-parseable ledger may hold non-mapping task entries; ignore
+    # them for counting so a malformed ledger degrades gracefully instead of crashing.
+    all_tasks = data.get("tasks") or []
+    tasks = [t for t in all_tasks if isinstance(t, dict)]
+    cycles = data.get("review_cycles")
 
     def _count(status: str) -> int:
         return sum(1 for t in tasks if t.get("status") == status and not t.get("orphaned"))
@@ -90,11 +94,11 @@ def compact_status(root: Path) -> dict:
             "in_progress": _count("IN_PROGRESS"),
             "done": _count("DONE"),
             "orphaned": sum(1 for t in tasks if t.get("orphaned")),
-            "total": len(tasks),
+            "total": len(all_tasks),
         },
         "active_task": active_task,
         "review": {
-            "cycles": len(data.get("review_cycles") or []),
+            "cycles": len(cycles) if isinstance(cycles, list) else 0,
             "blocking_open": len(handoff.blocking_approval_check(data)),
         },
         "workflow_lane": data.get("workflow_lane", ledger.DEFAULT_WORKFLOW_LANE),

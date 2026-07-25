@@ -160,6 +160,16 @@ def test_blocking_handoff_finding_makes_ledger_blocking(handoff_repo) -> None:
     assert doctor.NA_VERIFY_BLOCKING in codes
 
 
+def test_non_utf8_ledger_does_not_crash(doctor_healthy_repo: Path) -> None:
+    # Regression (review finding 1): a non-UTF8 status.yaml raises UnicodeDecodeError
+    # from load_raw — outside the per-domain _run guard — which must not crash doctor.
+    _ledger_path(doctor_healthy_repo).write_bytes(b"\xff\xfe not utf8")
+    result = doctor.cmd_doctor(doctor_healthy_repo)  # must not raise
+    dom = {d["domain"]: d for d in result.extra["domains"]}["ledger"]
+    assert dom["severity"] == doctor.EXECUTION_ERROR
+    assert result.exit_code == 2
+
+
 def test_active_feature_scope_ignores_other_features(doctor_healthy_repo: Path) -> None:
     # FR-012a: a second, broken (too-new) feature ledger must never be inspected.
     write_second_feature(doctor_healthy_repo, schema_version=99)

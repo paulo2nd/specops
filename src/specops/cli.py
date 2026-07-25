@@ -374,8 +374,13 @@ def report(
         try:
             result = doctor_mod.cmd_report(root)
         except (LedgerParseError, SpecopsError) as exc:
-            typer.echo(outcome.render("report", outcome.INFRA_ERROR, detail=exc.message))
-            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
+            # Map the class from the exception's own exit code so --json and the human
+            # path (handled by _handle_errors) return the SAME exit code for the same
+            # error; carry output_version so the error doc is version-negotiable too.
+            cls = outcome.INFRA_ERROR if exc.exit_code == 2 else outcome.GATE_REJECTION
+            typer.echo(outcome.render(
+                "report", cls, output_version=doctor_mod.OUTPUT_VERSION, detail=exc.message))
+            raise typer.Exit(exc.exit_code) from None
         typer.echo(doctor_mod.report_json(result))
         raise typer.Exit(result.exit_code)
     result = doctor_mod.cmd_report(root)

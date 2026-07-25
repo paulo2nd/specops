@@ -46,5 +46,21 @@ def test_cmd_report_builds_versioned_payload(doctor_healthy_repo: Path) -> None:
     result = doctor.cmd_report(doctor_healthy_repo)
     assert result.payload["command"] == "report"
     assert result.payload["output_version"] == doctor.OUTPUT_VERSION
+    # Regression (review finding 4): the success payload carries outcome/class, matching
+    # the contract and the doctor --json / report error-branch documents.
+    assert result.payload["outcome"] == "ok"
+    assert result.payload["class"] == "pass"
     assert result.payload["active_feature"] == "001-demo"
     assert result.exit_code == 0
+
+
+def test_compact_status_tolerates_non_dict_task_entries(doctor_healthy_repo: Path) -> None:
+    # Regression (review finding 2): a YAML-parseable ledger with a bare-scalar task
+    # entry must not crash compact_status.
+    led = doctor_healthy_repo / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(led.read_text())
+    data["tasks"] = ["T001", {"id": "T002", "status": "DONE", "orphaned": False}]
+    led.write_text(yaml.dump(data))
+    snap = status.compact_status(doctor_healthy_repo)  # must not raise
+    assert snap["tasks"]["done"] == 1  # the one well-formed task is counted
+    assert snap["tasks"]["total"] == 2

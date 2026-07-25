@@ -99,6 +99,17 @@ def test_active_feature_scope_ignores_other_features(doctor_healthy_repo: Path) 
     assert "002-other" not in result.stdout
 
 
+def test_non_utf8_ledger_exits_two_without_traceback(doctor_healthy_repo: Path) -> None:
+    # Regression (review finding 1): the never-crash guarantee holds at the CLI boundary.
+    _ledger(doctor_healthy_repo).write_bytes(b"\xff\xfe not utf8")
+    result = _invoke(doctor_healthy_repo, "doctor", "--json")
+    assert result.exit_code == 2
+    # A clean typer.Exit surfaces as SystemExit; an uncaught crash would surface the
+    # original UnicodeDecodeError instead.
+    assert isinstance(result.exception, SystemExit)
+    assert json.loads(result.stdout)["verdict"] == "execution-error"
+
+
 def test_every_non_ok_finding_carries_next_action(doctor_healthy_repo: Path) -> None:
     data = yaml.safe_load(_ledger(doctor_healthy_repo).read_text())
     data["schema_version"] = 5  # migratable → warning

@@ -177,14 +177,14 @@ def _max_severity(domains: list[DomainResult]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _domain_environment(root: Path, repo: Any) -> DomainResult:
+def _domain_environment(repo: Any, has_speckit: bool) -> DomainResult:
     findings: list[Finding] = []
     if repo is None:
         findings.append(_finding(
             BLOCKING, "git", "not a Git repository", NA_INITIALIZE_REPOSITORY,
             "Run 'git init' (or 'specops init') in the repository root.",
         ))
-    if not speckit.has_speckit(root):
+    if not has_speckit:
         findings.append(_finding(
             BLOCKING, "speckit", "not a Spec Kit repository (no .specify/templates)",
             NA_INSTALL_SPECOPS, "Initialize Spec Kit ('specify init') before using SpecOps.",
@@ -194,7 +194,9 @@ def _domain_environment(root: Path, repo: Any) -> DomainResult:
     return DomainResult(D_ENVIRONMENT, findings)
 
 
-def _domain_cli_extension(root: Path) -> DomainResult:
+def _domain_cli_extension(install_state: str | None, state_error: Exception | None) -> DomainResult:
+    if state_error is not None:
+        raise state_error  # surfaced as execution-error by _run (bad manifest)
     findings: list[Finding] = []
     result = compat.check()
     if not result.satisfied:
@@ -208,7 +210,7 @@ def _domain_cli_extension(root: Path) -> DomainResult:
                 WARNING, "cli", result.reason(), NA_UPGRADE_CLI,
                 f"Upgrade the SpecOps CLI to >= {result.required}.",
             ))
-    if migration.detect_state(root) == migration.ABSENT:
+    if install_state == migration.ABSENT:
         findings.append(_finding(
             WARNING, "extension", "SpecOps extension is not installed", NA_INSTALL_SPECOPS,
             "Install the native extension with 'specops init'.",
@@ -219,8 +221,8 @@ def _domain_cli_extension(root: Path) -> DomainResult:
     return DomainResult(D_CLI_EXTENSION, findings)
 
 
-def _domain_integration(root: Path) -> DomainResult:
-    if not speckit.has_speckit(root):
+def _domain_integration(root: Path, has_speckit: bool) -> DomainResult:
+    if not has_speckit:
         return DomainResult(D_INTEGRATION, [_ok("integration", "no Spec Kit repository; skipped.")])
     try:
         targets = speckit.resolve_prompt_targets(root)
@@ -240,11 +242,13 @@ def _domain_integration(root: Path) -> DomainResult:
     )])
 
 
-def _domain_legacy(root: Path) -> DomainResult:
-    state = migration.detect_state(root)
-    if state in (migration.LEGACY, migration.NATIVE_AND_LEGACY):
+def _domain_legacy(install_state: str | None, state_error: Exception | None) -> DomainResult:
+    if state_error is not None:
+        raise state_error  # surfaced as execution-error by _run (bad manifest)
+    if install_state in (migration.LEGACY, migration.NATIVE_AND_LEGACY):
         return DomainResult(D_LEGACY, [_finding(
-            WARNING, "legacy", f"legacy marker-injected installation detected ({state})",
+            WARNING, "legacy",
+            f"legacy marker-injected installation detected ({install_state})",
             NA_MIGRATE_LEGACY, "Migrate to the native extension with 'specops extension migrate'.",
         )])
     return DomainResult(D_LEGACY, [_ok("legacy", "no legacy marker-injected artifacts.")])
@@ -315,12 +319,12 @@ def _domain_ledger(
         ))
     for i, violation in enumerate(ledger.validate_invariants(data)):
         findings.append(_finding(
-            BLOCKING, f"invariant-{i}", f"ledger invariant violated: {violation}",
+            BLOCKING, f"invariant-{i:03d}", f"ledger invariant violated: {violation}",
             NA_RECONCILE, "Reconcile/rebaseline the ledger to restore consistency.",
         ))
     for i, (_kind, message) in enumerate(ledger.finding_structural_defects(data)):
         findings.append(_finding(
-            BLOCKING, f"finding-{i}", f"handoff/finding defect: {message}",
+            BLOCKING, f"finding-{i:03d}", f"handoff/finding defect: {message}",
             NA_VERIFY_BLOCKING, "Resolve the finding via 'specops handoff' before approval.",
         ))
     unresolved = handoff.blocking_approval_check(data)
@@ -386,12 +390,12 @@ def _domain_workflow_divergence(root: Path, feature_dir: Path | None) -> DomainR
     findings: list[Finding] = []
     for i, violation in enumerate(violations):
         findings.append(_finding(
-            BLOCKING, f"violation-{i}", violation, NA_RECONCILE,
+            BLOCKING, f"violation-{i:03d}", violation, NA_RECONCILE,
             "Reconcile the repository ('specops reconcile') and fix the divergence.",
         ))
     for i, warning in enumerate(warnings):
         findings.append(_finding(
-            WARNING, f"warning-{i}", warning, NA_RECONCILE,
+            WARNING, f"warning-{i:03d}", warning, NA_RECONCILE,
             "Review the reconcile warning ('specops reconcile').",
         ))
     if not findings:
@@ -468,18 +472,35 @@ def _load_ledger_data(
         return ledger.load_raw(feature_dir), None
     except LedgerParseError as exc:
         return None, exc
+    except Exception as exc:  # noqa: BLE001 — e.g. a non-UTF8/unreadable ledger (OSError,
+        # UnicodeDecodeError). The shared pre-read runs outside the per-domain _run
+        # fail-safe, so it must never propagate — convert it to an execution-error the
+        # ledger domain reports (FR-015 never-crash / never-omit-a-domain).
+        return None, LedgerParseError(f"cannot read ledger: {exc}")
 
 
 def diagnose(root: Path) -> list[DomainResult]:
-    """Run every diagnostic domain in the fixed order and return their results."""
+    """Run every diagnostic domain in the fixed order and return their results.
+
+    Shared surfaces (repo, active feature, ledger, Spec Kit presence, install state) are
+    read once here and threaded into the domains, halving repeated I/O. Any failure of a
+    shared read is captured (never raised) so a bad manifest/ledger surfaces as an
+    execution-error inside the owning domain rather than crashing doctor (FR-015).
+    """
     repo = gitops.find_repo(root)
     feature_dir = speckit.resolve_feature_dir(root)
     data, ledger_error = _load_ledger_data(feature_dir)
+    has_speckit = speckit.has_speckit(root)
+    try:
+        install_state: str | None = migration.detect_state(root)
+        state_error: Exception | None = None
+    except Exception as exc:  # noqa: BLE001 — surfaced as execution-error by the owning domains
+        install_state, state_error = None, exc
     return [
-        _run(D_ENVIRONMENT, _domain_environment, root, repo),
-        _run(D_CLI_EXTENSION, _domain_cli_extension, root),
-        _run(D_INTEGRATION, _domain_integration, root),
-        _run(D_LEGACY, _domain_legacy, root),
+        _run(D_ENVIRONMENT, _domain_environment, repo, has_speckit),
+        _run(D_CLI_EXTENSION, _domain_cli_extension, install_state, state_error),
+        _run(D_INTEGRATION, _domain_integration, root, has_speckit),
+        _run(D_LEGACY, _domain_legacy, install_state, state_error),
         _run(D_CONFIG, _domain_config, root),
         _run(D_FEATURE_IDENTITY, _domain_feature_identity, root, repo, feature_dir, data),
         _run(D_LEDGER, _domain_ledger, feature_dir, data, ledger_error),
@@ -556,6 +577,8 @@ def cmd_report(root: Path) -> ReportResult:
     payload = {
         "command": "report",
         "output_version": OUTPUT_VERSION,
+        "outcome": outcome.status_for(outcome.PASS),
+        "class": outcome.PASS,
         **snapshot,
     }
     human = _render_report_human(snapshot)
