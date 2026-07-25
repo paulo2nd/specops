@@ -11,6 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Lightweight Workflow Lane (Feature 013).** A proportional lane for small,
+  reversible changes, delivered as a second SpecOps-owned Spec Kit workflow
+  (`specops-lite`, installed additively alongside `specops`) plus a new Principle IV
+  injected directive that makes the agent **recognize and propose** the lane — the
+  human never drives the `specops` CLI and answers only native gates (eligibility, two
+  attestations, halt/promote).
+  - New `specops lane` commands: `start`, `status`, `check`, `attest`, `close`,
+    `promote` — agent/workflow-facing, non-interactive, with the stable `--json`
+    outcome contract (exit `0`/`1`/`2`).
+  - State lives in a dedicated `lane.yaml` record (its own schema — never
+    `status.yaml`); the branch's commit history is the working record.
+  - **Hybrid safety core**: four categories detected from the diff (migration, secret,
+    dependency, destructive) via a generic non-removable pattern floor (overridable via
+    `lane.safety` in `specops.json`); two categories not generically diff-detectable
+    (root-cause, public-contract) enforced by always-on human attestation. A trip offers
+    only halt or promote — no recordable bypass.
+  - **Fail-closed close** runs the deterministic gate-profile suite and records
+    structured evidence plus a rendered `retrospective.md`.
+  - **Lossless promotion** synthesizes a full ledger at the `PLAN` phase with zero
+    commit loss and carries the lane's context (`promoted_from_lane` / `lane_provenance`).
+
 ### Changed
 
 - **The shipped `specops` workflow now performs and enforces the semantic review

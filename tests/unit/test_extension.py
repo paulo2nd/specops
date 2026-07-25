@@ -31,9 +31,10 @@ def test_merge_preserves_foreign_commands() -> None:
     assert "specops-review" in ids
 
 
-def test_merge_writes_all_four_hook_points() -> None:
+def test_merge_writes_all_hook_points() -> None:
     merged = extension._merge_manifest({}, [])
     assert set(merged["hooks"]) == {
+        "before_specify",  # Feature 013: lightweight-lane recognition directive
         "after_specify",
         "before_plan",
         "after_tasks",

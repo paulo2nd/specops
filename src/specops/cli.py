@@ -109,6 +109,14 @@ gate_app = typer.Typer(
 )
 app.add_typer(gate_app, name="gate")
 
+lane_app = typer.Typer(
+    name="lane",
+    help="Lightweight lane: start, status, check, attest, close, promote (Feature 013). "
+         "Agent/workflow-facing — the human answers native gates, not this CLI.",
+    no_args_is_help=True,
+)
+app.add_typer(lane_app, name="lane")
+
 # ---------------------------------------------------------------------------
 # Error boundary: single exit-code mapper (contracts/errors.md)
 # ---------------------------------------------------------------------------
@@ -991,6 +999,127 @@ def gate_report(
     else:
         typer.echo(report.render())
         typer.echo(f"[evidence] {len(ev)} structured record(s) in the ledger.")
+
+
+# ---------------------------------------------------------------------------
+# lane subcommands (Feature 013) — agent/workflow-facing, non-interactive
+# ---------------------------------------------------------------------------
+
+def _emit_lane(command: str, res: Any, json_out: bool, soft: bool = False) -> None:
+    """Render a LaneResult via the outcome contract and exit with the mapped code.
+
+    With ``--json --soft`` the process always exits 0 (the class/verdict is in the JSON),
+    so a gate-rejection DRIVES a native workflow `if` condition instead of aborting the
+    shell step — the same discipline `specops preflight --soft` uses (Feature 007/013).
+    """
+    from specops import outcome
+    if json_out:
+        typer.echo(outcome.render(command, res.cls, **res.extra))
+    else:
+        typer.echo(res.human, err=res.cls != outcome.PASS)
+    if soft and json_out:
+        raise typer.Exit(0)
+    raise typer.Exit(outcome.exit_for(res.cls))
+
+
+@lane_app.command("start")
+@_handle_errors
+def lane_start(
+    answers: str = typer.Option(
+        "", "--answers",
+        help="Comma-separated confirmed eligibility criteria "
+             "(small,reversible,no-high-risk-category).",
+    ),
+    bundle: str = typer.Option(
+        None, "--bundle", help="Bundle adjacent reversible changes; note describing the bundle.",
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Open a lightweight lane after confirming eligibility (fail-closed)."""
+    from specops import lane
+    _require_git(Path("."))
+    res = lane.cmd_start(Path("."), answers=answers.split(","), bundle=bundle)
+    _emit_lane("lane-start", res, json_out)
+
+
+@lane_app.command("status")
+@_handle_errors
+def lane_status(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Read-only lane summary."""
+    from specops import lane
+    _require_git(Path("."))
+    res = lane.cmd_status(Path("."))
+    _emit_lane("lane-status", res, json_out)
+
+
+@lane_app.command("check")
+@_handle_errors
+def lane_check(
+    staged: bool = typer.Option(False, "--staged", help="Also scan staged (uncommitted) changes."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+    soft: bool = typer.Option(
+        False, "--soft",
+        help="With --json, always exit 0 (the class is in the JSON) so a detection drives "
+             "a native workflow condition instead of aborting the step.",
+    ),
+) -> None:
+    """Read-only safety detection over the four diff-detectable categories."""
+    from specops import lane
+    _require_git(Path("."))
+    res = lane.cmd_check(Path("."), staged=staged)
+    _emit_lane("lane-check", res, json_out, soft)
+
+
+@lane_app.command("attest")
+@_handle_errors
+def lane_attest(
+    root_cause: str = typer.Option(
+        ..., "--root-cause", help="Root-cause attestation: 'clear' or 'flag'.",
+    ),
+    public_contract: str = typer.Option(
+        ..., "--public-contract", help="Public-contract attestation: 'clear' or 'flag'.",
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+    soft: bool = typer.Option(
+        False, "--soft",
+        help="With --json, always exit 0 (the class is in the JSON) so a flagged attestation "
+             "drives a native workflow condition instead of aborting the step.",
+    ),
+) -> None:
+    """Record the two always-on attestations (root-cause, public-contract)."""
+    from specops import lane
+    _require_git(Path("."))
+    res = lane.cmd_attest(Path("."), root_cause=root_cause, public_contract=public_contract)
+    _emit_lane("lane-attest", res, json_out, soft)
+
+
+@lane_app.command("close")
+@_handle_errors
+def lane_close(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Fail-closed closure: gate-profile suite + retrospective + evidence."""
+    from specops import lane
+    _require_git(Path("."))
+    res = lane.cmd_close(Path("."))
+    _emit_lane("lane-close", res, json_out)
+
+
+@lane_app.command("promote")
+@_handle_errors
+def lane_promote(
+    reason: str = typer.Option(
+        ..., "--reason", help="Promotion trigger: 'safety-trip' or 'scope-growth'.",
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Lossless promotion to the full workflow: synthesize a ledger at PLAN."""
+    from specops import lane
+    _require_git(Path("."))
+    res = lane.cmd_promote(Path("."), reason=reason)
+    _emit_lane("lane-promote", res, json_out)
 
 
 if __name__ == "__main__":

@@ -22,19 +22,32 @@ from specops.errors import SpecopsError
 
 OWNER = "specops"
 
-# The SpecOps-owned workflow (Feature 007) — additively registered alongside the
-# bundled `speckit` workflow, which is never modified (Constitution Principle I).
-WORKFLOW_ID = "specops"
+# The SpecOps-owned workflows (Feature 007; Feature 013 adds `specops-lite`) — additively
+# registered alongside the bundled `speckit` workflow, which is never modified (Principle I).
+WORKFLOW_ID = "specops"  # retained for back-compat references
 _WORKFLOW_ENTRY = {
     "name": "SpecOps Augmented Lifecycle",
     "version": "1.0.0",
     "description": "SpecOps augmented Spec Kit lifecycle with deterministic gates.",
     "source": OWNER,
 }
+# Registry of every SpecOps-owned workflow id → its registry entry. install/unregister
+# iterate this, so adding a workflow is a one-line change here plus its template dir.
+_WORKFLOWS: dict[str, dict[str, str]] = {
+    "specops": _WORKFLOW_ENTRY,
+    "specops-lite": {
+        "name": "SpecOps Lightweight Lane",
+        "version": "1.0.0",
+        "description": "Proportional lightweight lane for small reversible changes (Feature 013).",
+        "source": OWNER,
+    },
+}
 
 # directive stem -> (hook_point, optional, description). Prompt provenance is the
 # directive template (research R1); the host reads these hook points.
 _HOOK_SPECS: list[tuple[str, str, bool, str]] = [
+    ("lite", "before_specify", True,
+     "SpecOps lightweight-lane recognition (propose the lite lane for small reversible changes)"),
     ("specify", "after_specify", True, "SpecOps specification directives"),
     ("plan", "before_plan", False, "SpecOps planning directives (consistency gate)"),
     ("tasks", "after_tasks", False, "SpecOps task-generation directives (ledger creation seam)"),
@@ -199,12 +212,12 @@ def _workflow_registry_path(root: Path) -> Path:
     return _workflows_dir(root) / "workflow-registry.json"
 
 
-def _workflow_file_path(root: Path) -> Path:
-    return _workflows_dir(root) / WORKFLOW_ID / "workflow.yml"
+def _workflow_file_path(root: Path, workflow_id: str = WORKFLOW_ID) -> Path:
+    return _workflows_dir(root) / workflow_id / "workflow.yml"
 
 
-def _workflow_template() -> str:
-    return (_templates_dir() / "workflows" / WORKFLOW_ID / "workflow.yml").read_text(
+def _workflow_template(workflow_id: str = WORKFLOW_ID) -> str:
+    return (_templates_dir() / "workflows" / workflow_id / "workflow.yml").read_text(
         encoding="utf-8"
     )
 
@@ -222,62 +235,70 @@ def _read_registry(root: Path) -> dict[str, Any]:
 
 
 def install_workflow(root: Path) -> bool:
-    """Install the SpecOps-owned `specops` workflow additively (FR-001a).
+    """Install every SpecOps-owned workflow additively (FR-001a; Feature 013).
 
-    Writes `.specify/workflows/specops/workflow.yml` from the template and upserts
-    the `specops` key in Spec Kit's `workflow-registry.json`, preserving every
-    foreign entry (never touches the bundled `speckit` workflow — Principle I).
-    Idempotent: returns True only when something actually changed.
+    Writes `.specify/workflows/<id>/workflow.yml` from each template and upserts each
+    `<id>` key in Spec Kit's `workflow-registry.json`, preserving every foreign entry
+    (never touches the bundled `speckit` workflow — Principle I). Iterates ``_WORKFLOWS``
+    (currently `specops` + `specops-lite`). Idempotent: returns True only on a real change.
     """
     changed = False
-
-    content = _workflow_template()
-    wf_path = _workflow_file_path(root)
-    file_changed = (not wf_path.is_file()) or wf_path.read_text(encoding="utf-8") != content
-    if file_changed:
-        _atomic_write(wf_path, content)
-        changed = True
-
     registry = _read_registry(root)
     workflows = dict(registry.get("workflows") or {})
-    existing = workflows.get(WORKFLOW_ID) or {}
-    core_matches = all(existing.get(k) == v for k, v in _WORKFLOW_ENTRY.items())
-    if not core_matches or file_changed or WORKFLOW_ID not in workflows:
-        ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-        workflows[WORKFLOW_ID] = {
-            **_WORKFLOW_ENTRY,
-            "installed_at": existing.get("installed_at") or ts,
-            "updated_at": ts,
-        }
+    registry_dirty = False
+
+    for workflow_id, entry in _WORKFLOWS.items():
+        content = _workflow_template(workflow_id)
+        wf_path = _workflow_file_path(root, workflow_id)
+        file_changed = (not wf_path.is_file()) or wf_path.read_text(encoding="utf-8") != content
+        if file_changed:
+            _atomic_write(wf_path, content)
+            changed = True
+
+        existing = workflows.get(workflow_id) or {}
+        core_matches = all(existing.get(k) == v for k, v in entry.items())
+        if not core_matches or file_changed or workflow_id not in workflows:
+            ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+            workflows[workflow_id] = {
+                **entry,
+                "installed_at": existing.get("installed_at") or ts,
+                "updated_at": ts,
+            }
+            registry_dirty = True
+            changed = True
+
+    if registry_dirty:
         registry.setdefault("schema_version", "1.0")
         registry["workflows"] = workflows
         _atomic_write(_workflow_registry_path(root), json.dumps(registry, indent=2) + "\n")
-        changed = True
     return changed
 
 
 def unregister_workflow(root: Path) -> bool:
-    """Remove the SpecOps `specops` workflow file + registry key, preserving every
-    foreign entry and the bundled `speckit` workflow. Returns True when changed."""
+    """Remove every SpecOps-owned workflow file + registry key, preserving all foreign
+    entries and the bundled `speckit` workflow (Feature 013). Returns True when changed."""
     changed = False
-
-    wf_path = _workflow_file_path(root)
-    if wf_path.is_file():
-        wf_path.unlink()
-        changed = True
-    wf_dir = wf_path.parent
-    if wf_dir.is_dir() and not any(wf_dir.iterdir()):
-        wf_dir.rmdir()
-
     reg_path = _workflow_registry_path(root)
-    if reg_path.is_file():
-        registry = _read_registry(root)
-        workflows = registry.get("workflows") or {}
-        if WORKFLOW_ID in workflows:
-            del workflows[WORKFLOW_ID]
-            registry["workflows"] = workflows
-            _atomic_write(reg_path, json.dumps(registry, indent=2) + "\n")
+    registry = _read_registry(root) if reg_path.is_file() else {}
+    workflows = dict(registry.get("workflows") or {})
+    registry_dirty = False
+
+    for workflow_id in _WORKFLOWS:
+        wf_path = _workflow_file_path(root, workflow_id)
+        if wf_path.is_file():
+            wf_path.unlink()
             changed = True
+        wf_dir = wf_path.parent
+        if wf_dir.is_dir() and not any(wf_dir.iterdir()):
+            wf_dir.rmdir()
+        if workflow_id in workflows:
+            del workflows[workflow_id]
+            registry_dirty = True
+            changed = True
+
+    if registry_dirty:
+        registry["workflows"] = workflows
+        _atomic_write(reg_path, json.dumps(registry, indent=2) + "\n")
     return changed
 
 

@@ -1,6 +1,29 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.8.1 → 1.9.0
+Rationale (1.9.0, 2026-07-24): Amended during /speckit-implement of
+specs/013-lightweight-workflow-lane (Lightweight Workflow Lane). Feature 013 adds a
+proportional lightweight lane for small reversible changes, delivered as a second
+SpecOps-owned Spec Kit workflow (`specops-lite`, installed additively alongside `specops`)
+plus a NEW Principle IV injected directive — **Lightweight Lane Recognition** — that makes
+the agent recognize a small/reversible change and PROPOSE the lane (a human-confirmed
+gate, never auto-classifying), then drive the `specops lane *` CLI so the human never
+conducts SpecOps (FR-022/FR-023). Principle IV's directive list gains this one bullet; no
+principle is removed or redefined. The lane keeps its own dedicated `lane.yaml` record
+(its own schema, never `status.yaml`); the safety core is hybrid — four diff-detectable
+categories (migration/secret/dependency/destructive) plus two always-on human attestations
+(root-cause, public-contract, which are not generically diff-detectable); closure runs the
+deterministic gate-profile suite and records structured evidence; promotion synthesizes a
+full ledger at PLAN with zero commit loss. MINOR bump: a new directive added under an
+existing principle; the additive/never-destructive intent is preserved. Templates updated in
+the same change set: src/specops/templates/directives/lite.md (new directive),
+src/specops/templates/workflows/specops-lite/workflow.yml (new workflow), and
+src/specops/templates/lane.yaml (lane-record scaffold). The delivered CLI (`specops lane
+start|status|check|attest|close|promote`) and the additive second-workflow install are
+covered by the feature's own tests, never run against this repository (No Self-Application).
+
+Previous report (1.8.1):
 Version change: 1.8.0 → 1.8.1
 Rationale (1.8.1, 2026-07-24): Amended during /speckit-implement of
 specs/017-gate-rename-vocabulary (Gate Rename & Vocabulary Pass). The deterministic
@@ -373,6 +396,16 @@ sourced identically from the SpecOps templates. The directives are:
 - **Stop-and-Ask Gates (§8.2)**: agents halt and ask the human on persisted
   schema changes (migrations), secrets, public contract breaks, or technical
   ambiguities.
+- **Lightweight Lane Recognition (Feature 013)**: at the lifecycle entry the agent
+  assesses whether a request is a small, reversible change and, if so, **proposes** the
+  lightweight lane (`specops-lite`) through a human-confirmed gate — never auto-classifying
+  or auto-entering. On confirmation the agent drives the deterministic `specops lane`
+  lifecycle (`start` → work-as-commits → `check`/`attest` → `close`, or lossless `promote`
+  at PLAN when risk/scope grows) so the human never conducts the `specops` CLI and meets
+  only native gates (eligibility, the two attestations, halt/promote). The lane keeps a
+  dedicated `lane.yaml` record (never `status.yaml`); its non-pierceable core is the four
+  diff-detectable safety categories plus the two always-on attestations (root-cause,
+  public-contract). The directive degrades to a no-op where SpecOps is not initialized.
 - **Ledger & Phase Wiring**: during a corrective round the implement agent marks a
   resolved finding `FIXED` with `specops handoff finding fix <id> --task … --commit
   … (--evidence … | --auto)` (Feature 011), linking the correction to its task,
@@ -484,4 +517,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.8.1 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-24
+**Version**: 1.9.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-24

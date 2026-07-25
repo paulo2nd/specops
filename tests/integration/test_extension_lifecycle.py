@@ -49,6 +49,7 @@ def test_install_registers_and_leaves_host_untouched(fake_speckit_repo, compat_o
 
     data = _manifest(root)
     assert set(data["hooks"]) == {
+        "before_specify",  # Feature 013: lightweight-lane recognition directive
         "after_specify", "before_plan", "after_tasks", "after_implement"
     }
     assert any(c["id"] == "specops-review" for c in data["commands"])

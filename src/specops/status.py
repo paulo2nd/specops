@@ -230,6 +230,59 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
     return f"Ledger created: {rel}"
 
 
+def synthesize_ledger_at_plan(feature_dir: Path, repo: git.Repo, lane_data: dict) -> Path:
+    """Synthesize a full ledger at the PLAN phase from a promoted lightweight lane.
+
+    Feature 013 (FR-015): builds ``status.yaml`` from the standard template, positioned at
+    ``current_phase: PLAN`` with the lane's baseline, so the promoted change flows through
+    plan → tasks → implement → review before DONE. The lane's branch commits are preserved
+    by the branch itself (promotion never rewrites history); their context is carried into
+    the ledger via :func:`ledger.attach_lane_provenance`. Fails if a ledger already exists.
+    """
+    ledger_path = _ledger_path(feature_dir)
+    if ledger_path.is_file():
+        raise SpecopsError(f"Ledger already exists: {ledger_path}")
+
+    branch = gitops.current_branch(repo)
+    baseline = str(lane_data.get("baseline") or gitops.head_sha(repo))
+    ts = now_utc()
+    template = (_templates_dir() / "status.yaml").read_text(encoding="utf-8")
+    content = (
+        template
+        .replace("{{feature-name}}", feature_dir.name)
+        .replace("{{branch}}", branch)
+        .replace("{{commit-hash}}", baseline)
+        .replace("{{active-artifact}}", ledger.artifact_for_phase("PLAN"))
+        .replace("{{timestamp}}", ts)
+    )
+    data = yaml.safe_load(content)
+    data["current_phase"] = "PLAN"
+    ledger.attach_lane_provenance(data, lane_data)
+    ledger.write_new(feature_dir, data)
+    # The lite lane never runs /speckit-specify, so no spec.md exists — but a ledger at
+    # PLAN and the before_plan directive expect one. Seed a minimal specification stub from
+    # the lane's context so the resumed full workflow has an artifact to plan against; the
+    # human refines it before continuing (Feature 013 promotion, finding 7).
+    spec_path = feature_dir / "spec.md"
+    if not spec_path.is_file():
+        elig = lane_data.get("eligibility") or {}
+        answers = ", ".join(a.get("key", "") for a in elig.get("answers") or []) or "—"
+        stub = (
+            f"# Feature Specification: {feature_dir.name}\n\n"
+            "**Status**: Promoted from the lightweight lane — refine before planning.\n\n"
+            "## Context\n\n"
+            "This feature began in the SpecOps lightweight lane and was promoted to the full "
+            "workflow because its scope or risk grew beyond a small reversible change. The lane "
+            f"baseline was `{baseline[:7]}`; eligibility was confirmed for: {answers}. The lane's "
+            "stop-and-ask decisions are recorded under `lane_provenance` in `status.yaml`.\n\n"
+            "## Next step\n\n"
+            "Replace this stub with a real specification (run `/speckit-specify` to regenerate, "
+            "or edit directly), then proceed with `/speckit-plan`.\n"
+        )
+        ledger.atomic_write(spec_path, stub)
+    return ledger_path
+
+
 _OPTIONAL_STEPS = ("clarify", "checklist", "analyze")
 _STEP_DECISIONS = ("run", "skip")
 

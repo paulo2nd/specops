@@ -57,6 +57,24 @@ def merge_preserve(existing: dict[str, Any], template: dict[str, Any]) -> dict[s
     return result
 
 
+def lane_safety_overrides(cfg: dict[str, Any]) -> dict[str, list[str]]:
+    """Return per-category extra safety globs from ``lane.safety`` (Feature 013).
+
+    These *add* to the built-in non-removable detection floor in :mod:`specops.safety`;
+    they never remove it (protecting the non-pierceable core). A malformed block is
+    ignored (treated as no overrides) rather than failing — the floor always applies.
+    """
+    lane = cfg.get("lane")
+    safety = lane.get("safety") if isinstance(lane, dict) else None
+    if not isinstance(safety, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for category, globs in safety.items():
+        if isinstance(globs, list):
+            out[str(category)] = [str(g) for g in globs if isinstance(g, str)]
+    return out
+
+
 def create_or_merge(root: Path) -> tuple[dict[str, Any], bool]:
     """
     Create specops.json from defaults, or merge-preserve an existing one.

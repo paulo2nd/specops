@@ -166,6 +166,33 @@ prior deterministic-only behavior (no toggle), and a run that cannot perform the
 review (the `specops.review` command unavailable) **fails closed** rather than
 completing silently.
 
+### The `specops-lite` workflow (lightweight lane)
+
+For small, reversible changes that don't warrant the full lifecycle, `specops
+extension install` also registers a second SpecOps-owned workflow, `specops-lite`.
+**You never drive the `specops` CLI for the lane** — an injected Principle IV directive
+makes the agent recognize a small/reversible change, *propose* the lane (a human
+confirmation, never auto-classifying), and then drive every `specops lane *` command
+itself. Your only interactions are native gates: eligibility, two attestations, and —
+if something trips — halt or promote.
+
+The lane keeps a dedicated `lane.yaml` record (its own schema, never `status.yaml`);
+your ordinary branch commits are the working record. Its non-pierceable safety core is
+**hybrid**: four categories are detected from the diff (migration, secret, dependency,
+destructive — via a generic, non-removable pattern floor, extensible through
+`lane.safety` in `specops.json`), and two that aren't generically diff-detectable
+(root-cause, public-contract) are enforced by always-on human attestation. A trip offers
+only **halt** or **promote** — there is no recordable bypass.
+
+Closure runs the deterministic gate-profile suite (fail-closed) and records structured
+evidence plus a rendered `retrospective.md`. If the change outgrows the lane, **promotion
+is lossless**: it synthesizes a full ledger at the `PLAN` phase, preserving every commit
+and carrying the lane's context so the change receives full planning and review.
+
+The `specops lane` commands (`start`, `status`, `check`, `attest`, `close`, `promote`)
+are agent/workflow-facing, non-interactive, and expose the stable `--json` outcome
+contract — they compose as gates, exactly like `specops preflight`.
+
 ### `specops status show`
 
 Read-only. Prints ledger state: feature, branch, phase, active task, task counts
