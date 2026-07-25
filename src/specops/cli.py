@@ -97,7 +97,7 @@ app.add_typer(handoff_app, name="handoff")
 
 finding_app = typer.Typer(
     name="finding",
-    help="Finding lifecycle: add, fix, verify.",
+    help="Finding lifecycle: add/fix/verify/dismiss; import-json/import-sarif/promote (Feat. 015).",
     no_args_is_help=True,
 )
 handoff_app.add_typer(finding_app, name="finding")
@@ -810,6 +810,43 @@ def handoff_finding_dismiss(
     """Withdraw a false-positive or superseded finding to the terminal DISMISSED state."""
     from specops import handoff
     _emit_handoff(handoff.cmd_finding_dismiss(Path("."), finding_id, reason=reason), json_out)
+
+
+@finding_app.command("import-json")
+@_handle_errors
+def handoff_finding_import_json(
+    file: str = typer.Option(..., "--file", help="Findings-contract JSON document ('-' = stdin)."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Import external review findings from the versioned JSON contract (Feature 015)."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_finding_import_json(Path("."), file=file), json_out)
+
+
+@finding_app.command("import-sarif")
+@_handle_errors
+def handoff_finding_import_sarif(
+    file: str = typer.Option(..., "--file", help="SARIF 2.1.0 document ('-' = stdin)."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Import external review findings from a SARIF 2.1.0 document (Feature 015)."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_finding_import_sarif(Path("."), file=file), json_out)
+
+
+@finding_app.command("promote")
+@_handle_errors
+def handoff_finding_promote(
+    finding_id: str = typer.Argument(..., help="Imported finding id (e.g. R1-F01)."),
+    expected_evidence: str = typer.Option(..., "--expected-evidence",
+                                          help="Declared evidence that will close it."),
+    closure: str = typer.Option(..., "--closure", help="Closure criteria."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Escalate an imported advisory finding to blocking (human, audited triage)."""
+    from specops import handoff
+    _emit_handoff(handoff.cmd_finding_promote(
+        Path("."), finding_id, closure=closure, expected_evidence=expected_evidence), json_out)
 
 
 @handoff_app.command("authorize")

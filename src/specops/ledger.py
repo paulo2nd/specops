@@ -30,7 +30,7 @@ from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 LEDGER_FILENAME = "status.yaml"
 
-CURRENT_SCHEMA = 6
+CURRENT_SCHEMA = 7
 OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
 
 # Feature 009 — the no-map context-provenance marker backfilled onto records
@@ -46,6 +46,12 @@ ACK_FIELDS = ("path", "task", "reason")
 # Feature 012 (v6) — structured evidence. A top-level `evidence` list holds
 # id-addressable records; tasks carry `evidence_refs` and findings an `evidence_id`
 # into it. The legacy `<CLASS>:<summary>` string is retained; see specops.evidence.
+
+# Feature 015 (v7) — external review ingestion. An imported finding is a normal
+# Feature 011 finding carrying additive optional fields (`imported`, `producer`,
+# `reviewed_digest`, `promotion`); see specops.ingestion / specops.handoff. The
+# fields are optional — a pre-v7 finding simply lacks them (it is "not imported"),
+# so the migration is a pure version bump with no backfill.
 
 # Feature 011 (v5) — structured corrective handoffs. Each review cycle may carry
 # a nested `handoff` object holding the round's findings; see specops.handoff.

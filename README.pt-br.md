@@ -504,6 +504,37 @@ autoritativo. `specops status transition-phase DONE` falha fechado enquanto
 qualquer achado bloqueante estiver não verificado; um repositório sem achados
 estruturados degrada para o gate anterior.
 
+### `specops handoff finding import-json | import-sarif | promote`
+
+**Ingestão de revisão externa** (Feature 015) permite que um revisor externo mais
+forte ou especializado — uma caça a bugs multiagente, um analisador estático
+(CodeQL, semgrep) ou um humano — alimente o **mesmo** handoff corretivo por um
+contrato de entrada estável, versionado e neutro de stack. O SpecOps **registra** o
+julgamento externo como um snapshot e faz o **gate** deterministicamente sobre ele
+(Princípio II/VI); ele nunca executa, empacota ou reverifica o revisor (Princípio IV).
+
+- `specops handoff finding import-json --file <caminho|->` — importa achados de um
+  contrato JSON versionado (`contract_version: 1`; ver
+  [`findings-input.schema.json`](specs/015-external-review-ingestion/contracts/findings-input.schema.json)).
+- `specops handoff finding import-sarif --file <caminho|->` — importa achados de um
+  documento **SARIF 2.1.0** (opt-in; o inverso do adaptador de *saída* SARIF da
+  Feature 012). O `tool.driver` (nome/versão) vira o produtor do achado.
+- `specops handoff finding promote <id> --closure "…" --expected-evidence "…"` — a
+  escalada **humana e auditada** de um achado importado para `blocking`.
+
+Todo achado importado entra como **`advisory` independentemente da severidade
+declarada pelo produtor** — nenhum produtor externo bloqueia um merge sozinho. Cada um
+registra seu **produtor** (ferramenta + versão) e um **digest por caminho**; `specops
+handoff report` marca um achado como **stale** quando o caminho ao qual ele aponta
+mudou desde a revisão (granularidade de caminho — uma mudança não relacionada nunca o
+torna stale). A importação é **tudo-ou-nada** (qualquer defeito nomeia todos os
+problemas e não escreve nada; um documento vazio é no-op) e **idempotente** (uma
+reimportação atualiza a staleness no lugar, nunca duplica e nunca rebaixa uma
+promoção). A retirada reutiliza `handoff finding dismiss`. A promoção anexa os
+critérios de fechamento + a evidência esperada que um achado bloqueante exige, de modo
+que o achado é verificável pelo ciclo inalterado da Feature 011. Schema do ledger
+**v7**, migrado adiante automaticamente.
+
 ## Como o SpecOps se comporta: um caminho pavimentado que você pode deixar — no registro
 
 O SpecOps não é um gate rígido que te bloqueia nem uma sugestão que você pode

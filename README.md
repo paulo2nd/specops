@@ -472,6 +472,36 @@ Markdown revision report is a rendered projection of that authoritative state.
 `specops status transition-phase DONE` fails closed while any blocking finding is
 unverified; a repository with no structured findings degrades to the prior gate.
 
+### `specops handoff finding import-json | import-sarif | promote`
+
+**External review ingestion** (Feature 015) lets a stronger or specialized external
+reviewer — a multi-agent bug hunt, a static analyzer (CodeQL, semgrep), or a human —
+feed the **same** corrective handoff through a stable, versioned, stack-neutral input
+contract. SpecOps **records** the external judgment as a snapshot and **gates**
+deterministically on it (Principle II/VI); it never runs, bundles, or re-verifies the
+reviewer (Principle IV).
+
+- `specops handoff finding import-json --file <path|->` — import findings from a
+  versioned JSON contract (`contract_version: 1`; see
+  [`findings-input.schema.json`](specs/015-external-review-ingestion/contracts/findings-input.schema.json)).
+- `specops handoff finding import-sarif --file <path|->` — import findings from a
+  **SARIF 2.1.0** document (opt-in; the inverse of the Feature 012 SARIF *output*
+  adapter). Its `tool.driver` name/version becomes the finding's producer.
+- `specops handoff finding promote <id> --closure "…" --expected-evidence "…"` —
+  the **human, audited** escalation of an imported finding to `blocking`.
+
+Every imported finding lands **`advisory` regardless of any producer-declared
+severity** — no external producer can block a merge on its own. Each records its
+**producer** (tool + version) and a **per-path reviewed digest**; `specops handoff
+report` flags a finding **stale** when the path it points at has changed since it was
+reviewed (path granularity — an unrelated change never stales it). Import is
+**all-or-nothing** (any defect names every problem and writes nothing; an empty
+document is a no-op) and **idempotent** (a re-import refreshes staleness in place,
+never duplicates, and never demotes a promotion). Withdrawal reuses `handoff finding
+dismiss`. Promotion attaches the closure criteria + expected evidence a blocking
+finding needs, so the finding is verifiable through the unchanged Feature 011
+lifecycle. Ledger schema **v7**, migrated forward automatically.
+
 ## How SpecOps behaves: a paved road you can leave — on the record
 
 SpecOps is neither a rigid gate that blocks you nor a suggestion you can ignore.

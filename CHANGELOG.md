@@ -13,6 +13,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **External Review Ingestion (Feature 015).** Any external reviewer — an LLM bug
+  hunt, a static analyzer (CodeQL, semgrep), or a human — can now feed the structured
+  corrective handoff (Feature 011) through a stable, versioned, stack-neutral input
+  contract. SpecOps records the finding as a snapshot and gates deterministically on
+  it; it never runs, bundles, or re-verifies the reviewer (Principle IV).
+  - New `specops handoff finding` commands: `import-json` (a versioned JSON contract,
+    `contract_version: 1`), `import-sarif` (an opt-in **SARIF 2.1.0** input adapter,
+    the inverse of the Feature 012 SARIF output adapter), and `promote` (the human,
+    audited escalation of an imported finding to `blocking`). All carry the stable
+    `--json` outcome contract (exit `0`/`1`/`2`).
+  - Every imported finding is recorded **`advisory` regardless of the producer's
+    declared severity** — no external producer can block a merge on its own; only a
+    human `promote` makes it gate approval, after which the unchanged Feature 011
+    blocking-approval invariant applies.
+  - Each finding records its **producer** (tool + version) and a **per-path reviewed
+    digest**; `handoff report` flags a finding **stale** when the path it points at has
+    changed since it was reviewed (path granularity — an unrelated change never stales
+    it). Import is **all-or-nothing** (any defect names every problem and writes
+    nothing; an empty document is a no-op) and **idempotent** (a re-import refreshes
+    staleness in place, never duplicates, never demotes a promotion). Withdrawal reuses
+    `handoff finding dismiss`.
+  - **Migration required**: ledger schema **v6 → v7** (additive — the new finding
+    fields are optional). Pre-v7 ledgers upgrade forward automatically with no data
+    loss; a repository that never imports external findings behaves exactly as before.
+
 - **Lightweight Workflow Lane (Feature 013).** A proportional lane for small,
   reversible changes, delivered as a second SpecOps-owned Spec Kit workflow
   (`specops-lite`, installed additively alongside `specops`) plus a new Principle IV

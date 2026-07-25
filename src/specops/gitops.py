@@ -64,6 +64,25 @@ def commit_exists(repo: git.Repo, sha: str) -> bool:
         return False
 
 
+def blob_sha(repo: git.Repo, rev: str, path: str) -> str | None:
+    """Return the git blob SHA of *path* at *rev*, or None when it does not resolve.
+
+    A deterministic, offline, per-path content digest (git's own object hash): two
+    revisions with byte-identical content at *path* share a blob SHA, so a change to
+    any other path leaves it unchanged (Feature 015 per-path staleness). Returns
+    None when *rev* is unresolvable or *path* is absent (a removed/renamed path),
+    which the caller treats as stale.
+    """
+    try:
+        tree = repo.commit(rev).tree
+    except (GitCommandError, git.BadName, ValueError):
+        return None
+    try:
+        return tree[path].hexsha
+    except KeyError:
+        return None
+
+
 def dirty_files(repo: git.Repo) -> list[str]:
     """Return `git status --porcelain` lines; empty list means a clean tree."""
     out = repo.git.status("--porcelain")

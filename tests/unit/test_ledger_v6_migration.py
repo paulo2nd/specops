@@ -31,7 +31,7 @@ def _task(tid: str, evidence: str | None) -> dict:
 def test_v5_is_migratable_to_v6() -> None:
     assert ledger.classify(_v5_ledger()) == ledger.MIGRATABLE
     out = ledger.migrate_to_current(_v5_ledger())
-    assert out["schema_version"] == 6
+    assert out["schema_version"] == ledger.CURRENT_SCHEMA
 
 
 def test_legacy_strings_become_structured_records_lossless() -> None:
