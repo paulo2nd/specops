@@ -337,6 +337,52 @@ def review(
     _run_gate("review", json_out, soft, sarif)
 
 
+@app.command("doctor")
+@_handle_errors
+def doctor(
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the stable, versioned diagnostic JSON (Feature 014)."
+    ),
+) -> None:
+    """Read-only health diagnostic across every SpecOps surface (Feature 014).
+
+    Reports a per-domain, severity-classified result with deterministic next actions;
+    exit 0 (ok/warning), 1 (blocking), 2 (execution-error). Mutates nothing.
+    """
+    from specops import doctor as doctor_mod
+    from specops import outcome
+    result = doctor_mod.cmd_doctor(Path("."))
+    if json_out:
+        typer.echo(doctor_mod.doctor_json(result))
+    else:
+        typer.echo(result.human, err=result.cls != outcome.PASS)
+    raise typer.Exit(result.exit_code)
+
+
+@app.command("report")
+@_handle_errors
+def report(
+    json_out: bool = typer.Option(
+        False, "--json", help="Emit the stable, versioned status JSON (Feature 014)."
+    ),
+) -> None:
+    """Compact, read-only project/feature status report (Feature 014). Mutates nothing."""
+    from specops import doctor as doctor_mod
+    from specops import outcome
+    root = Path(".")
+    if json_out:
+        try:
+            result = doctor_mod.cmd_report(root)
+        except (LedgerParseError, SpecopsError) as exc:
+            typer.echo(outcome.render("report", outcome.INFRA_ERROR, detail=exc.message))
+            raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
+        typer.echo(doctor_mod.report_json(result))
+        raise typer.Exit(result.exit_code)
+    result = doctor_mod.cmd_report(root)
+    typer.echo(result.human)
+    raise typer.Exit(result.exit_code)
+
+
 # ---------------------------------------------------------------------------
 # status subcommands
 # ---------------------------------------------------------------------------

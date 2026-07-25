@@ -41,11 +41,12 @@ Emitted in this exact order every run (determinism, D10):
 Stable machine-actionable codes; the human text is separate. Initial v1 set (extensible —
 consumers must tolerate unknown codes, D4):
 
-`none` (only on `ok`), `install_specops`, `upgrade_cli`, `run_specify_check`,
-`run_specify_workflow_status`, `migrate_legacy_install`, `fix_config`,
-`start_or_select_feature`, `resolve_identity_conflict`, `run_status_migrate`,
-`ledger_schema_unsupported`, `fix_context_map`, `refresh_context_provenance`,
-`reconcile_repository`, `install_gate_command`, `verify_blocking_findings`.
+`none` (only on `ok`), `initialize_repository`, `install_specops`, `upgrade_cli`,
+`run_specify_check`, `run_specify_workflow_status`, `migrate_legacy_install`,
+`fix_config`, `start_or_select_feature`, `resolve_identity_conflict`,
+`run_status_migrate`, `ledger_schema_unsupported`, `fix_context_map`,
+`refresh_context_provenance`, `reconcile_repository`, `install_gate_command`,
+`fix_gate_profiles`, `verify_blocking_findings`, `repair_unreadable_input`.
 
 ## Entities
 

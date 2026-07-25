@@ -33,11 +33,12 @@
           "type": "string",
           "description": "Stable machine-actionable code. `none` iff severity is `ok`. New values may be added in a later release without a version bump.",
           "examples": [
-            "none", "install_specops", "upgrade_cli", "run_specify_check",
-            "run_specify_workflow_status", "migrate_legacy_install", "fix_config",
-            "start_or_select_feature", "resolve_identity_conflict", "run_status_migrate",
-            "ledger_schema_unsupported", "fix_context_map", "refresh_context_provenance",
-            "reconcile_repository", "install_gate_command", "verify_blocking_findings"
+            "none", "initialize_repository", "install_specops", "upgrade_cli",
+            "run_specify_check", "run_specify_workflow_status", "migrate_legacy_install",
+            "fix_config", "start_or_select_feature", "resolve_identity_conflict",
+            "run_status_migrate", "ledger_schema_unsupported", "fix_context_map",
+            "refresh_context_provenance", "reconcile_repository", "install_gate_command",
+            "fix_gate_profiles", "verify_blocking_findings", "repair_unreadable_input"
           ]
         },
         "next_action": { "type": "string" },

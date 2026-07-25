@@ -44,6 +44,63 @@ def _load_ledger(feature_dir: Path) -> dict:
     return ledger.load_raw(feature_dir)
 
 
+def compact_status(root: Path) -> dict:
+    """Return a compact, read-only snapshot of the active feature (Feature 014, FR-014).
+
+    Shared read path for ``specops report``. Never mutates. Raises LedgerParseError
+    when the active feature's ledger is unreadable/corrupt (the CLI maps that to an
+    execution error). A missing active feature — or an active feature with no ledger
+    yet — yields a snapshot with ``active_feature`` set (or None) and null/zero fields.
+    """
+    from specops import handoff
+
+    feature_dir = speckit.resolve_feature_dir(root)
+    empty_tasks = {"pending": 0, "in_progress": 0, "done": 0, "orphaned": 0, "total": 0}
+    if feature_dir is None:
+        return {
+            "active_feature": None, "branch": None, "phase": None,
+            "tasks": dict(empty_tasks), "active_task": None,
+            "review": {"cycles": 0, "blocking_open": 0},
+            "workflow_lane": ledger.DEFAULT_WORKFLOW_LANE,
+        }
+    if not _ledger_path(feature_dir).is_file():
+        return {
+            "active_feature": feature_dir.name, "branch": None, "phase": None,
+            "tasks": dict(empty_tasks), "active_task": None,
+            "review": {"cycles": 0, "blocking_open": 0},
+            "workflow_lane": ledger.DEFAULT_WORKFLOW_LANE,
+        }
+
+    data = ledger.load_raw(feature_dir)
+    tasks = data.get("tasks") or []
+
+    def _count(status: str) -> int:
+        return sum(1 for t in tasks if t.get("status") == status and not t.get("orphaned"))
+
+    active_task = next(
+        (t["id"] for t in tasks if t.get("status") == "IN_PROGRESS" and not t.get("orphaned")),
+        None,
+    )
+    return {
+        "active_feature": data.get("feature", feature_dir.name),
+        "branch": data.get("branch"),
+        "phase": data.get("current_phase"),
+        "tasks": {
+            "pending": _count("PENDING"),
+            "in_progress": _count("IN_PROGRESS"),
+            "done": _count("DONE"),
+            "orphaned": sum(1 for t in tasks if t.get("orphaned")),
+            "total": len(tasks),
+        },
+        "active_task": active_task,
+        "review": {
+            "cycles": len(data.get("review_cycles") or []),
+            "blocking_open": len(handoff.blocking_approval_check(data)),
+        },
+        "workflow_lane": data.get("workflow_lane", ledger.DEFAULT_WORKFLOW_LANE),
+    }
+
+
 def _sync_tasks(data: dict, tasks_text: str) -> None:
     """Sync ledger tasks[] from tasks.md content.
 
