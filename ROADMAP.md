@@ -82,7 +82,7 @@ Roadmap status uses four values:
 | 011 | Structured Corrective Handoff | MERGED | 006, 010 | Auditability |
 | 012 | Gate Profiles and Structured Evidence | MERGED | 006, 008, 010 | Auditability |
 | 013 | Lightweight Workflow Lane | MERGED | 007, 011, 012 | Adoption |
-| 014 | Diagnostics and Machine Reports | PLANNED | 005–016 | Adoption |
+| 014 | Diagnostics and Machine Reports | ACTIVE | 005–016 | Adoption |
 | 015 | External Review Ingestion | MERGED | 011, 012 | Adoption |
 | 016 | Review Composition in the Workflow | MERGED | 007, 011 | Adoption |
 | 017 | Gate Rename & Vocabulary Pass | MERGED | — | Adoption |
