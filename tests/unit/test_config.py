@@ -68,3 +68,43 @@ def test_create_or_merge_idempotent(tmp_path: Path) -> None:
     cfg1, _ = config.create_or_merge(tmp_path)
     cfg2, _ = config.create_or_merge(tmp_path)
     assert cfg1 == cfg2
+
+
+def test_create_or_merge_raises_on_corrupted(tmp_path: Path) -> None:
+    # A corrupted file must NOT be silently discarded and rewritten with defaults
+    # (#23): create_or_merge propagates ConfigError, same contract as load().
+    path = tmp_path / "specops.json"
+    path.write_text("NOT JSON", encoding="utf-8")
+    with pytest.raises(config.ConfigError, match="Cannot parse"):
+        config.create_or_merge(tmp_path)
+    # The user's original bytes are left untouched.
+    assert path.read_text(encoding="utf-8") == "NOT JSON"
+
+
+def test_create_or_merge_skips_write_when_unchanged(tmp_path: Path) -> None:
+    # When the merge produces no change, the file is not rewritten, keeping the
+    # user's exact bytes and byte-for-byte install idempotence (#23).
+    config.create_or_merge(tmp_path)
+    path = tmp_path / "specops.json"
+    before = path.read_bytes()
+    mtime_before = path.stat().st_mtime_ns
+    cfg, created = config.create_or_merge(tmp_path)
+    assert created is False
+    assert path.read_bytes() == before
+    assert path.stat().st_mtime_ns == mtime_before
+
+
+def test_create_or_merge_preserves_user_formatting_when_complete(tmp_path: Path) -> None:
+    # An existing file that already has every default key is not reformatted:
+    # unknown keys and the user's own layout survive verbatim (#23).
+    path = tmp_path / "specops.json"
+    original = (
+        '{"test_command": "mytest", "lint_command": "ruff", '
+        '"skills_dir": ".specify/skills", "min_cli_version": "0.3.0", '
+        '"custom": "keep"}'
+    )
+    path.write_text(original, encoding="utf-8")
+    cfg, created = config.create_or_merge(tmp_path)
+    assert created is False
+    assert cfg["custom"] == "keep"
+    assert path.read_text(encoding="utf-8") == original

@@ -33,7 +33,7 @@ def resolve_feature_dir(root: Path) -> Path | None:
     feature_json = root / ".specify" / "feature.json"
     if feature_json.is_file():
         try:
-            data = json.loads(feature_json.read_text())
+            data = json.loads(feature_json.read_text(encoding="utf-8"))
             rel = data.get("feature_directory", "")
             if rel:
                 candidate = (root / rel).resolve()
@@ -190,7 +190,7 @@ def resolve_prompt_targets(root: Path) -> list[dict]:
         )
 
     try:
-        integration_data = json.loads(integration_json.read_text())
+        integration_data = json.loads(integration_json.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ManifestResolutionError(
             f"Cannot parse {integration_json}: {exc}"
@@ -208,7 +208,7 @@ def resolve_prompt_targets(root: Path) -> list[dict]:
                 f"Missing manifest for integration '{agent}': {manifest_path}"
             )
         try:
-            manifest = json.loads(manifest_path.read_text())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             raise ManifestResolutionError(
                 f"Cannot parse {manifest_path}: {exc}"
