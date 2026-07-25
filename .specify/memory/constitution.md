@@ -1,6 +1,22 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.9.0 → 1.9.1
+Rationale (1.9.1, 2026-07-25): PATCH amendment landed with the #24 fix PR (Wave 1
+of the 1.0 Readiness cycle), not a feature — defect fixes are never roadmap features.
+The CLI-compatibility gate's hand-rolled version parser truncated pre-release suffixes,
+so `0.3.0rc1` wrongly satisfied a `>= 0.3.0` floor (PEP 440 says `0.3.0rc1 < 0.3.0`);
+because the floor can come from the user's `specops.json` `min_cli_version`, the gate
+could pass when it should block. The fix adopts `packaging` (`Version(a) >= Version(b)`),
+so the Technical Constraints dependency list adds `packaging` with its justification.
+PATCH bump: the dependency-list enumeration is updated and the rule itself ("new runtime
+dependencies require justification") is unchanged; no principle is removed, redefined, or
+added, and the delivered gate behavior is corrected, not reshaped. `packaging` is pure
+Python with zero transitive deps and ships type stubs (no mypy override needed). No
+template changes: this touches no Principle IV directive or scaffold asset. The corrected
+gate is covered by the fix's own tests, never run against this repository (No Self-Application).
+
+Previous report (1.9.0):
 Version change: 1.8.1 → 1.9.0
 Rationale (1.9.0, 2026-07-24): Amended during /speckit-implement of
 specs/013-lightweight-workflow-lane (Lightweight Workflow Lane). Feature 013 adds a
@@ -460,9 +476,11 @@ if the underlying commands are mechanically composable.
 - **Packaging**: Python package published to PyPI as `speckit-specops`,
   installable via `pip` (including `pip install -e .` for development), exposing
   the `specops` entrypoint with functional `--help`.
-- **Dependencies**: limited to Typer (CLI), PyYAML (ledger), and GitPython
-  (evidence collection). New runtime dependencies require justification in
-  the plan's Complexity Tracking section.
+- **Dependencies**: limited to Typer (CLI), PyYAML (ledger), GitPython
+  (evidence collection), and `packaging` (PEP 440 version comparison in the
+  CLI-compatibility gate — pure Python, zero transitive deps, replaces a
+  hand-rolled parser that mis-ordered pre-releases, #24). New runtime
+  dependencies require justification in the plan's Complexity Tracking section.
 - **Structure**: modules live under `src/specops/` (`cli.py`, `status.py`,
   `reconcile.py`, `consistency.py`) with scaffold assets in
   `src/specops/templates/` (`review.md`, `status.yaml`).
@@ -517,4 +535,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.9.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-24
+**Version**: 1.9.1 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-25

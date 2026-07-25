@@ -9,6 +9,8 @@ from __future__ import annotations
 import importlib.metadata
 from dataclasses import dataclass
 
+from packaging.version import InvalidVersion, Version
+
 PACKAGE_NAME = "speckit-specops"
 
 # The first CLI release that understands the native `.specify/extensions.yml`
@@ -45,31 +47,18 @@ def installed_version() -> str | None:
         return None
 
 
-def _parse(version: str) -> tuple[int, ...]:
-    """Parse a dotted version into an int tuple, ignoring any pre-release suffix.
-
-    ``"0.3.0"`` -> ``(0, 3, 0)``; ``"0.3.0.dev1"``/``"0.3.0rc1"`` -> ``(0, 3, 0)``.
-    Non-numeric leading components degrade to 0 so a malformed version never
-    crashes the gate (it simply compares low).
-    """
-    parts: list[int] = []
-    for chunk in version.split("."):
-        num = ""
-        for ch in chunk:
-            if ch.isdigit():
-                num += ch
-            else:
-                break
-        parts.append(int(num) if num else 0)
-    return tuple(parts)
-
-
 def _satisfies(installed: str, minimum: str) -> bool:
-    a, b = _parse(installed), _parse(minimum)
-    width = max(len(a), len(b))
-    a += (0,) * (width - len(a))  # pad so '0.3' == '0.3.0' (not "older")
-    b += (0,) * (width - len(b))
-    return a >= b
+    """True when *installed* meets the *minimum* floor under full PEP 440 semantics.
+
+    Uses :class:`packaging.version.Version`, so pre-releases order correctly
+    (``0.3.0rc1 < 0.3.0``, #24), ``0.3`` equals the ``0.3.0`` floor, and epochs
+    / dev builds are handled. An unparseable version compares as *not satisfied*,
+    keeping the gate fail-closed (R7).
+    """
+    try:
+        return Version(installed) >= Version(minimum)
+    except InvalidVersion:
+        return False
 
 
 def check(minimum: str = MIN_CLI_VERSION) -> CompatResult:
