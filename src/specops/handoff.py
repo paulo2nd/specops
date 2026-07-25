@@ -17,12 +17,14 @@ language-specific parser is added — the handoff is deterministic ledger state.
 """
 from __future__ import annotations
 
+import json
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from specops import contextmap, gitops, ledger, outcome, speckit, status, trace
+from specops import contextmap, gitops, ingestion, ledger, outcome, speckit, status, trace
 from specops import evidence as evidence_mod
 from specops.errors import SpecopsError
 
@@ -35,6 +37,8 @@ HANDOFF_AUTHORIZED = "handoff_authorized"
 FINDING_FIXED = "finding_fixed"
 FINDING_VERIFIED = "finding_verified"
 FINDING_DISMISSED = "finding_dismissed"
+FINDINGS_IMPORTED = "findings_imported"  # Feature 015 — external ingestion
+FINDING_PROMOTED = "finding_promoted"    # Feature 015 — advisory -> blocking triage
 HANDOFF_CLOSED = "handoff_closed"
 HANDOFF_ALREADY_CLOSED = "handoff_already_closed"
 VALIDATE_OK = "validate_ok"
@@ -62,6 +66,8 @@ _CLASS_FOR_STATUS = {
     FINDING_FIXED: outcome.PASS,
     FINDING_VERIFIED: outcome.PASS,
     FINDING_DISMISSED: outcome.PASS,
+    FINDINGS_IMPORTED: outcome.PASS,
+    FINDING_PROMOTED: outcome.PASS,
     HANDOFF_CLOSED: outcome.PASS,
     HANDOFF_ALREADY_CLOSED: outcome.PASS,
     VALIDATE_OK: outcome.PASS,
@@ -491,6 +497,167 @@ def cmd_import(root: Path, round: int | None) -> HandoffResult:
 
 
 # ---------------------------------------------------------------------------
+# External review ingestion (Feature 015)
+# ---------------------------------------------------------------------------
+
+
+def _finding_identity(f: dict) -> tuple:
+    """Content identity of a stored finding, matching ingestion.content_identity."""
+    producer = f.get("producer") or {}
+    return (producer.get("name"), f.get("rule"), f.get("file"), f.get("line"), f.get("action"))
+
+
+def _reviewed_digest(repo: Any, nf: ingestion.NormFinding) -> dict:
+    """Per-path content digest the finding was reviewed against (FR-004)."""
+    rev = nf.reviewed_commit or "HEAD"
+    blob = gitops.blob_sha(repo, rev, nf.file) if repo is not None else None
+    return {"path": nf.file, "commit": nf.reviewed_commit, "blob": blob}
+
+
+def _read_document(file: str) -> tuple[str, str | None]:
+    """Read the input document from a path or ``-`` (stdin). Returns (text, error)."""
+    if file == "-":
+        return sys.stdin.read(), None
+    p = Path(file)
+    if not p.is_file():
+        return "", f"cannot read document '{file}'"
+    return p.read_text(encoding="utf-8"), None
+
+
+def _defect_result(cmd: str, defects: list[str]) -> HandoffResult:
+    """All-or-nothing failure: name every defect, import nothing (FR-013, exit 2)."""
+    human = f"{cmd}: {len(defects)} defect(s); imported nothing\n" + "\n".join(
+        f"  - {d}" for d in defects)
+    return HandoffResult(cmd, BAD_ARGS, human, {"defects": defects})
+
+
+def _apply_import(root: Path, cmd: str, normalized: list[ingestion.NormFinding]) -> HandoffResult:
+    """Write normalized findings into the current round's handoff, atomically.
+
+    Idempotent by content identity: a match refreshes only ``reviewed_digest`` (never
+    duplicates, never overwrites a promotion — FR-007/FR-009); a new identity appends
+    an ``advisory`` finding via ``_next_id`` (FR-002/FR-005). An empty set is a no-op
+    success (FR-013)."""
+    if not normalized:
+        return HandoffResult(cmd, FINDINGS_IMPORTED, f"{cmd}: empty document (no-op)",
+                             {"imported": 0, "refreshed": 0, "ids": []})
+    loaded = _load_write(root)
+    if isinstance(loaded, HandoffResult):
+        return HandoffResult(cmd, loaded.status, loaded.human)
+    feature_dir, data, base_rev, base_violations, repo = loaded
+
+    cycle = _current_cycle(data)
+    if cycle is None:
+        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: no open review cycle to import into")
+    existing = cycle.get("handoff")
+    if isinstance(existing, dict) and existing.get("closed_at"):
+        return HandoffResult(cmd, BAD_ARGS,
+                             f"{cmd}: the round's handoff is closed; open a new review round")
+    handoff = _ensure_handoff(cycle)
+    index = {_finding_identity(f): f for f in handoff["findings"]}
+
+    imported, refreshed, new_ids = 0, 0, []
+    for nf in normalized:
+        digest = _reviewed_digest(repo, nf)
+        match = index.get(ingestion.content_identity(nf))
+        if match is not None:
+            match["reviewed_digest"] = digest  # refresh in place; never demote (FR-007/FR-009)
+            refreshed += 1
+            continue
+        fid = _next_id(cycle)
+        rec: dict[str, Any] = {
+            "id": fid, "severity": "advisory", "rule": nf.rule, "file": nf.file,
+            "line": nf.line, "action": nf.action,
+            "expected_evidence": None, "closure_criteria": None,
+            "state": "OPEN", "task": None, "commits": [], "evidence": None,
+            "fixed_at": None, "verified_at": None,
+            "imported": {"contract_version": ingestion.INPUT_CONTRACT_VERSION,
+                         "source_format": nf.source_format},
+            "producer": {"name": nf.producer_name, "version": nf.producer_version},
+            "reviewed_digest": digest,
+        }
+        handoff["findings"].append(rec)
+        index[ingestion.content_identity(nf)] = rec
+        new_ids.append(fid)
+        imported += 1
+
+    status._finalize(feature_dir, data, base_rev, base_violations)
+    return HandoffResult(cmd, FINDINGS_IMPORTED,
+                         f"{cmd}: imported {imported}, refreshed {refreshed}",
+                         {"imported": imported, "refreshed": refreshed, "ids": new_ids})
+
+
+def cmd_finding_import_json(root: Path, *, file: str) -> HandoffResult:
+    """Import external findings from a versioned JSON contract document (FR-001)."""
+    cmd = "handoff finding import-json"
+    text, err = _read_document(file)
+    if err:
+        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: {err}")
+    try:
+        doc = json.loads(text)
+    except json.JSONDecodeError as e:
+        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: invalid JSON ({e})")
+    normalized, defects = ingestion.parse_contract(doc)
+    if defects:
+        return _defect_result(cmd, defects)
+    return _apply_import(root, cmd, normalized)
+
+
+def cmd_finding_import_sarif(root: Path, *, file: str) -> HandoffResult:
+    """Import external findings from a SARIF 2.1.0 document (FR-011)."""
+    cmd = "handoff finding import-sarif"
+    text, err = _read_document(file)
+    if err:
+        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: {err}")
+    try:
+        doc = json.loads(text)
+    except json.JSONDecodeError as e:
+        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: invalid JSON ({e})")
+    normalized, defects = ingestion.parse_sarif(doc)
+    if defects:
+        return _defect_result(cmd, defects)
+    return _apply_import(root, cmd, normalized)
+
+
+def cmd_finding_promote(
+    root: Path, fid: str, *, closure: str, expected_evidence: str,
+) -> HandoffResult:
+    """Escalate an imported ``advisory`` finding to ``blocking`` (human, audited — FR-006).
+
+    Sets the closure criteria + expected evidence a blocking finding requires (so
+    ``handoff validate`` never flags MISSING_CLOSURE and the finding is verifiable
+    through the unchanged Feature 011 lifecycle). Withdrawal/demotion uses the
+    existing ``handoff finding dismiss`` — this feature adds no new mechanism."""
+    cmd = "handoff finding promote"
+    closure, ee = (closure or "").strip(), (expected_evidence or "").strip()
+    if not (closure and ee):
+        return HandoffResult(cmd, BAD_ARGS,
+                             f"{cmd}: --closure and --expected-evidence are required", {"id": fid})
+    loaded = _load_write(root)
+    if isinstance(loaded, HandoffResult):
+        return HandoffResult(cmd, loaded.status, loaded.human)
+    feature_dir, data, base_rev, base_violations, _repo = loaded
+
+    located = _find_by_id(data, fid)
+    if located is None:
+        return HandoffResult(cmd, UNKNOWN_FINDING, f"{cmd}: unknown finding '{fid}'", {"id": fid})
+    _cycle, finding = located
+    if not finding.get("imported"):
+        return HandoffResult(cmd, BAD_ARGS,
+                             f"{cmd}: '{fid}' is not an imported finding", {"id": fid})
+    if finding.get("severity") != "advisory" or finding.get("promotion"):
+        return HandoffResult(cmd, BAD_ARGS,
+                             f"{cmd}: '{fid}' is not advisory (already promoted?)", {"id": fid})
+
+    finding.update({
+        "severity": "blocking", "closure_criteria": closure, "expected_evidence": ee,
+        "promotion": {"at": ledger.now_utc()},
+    })
+    status._finalize(feature_dir, data, base_rev, base_violations)
+    return HandoffResult(cmd, FINDING_PROMOTED, f"{cmd}: {fid} -> blocking (promoted)", {"id": fid})
+
+
+# ---------------------------------------------------------------------------
 # Read-only commands
 # ---------------------------------------------------------------------------
 
@@ -555,14 +722,29 @@ def cmd_validate(root: Path) -> HandoffResult:
     return HandoffResult(cmd, rep, human, {"defects": [m for _s, m in defects]})
 
 
-def _finding_view(cycle: dict, f: dict) -> dict:
-    return {
+def _finding_view(cycle: dict, f: dict, repo: Any = None) -> dict:
+    view = {
         "id": f.get("id"), "round": cycle.get("round"), "severity": f.get("severity"),
         "rule": f.get("rule"), "file": f.get("file"), "line": f.get("line"),
         "state": f.get("state"), "action": f.get("action"),
         "task": f.get("task"), "commits": list(f.get("commits") or []),
         "evidence": f.get("evidence"),
     }
+    # Feature 015: surface ingestion provenance + read-time per-path staleness (FR-010/FR-016).
+    if f.get("imported"):
+        reviewed = f.get("reviewed_digest") or {}
+        path = f.get("file")
+        current = (gitops.blob_sha(repo, "HEAD", path)
+                   if repo is not None and isinstance(path, str) else None)
+        view.update({
+            "imported": True,
+            "producer": f.get("producer"),
+            "reviewed_digest": reviewed,
+            "current_digest": current,
+            "stale": ingestion.is_stale(reviewed.get("blob"), current),
+            "promoted": bool(f.get("promotion")),
+        })
+    return view
 
 
 def cmd_report(root: Path) -> HandoffResult:
@@ -570,7 +752,8 @@ def cmd_report(root: Path) -> HandoffResult:
     human and JSON from the same view (parity, FR-012)."""
     cmd = "handoff report"
     data = _load_read(root)
-    views = [_finding_view(c, f) for c, f in _canonical(data)]
+    repo = gitops.find_repo(root)  # read-only: only used to recompute per-path digests
+    views = [_finding_view(c, f, repo) for c, f in _canonical(data)]
     remaining = blocking_approval_check(data)
 
     if not views:
@@ -579,8 +762,12 @@ def cmd_report(root: Path) -> HandoffResult:
         lines = [f"{cmd}: {len(views)} finding(s)"]
         for v in views:
             loc = f"{v['file']}:{v['line']}" if v["line"] is not None else v["file"]
+            prov = ""
+            if v.get("imported"):
+                who = (v.get("producer") or {}).get("name") or "?"
+                prov = f" [{who}]" + (" STALE" if v.get("stale") else "")
             lines.append(
-                f"  {v['id']} [{v['severity']}] {v['state']} {loc} — {v['action']}"
+                f"  {v['id']} [{v['severity']}] {v['state']} {loc} — {v['action']}{prov}"
                 + (f" (task {v['task']}, {len(v['commits'])} commit(s))" if v["task"] else "")
             )
         if remaining:
