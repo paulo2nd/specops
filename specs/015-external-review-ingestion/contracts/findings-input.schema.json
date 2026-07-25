@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/paulosegundo/specops/contracts/findings-input.schema.json",
+  "title": "SpecOps External Findings Input Contract",
+  "description": "Versioned, stack-neutral contract consumed by `specops handoff finding import-json` (Feature 015). Every imported finding becomes an advisory Feature 011 finding carrying producer and reviewed-diff-digest provenance. No producer may set blocking severity at import (FR-005); severity here is informational only.",
+  "type": "object",
+  "required": ["contract_version", "producer", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "description": "Contract schema version. Current supported: 1. An unknown value fails closed (exit 2).",
+      "const": 1
+    },
+    "producer": {
+      "description": "Default producer for every finding in this document (a finding MAY override). Recorded as-declared; never authenticated (FR-003/FR-019).",
+      "$ref": "#/$defs/producer"
+    },
+    "reviewed_commit": {
+      "description": "Optional commit the reviewer ran against, applied to every finding lacking its own. Absent ⇒ SpecOps captures the current HEAD at import (FR-004).",
+      "type": "string"
+    },
+    "findings": {
+      "description": "Zero or more findings. An empty array is a supported no-op success (exit 0).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "producer": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Tool or human identifier (e.g. \"codeql\", \"acme-llm-reviewer\", \"jdoe\"). Required; missing ⇒ import defect.",
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "description": "Producer version. Absent ⇒ recorded as \"unspecified\".",
+          "type": "string"
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["rule", "file", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": {
+          "description": "Stable rule/check identifier violated (e.g. \"py/sql-injection\", \"L2\").",
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "description": "Repository-relative path the finding points at. Normalized on import; basis for the per-location reviewed digest and staleness.",
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "description": "Optional 1-based line within `file`.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "description": "Concise reviewer statement / recommended action. Becomes the finding's action text.",
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "description": "Producer-declared severity. INFORMATIONAL ONLY — every imported finding is recorded `advisory` regardless (FR-005). Retained for the audit trail.",
+          "type": "string"
+        },
+        "producer": {
+          "description": "Optional per-finding producer override of the document-level producer.",
+          "$ref": "#/$defs/producer"
+        },
+        "reviewed_commit": {
+          "description": "Optional per-finding commit override of the document-level reviewed_commit.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}
