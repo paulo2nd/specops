@@ -76,6 +76,22 @@ def test_parse_contract_within_doc_dup_collapses() -> None:
     assert len(normalized) == 1
 
 
+def test_parse_contract_malformed_per_finding_producer_is_defect() -> None:
+    # A present-but-wrong-type producer must be a defect, not a silent doc fallback
+    # (review finding 5 — otherwise dedup identity silently drifts).
+    doc = _doc(findings=[
+        {"rule": "L2", "file": "a.py", "action": "x", "producer": "acme"}])
+    normalized, defects = ingestion.parse_contract(doc)
+    assert normalized == [] and any("producer must be an object" in d for d in defects)
+
+
+def test_parse_contract_bool_line_is_defect() -> None:
+    # isinstance(True, int) is True — a bool `line` must still be rejected (finding 8).
+    doc = _doc(findings=[{"rule": "L2", "file": "a.py", "action": "x", "line": True}])
+    normalized, defects = ingestion.parse_contract(doc)
+    assert normalized == [] and any("line" in d for d in defects)
+
+
 def test_content_identity_excludes_digest_and_is_deterministic() -> None:
     a, _ = ingestion.parse_contract(_doc())
     b, _ = ingestion.parse_contract(_doc(reviewed_commit="deadbeef"))
@@ -134,6 +150,14 @@ def test_parse_sarif_missing_tool_name_defect() -> None:
     assert normalized == [] and any("tool.driver.name" in d for d in defects)
 
 
+def test_parse_sarif_non_dict_driver_is_defect_not_crash() -> None:
+    # A truthy non-dict tool.driver must not raise AttributeError (review finding 1).
+    doc = {"version": "2.1.0",
+           "runs": [{"tool": {"driver": ["acme"]}, "results": [_result()]}]}
+    normalized, defects = ingestion.parse_sarif(doc)
+    assert normalized == [] and any("tool.driver.name" in d for d in defects)
+
+
 def test_parse_sarif_primary_location_is_first_with_uri() -> None:
     res = _result()
     res["locations"] = [
@@ -159,7 +183,9 @@ def test_parse_sarif_every_result_is_advisory_severity_informational() -> None:
 def test_is_stale_semantics() -> None:
     assert ingestion.is_stale("sha-a", "sha-a") is False
     assert ingestion.is_stale("sha-a", "sha-b") is True
-    assert ingestion.is_stale("sha-a", None) is True  # path removed at HEAD
+    assert ingestion.is_stale("sha-a", None) is True   # path removed at HEAD
+    assert ingestion.is_stale(None, None) is True      # absent at HEAD ⇒ stale (finding 4)
+    assert ingestion.is_stale(None, "sha-b") is True   # appeared / changed
 
 
 # ---------------------------------------------------------------------------

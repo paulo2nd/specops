@@ -165,6 +165,20 @@ def test_promote_requires_closure_and_evidence_exit2(handoff_repo) -> None:
     assert r.returncode == 2  # missing --expected-evidence (typer usage error)
 
 
+def test_promote_in_closed_handoff_rejected(handoff_repo) -> None:
+    # A closed round is frozen: promoting an advisory finding there would re-block a
+    # settled feature with no fix/verify (review finding 2).
+    root = handoff_repo(review_cycles=[make_cycle()])
+    fid = json.loads(
+        _run(root, "handoff", "finding", "import-json", "--file",
+             _write_doc(root, "f.json", _json_doc()), "--json").stdout)["ids"][0]
+    assert _run(root, "handoff", "close").returncode == 0  # no blocking findings ⇒ closable
+    r = _run(root, "handoff", "finding", "promote", fid,
+             "--closure", "c", "--expected-evidence", "TEST:e", "--json")
+    assert r.returncode == 2 and json.loads(r.stdout)["status"] == "bad_args"
+    assert _findings(root)[0]["severity"] == "advisory"  # not promoted
+
+
 def test_reimport_never_demotes_promotion(handoff_repo) -> None:
     root = handoff_repo(review_cycles=[make_cycle()])
     doc = _write_doc(root, "f.json", _json_doc())

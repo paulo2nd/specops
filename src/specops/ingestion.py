@@ -57,10 +57,17 @@ def content_identity(f: NormFinding) -> tuple:
 def is_stale(reviewed_blob: str | None, current_blob: str | None) -> bool:
     """True when a finding's own path changed since it was reviewed (FR-010).
 
-    Compares the per-path content digest recorded at import against the current one.
-    A differing digest — or a path that no longer exists at HEAD (``current_blob``
-    is ``None``) — is stale. Path granularity: unrelated paths never affect this.
+    A path that is absent at HEAD (``current_blob is None``) is stale — its target
+    was removed (this holds even when the reviewed baseline itself was ``None``).
+    Otherwise stale when the current per-path content digest differs from the one
+    recorded at import. Path granularity: unrelated paths never affect this.
+
+    Callers MUST only invoke this when the repository is resolvable; when it is not
+    (no current digest can be computed at all) staleness is *unknown*, not stale,
+    and the caller reports it as such rather than passing ``None`` here.
     """
+    if current_blob is None:
+        return True
     return reviewed_blob != current_blob
 
 
@@ -77,6 +84,10 @@ def _resolve_producer(
     raw: Any, fallback: Any,
 ) -> tuple[str | None, str | None, str | None]:
     """Resolve ``(name, version, error)`` from a per-finding producer or the doc default."""
+    if raw is not None and not isinstance(raw, dict):
+        # A present-but-malformed producer is a defect, never a silent fall-through to
+        # the document producer (which would misattribute and break dedup identity).
+        return None, None, "producer must be an object"
     p = raw if isinstance(raw, dict) else fallback
     if not isinstance(p, dict):
         return None, None, "missing producer"
@@ -162,7 +173,7 @@ def _norm_contract_finding(
     if perr:
         d.append(f"finding {index}: {perr}")
     line = item.get("line")
-    if line is not None and not isinstance(line, int):
+    if line is not None and (isinstance(line, bool) or not isinstance(line, int)):
         d.append(f"finding {index}: 'line' is not an integer")
         line = None
     if d:
@@ -228,7 +239,9 @@ def parse_sarif(doc: Any) -> tuple[list[NormFinding], list[str]]:
 
 def _sarif_producer(run: dict) -> tuple[str | None, str | None]:
     tool = run.get("tool")
-    driver = (tool.get("driver") or {}) if isinstance(tool, dict) else {}
+    driver = tool.get("driver") if isinstance(tool, dict) else None
+    if not isinstance(driver, dict):  # a truthy non-dict (list/str) must not crash .get()
+        driver = {}
     name = _req_str(driver.get("name"))
     version = _req_str(driver.get("version")) or UNSPECIFIED_VERSION
     return name, version

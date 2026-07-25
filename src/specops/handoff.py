@@ -587,9 +587,11 @@ def _apply_import(root: Path, cmd: str, normalized: list[ingestion.NormFinding])
                          {"imported": imported, "refreshed": refreshed, "ids": new_ids})
 
 
-def cmd_finding_import_json(root: Path, *, file: str) -> HandoffResult:
-    """Import external findings from a versioned JSON contract document (FR-001)."""
-    cmd = "handoff finding import-json"
+def _import_document(root: Path, cmd: str, file: str, parser: Any) -> HandoffResult:
+    """Shared read → json-parse → adapter → all-or-nothing → apply pipeline.
+
+    *parser* is ``ingestion.parse_contract`` or ``ingestion.parse_sarif`` — the only
+    difference between the JSON and SARIF import commands."""
     text, err = _read_document(file)
     if err:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: {err}")
@@ -597,26 +599,20 @@ def cmd_finding_import_json(root: Path, *, file: str) -> HandoffResult:
         doc = json.loads(text)
     except json.JSONDecodeError as e:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: invalid JSON ({e})")
-    normalized, defects = ingestion.parse_contract(doc)
+    normalized, defects = parser(doc)
     if defects:
         return _defect_result(cmd, defects)
     return _apply_import(root, cmd, normalized)
+
+
+def cmd_finding_import_json(root: Path, *, file: str) -> HandoffResult:
+    """Import external findings from a versioned JSON contract document (FR-001)."""
+    return _import_document(root, "handoff finding import-json", file, ingestion.parse_contract)
 
 
 def cmd_finding_import_sarif(root: Path, *, file: str) -> HandoffResult:
     """Import external findings from a SARIF 2.1.0 document (FR-011)."""
-    cmd = "handoff finding import-sarif"
-    text, err = _read_document(file)
-    if err:
-        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: {err}")
-    try:
-        doc = json.loads(text)
-    except json.JSONDecodeError as e:
-        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: invalid JSON ({e})")
-    normalized, defects = ingestion.parse_sarif(doc)
-    if defects:
-        return _defect_result(cmd, defects)
-    return _apply_import(root, cmd, normalized)
+    return _import_document(root, "handoff finding import-sarif", file, ingestion.parse_sarif)
 
 
 def cmd_finding_promote(
@@ -641,7 +637,13 @@ def cmd_finding_promote(
     located = _find_by_id(data, fid)
     if located is None:
         return HandoffResult(cmd, UNKNOWN_FINDING, f"{cmd}: unknown finding '{fid}'", {"id": fid})
-    _cycle, finding = located
+    cycle, finding = located
+    if (cycle.get("handoff") or {}).get("closed_at"):
+        # Consistent with cmd_finding_add / _apply_import: a closed round is frozen —
+        # promoting here would re-block a settled feature with no fix/verify (FR-006).
+        return HandoffResult(cmd, BAD_ARGS,
+                             f"{cmd}: '{fid}' is in a closed handoff; open a new review round",
+                             {"id": fid})
     if not finding.get("imported"):
         return HandoffResult(cmd, BAD_ARGS,
                              f"{cmd}: '{fid}' is not an imported finding", {"id": fid})
@@ -722,7 +724,9 @@ def cmd_validate(root: Path) -> HandoffResult:
     return HandoffResult(cmd, rep, human, {"defects": [m for _s, m in defects]})
 
 
-def _finding_view(cycle: dict, f: dict, repo: Any = None) -> dict:
+def _finding_view(
+    cycle: dict, f: dict, repo: Any = None, digest_cache: dict[str, str | None] | None = None,
+) -> dict:
     view = {
         "id": f.get("id"), "round": cycle.get("round"), "severity": f.get("severity"),
         "rule": f.get("rule"), "file": f.get("file"), "line": f.get("line"),
@@ -734,17 +738,31 @@ def _finding_view(cycle: dict, f: dict, repo: Any = None) -> dict:
     if f.get("imported"):
         reviewed = f.get("reviewed_digest") or {}
         path = f.get("file")
-        current = (gitops.blob_sha(repo, "HEAD", path)
-                   if repo is not None and isinstance(path, str) else None)
+        if repo is None or not isinstance(path, str):
+            # Cannot resolve the repo/path → staleness is *unknown*, never a blanket
+            # "stale" that would mislead the reviewer about unchanged content.
+            current, stale = None, None
+        else:
+            current = _head_digest(repo, path, digest_cache)
+            stale = ingestion.is_stale(reviewed.get("blob"), current)
         view.update({
             "imported": True,
             "producer": f.get("producer"),
             "reviewed_digest": reviewed,
             "current_digest": current,
-            "stale": ingestion.is_stale(reviewed.get("blob"), current),
+            "stale": stale,
             "promoted": bool(f.get("promotion")),
         })
     return view
+
+
+def _head_digest(repo: Any, path: str, cache: dict[str, str | None] | None) -> str | None:
+    """Blob digest of *path* at HEAD, memoized per path (many findings share paths)."""
+    if cache is None:
+        return gitops.blob_sha(repo, "HEAD", path)
+    if path not in cache:
+        cache[path] = gitops.blob_sha(repo, "HEAD", path)
+    return cache[path]
 
 
 def cmd_report(root: Path) -> HandoffResult:
@@ -753,7 +771,8 @@ def cmd_report(root: Path) -> HandoffResult:
     cmd = "handoff report"
     data = _load_read(root)
     repo = gitops.find_repo(root)  # read-only: only used to recompute per-path digests
-    views = [_finding_view(c, f, repo) for c, f in _canonical(data)]
+    digest_cache: dict[str, str | None] = {}  # memoize HEAD blobs across shared paths
+    views = [_finding_view(c, f, repo, digest_cache) for c, f in _canonical(data)]
     remaining = blocking_approval_check(data)
 
     if not views:
@@ -765,7 +784,7 @@ def cmd_report(root: Path) -> HandoffResult:
             prov = ""
             if v.get("imported"):
                 who = (v.get("producer") or {}).get("name") or "?"
-                prov = f" [{who}]" + (" STALE" if v.get("stale") else "")
+                prov = f" [{who}]" + (" STALE" if v.get("stale") is True else "")
             lines.append(
                 f"  {v['id']} [{v['severity']}] {v['state']} {loc} — {v['action']}{prov}"
                 + (f" (task {v['task']}, {len(v['commits'])} commit(s))" if v["task"] else "")
