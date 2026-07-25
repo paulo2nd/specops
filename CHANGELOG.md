@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-25
+
+Adoption milestone (Features 013–017) — and the completion of the SpecOps evolution
+roadmap: every numbered feature (005–017) is now merged. Small changes have a
+proportional safe lane, the shipped workflow performs and enforces the semantic review,
+any external reviewer's findings feed the structured handoff, the deterministic gate is
+honestly named `preflight`, and a single read-only diagnostic explains project health.
+
 ### Added
 
 - **Diagnostics and Machine Reports (Feature 014).** Two read-only surfaces that turn a
@@ -475,6 +483,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/paulo2nd/specops/compare/v0.4.0...v0.5.0
 [0.2.0]: https://github.com/paulo2nd/specops/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/paulo2nd/specops/releases/tag/v0.1.0
