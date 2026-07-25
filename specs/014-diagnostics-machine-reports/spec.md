@@ -198,12 +198,14 @@ ledger.
 - **FR-002**: The diagnostic MUST classify every finding into exactly one of four
   severities: `ok`, `warning`, `blocking`, `execution-error`.
 - **FR-003**: The diagnostic MUST inspect, at minimum, these domains and report a
-  per-domain result: (a) SpecOps CLI/extension presence and version compatibility;
-  (b) integration health; (c) legacy (marker-injected) installation artifacts;
-  (d) SpecOps configuration validity; (e) active-feature identity; (f) ledger schema
-  version and internal integrity; (g) context-map validity; (h) workflow/ledger
-  divergence (ledger vs. actual Git tree and workflow state); (i) preflight gate
-  (profile) availability.
+  per-domain result: (a) environment readiness — the working directory is a Git
+  repository and a Spec Kit repository (this domain hosts the "not a Spec Kit repo /
+  SpecOps not installed" state); (b) SpecOps CLI/extension presence and version
+  compatibility; (c) integration health; (d) legacy (marker-injected) installation
+  artifacts; (e) SpecOps configuration validity; (f) active-feature identity;
+  (g) ledger schema version and internal integrity; (h) context-map validity;
+  (i) workflow/ledger divergence (ledger vs. actual Git tree and workflow state);
+  (j) preflight gate (profile) availability.
 - **FR-004**: For every non-`ok` finding, the diagnostic MUST provide a deterministic,
   specific next action that tells the user what to do to resolve it, represented as
   **both** a stable machine-actionable `next_action_code` (drawn from a documented,
@@ -291,10 +293,10 @@ ledger.
 - **SC-001**: A user or CI job can determine why a workflow cannot safely continue, and
   obtain a specific next action, from a single read-only command invocation — with no
   additional commands required to understand the blocking cause.
-- **SC-002**: The diagnostic inspects 100% of the listed domains (CLI/extension
-  compatibility, integration health, legacy artifacts, configuration, feature identity,
-  ledger schema, context-map health, workflow/ledger divergence, gate availability) in
-  every run and reports a result for each.
+- **SC-002**: The diagnostic inspects 100% of the listed domains (environment readiness,
+  CLI/extension compatibility, integration health, legacy artifacts, configuration,
+  feature identity, ledger schema, context-map health, workflow/ledger divergence, gate
+  availability) in every run and reports a result for each.
 - **SC-003**: Running the diagnostic or status command leaves the repository, ledger,
   and context map byte-for-byte unchanged in 100% of runs across all fixtures.
 - **SC-004**: For every fixture with a known-broken surface, the overall verdict and the

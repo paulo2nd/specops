@@ -10,10 +10,11 @@ Deliver two read-only CLI surfaces that compose SpecOps's existing read APIs int
 single health/status view:
 
 - **`specops doctor [--json]`** — a read-only diagnostic that inspects every
-  SpecOps-specific surface (CLI/extension compatibility, integration resolvability,
-  legacy install artifacts, configuration, active-feature identity, ledger schema +
-  integrity, context-map health, workflow/ledger divergence, preflight gate
-  availability), classifies each finding by severity (`ok` / `warning` / `blocking` /
+  SpecOps-specific surface (environment readiness, CLI/extension compatibility,
+  integration resolvability, legacy install artifacts, configuration, active-feature
+  identity, ledger schema + integrity, context-map health, workflow/ledger divergence,
+  preflight gate availability), classifies each finding by severity
+  (`ok` / `warning` / `blocking` /
   `execution-error`), computes an overall verdict, and — for every non-`ok` finding —
   emits a deterministic next action as **both** a stable `next_action_code` enum and
   human-readable text. Exit code maps to the verdict via the existing outcome contract.
@@ -65,7 +66,7 @@ byte-identical output on unchanged inputs (FR-007/SC-005 — no wall-clock, no e
 native-command output); stable versioned JSON (FR-006/FR-018); exit codes consistent
 with the Feature 007 outcome contract and Principle VI (FR-008); EN/PT parity (FR-016).
 
-**Scale/Scope**: Two commands, one new module, ~9 diagnostic domains, one enum, one
+**Scale/Scope**: Two commands, one new module, 10 diagnostic domains, one enum, one
 output schema (version 1). Active-feature scope only (FR-012a); no whole-repo scan.
 
 ## Constitution Check
