@@ -333,6 +333,39 @@ tag `[SC-xxx]` correspondente, e que toda declaração de caminho em `plan.md`
 carrega um sufixo de ação válido (`(create)`/`(modify)`/`(remove)`). Sai com 1
 em caso de violação.
 
+### `specops doctor [--json]`
+
+Diagnóstico somente leitura (Feature 014). Inspeciona toda superfície específica do
+SpecOps para a **feature ativa apenas** e reporta um resultado por domínio,
+classificado por severidade, com uma próxima ação determinística. Dez domínios:
+prontidão de ambiente, compatibilidade de CLI/extensão, integração, artefatos legados,
+configuração, identidade da feature, esquema + integridade do ledger, saúde do mapa de
+contexto, divergência workflow/ledger e disponibilidade dos gates de preflight. Não
+altera nada, roda totalmente offline e nunca executa `specify` nem um comando de gate —
+ele *delega* aos comandos nativos `specify check` / `specify workflow status` apontando
+para eles.
+
+Cada achado carrega uma severidade (`ok` / `warning` / `blocking` / `execution-error`),
+uma mensagem humana e — quando não `ok` — tanto um `next_action_code` estável quanto o
+texto humano. O veredito geral é o achado mais severo; o código de saída segue o
+contrato de outcome: **0** (ok/warning), **1** (blocking), **2** (execution-error).
+`--json` emite um documento estável e versionado (`output_version: 1`; consumidores
+devem tolerar domínios e códigos desconhecidos).
+
+```bash
+specops doctor            # relatório de saúde legível
+specops doctor --json     # JSON estável para CI (use o código de saída como gate)
+```
+
+### `specops report [--json]`
+
+Status compacto somente leitura da feature ativa (Feature 014): identidade, branch,
+fase, contagem de tarefas (pending / in progress / done / orphaned / total), tarefa
+ativa, ciclos de revisão + achados bloqueantes em aberto, e a lane do workflow.
+Complementa o `specops status show` (somente humano) adicionando uma superfície de
+máquina estável; não altera nada. Sai com **0** normalmente (uma feature ativa ausente
+retorna campos nulos), **2** com um ledger ilegível.
+
 ### `specops context init | validate | resolve | explain`
 
 O **mapa de contexto** (`.specify/specops/context-map.yaml`) é uma descrição
