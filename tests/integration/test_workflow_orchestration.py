@@ -25,7 +25,7 @@ import yaml
 from specops import extension, handoff, speckit
 from specops import status as s
 from specops.errors import SpecopsError
-from tests.conftest import head_commit, make_cycle, make_task
+from tests.conftest import cli, head_commit, make_cycle, make_task
 
 WORKFLOW = (
     Path(__file__).resolve().parents[2]
@@ -34,7 +34,7 @@ WORKFLOW = (
 
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["specops", *args], cwd=repo, capture_output=True, text=True)
+    return cli(repo, *args)
 
 
 # --- C1: the workflow never duplicates directive-owned forward transitions -----

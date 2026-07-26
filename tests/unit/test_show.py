@@ -42,14 +42,13 @@ def _populated_ledger(feature_dir: Path) -> dict:
 
 def _setup(tmp_path: Path) -> tuple[Path, Path]:
     import json
-    import subprocess
+
+    from tests.conftest import git
     root = tmp_path / "repo"
     root.mkdir()
-    subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"], cwd=root, check=True, capture_output=True
-    )
-    subprocess.run(["git", "config", "user.name", "T"], cwd=root, check=True, capture_output=True)
+    git(root, "init")
+    git(root, "config", "user.email", "t@t.com")
+    git(root, "config", "user.name", "T")
     (root / ".specify" / "templates").mkdir(parents=True)
     (root / ".specify" / "feature.json").write_text(
         json.dumps({"feature_directory": "specs/002-test"})

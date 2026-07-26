@@ -1,5 +1,4 @@
 """Unit tests for status.py — phase machine, task transitions, evidence validation."""
-import datetime
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -10,33 +9,11 @@ import yaml
 from specops import ledger
 from specops import status as s
 from specops.errors import SpecopsError
+from tests.conftest import git, make_v1_ledger
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _make_ledger(
-    tmp_path: Path,
-    phase: str = "SPECIFY",
-    tasks: list | None = None,
-    baseline: str = "abc1234",
-    branch: str = "main",
-) -> dict:
-    data = {
-        "feature": "001-test",
-        "branch": branch,
-        "baseline": baseline,
-        "created_at": str(datetime.date.today()),
-        "updated_at": str(datetime.date.today()),
-        "current_phase": phase,
-        "recovery": {"active_task": None, "last_commit": None, "blockers": []},
-        "tasks": tasks or [],
-        "review_cycles": [],
-    }
-    ledger = tmp_path / "status.yaml"
-    ledger.write_text(yaml.dump(data))
-    return data
-
 
 def _task(id: str, status: str = "PENDING", started: str | None = None,
           commits: list | None = None, evidence: str | None = None) -> dict:
@@ -101,14 +78,12 @@ def _setup_feature(tmp_path: Path, phase: str = "SPECIFY") -> tuple[Path, Path]:
     import json
     root = tmp_path / "repo"
     root.mkdir()
-    subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"], cwd=root, check=True, capture_output=True
-    )
-    subprocess.run(["git", "config", "user.name", "T"], cwd=root, check=True, capture_output=True)
+    git(root, "init")
+    git(root, "config", "user.email", "t@t.com")
+    git(root, "config", "user.name", "T")
     (root / "README.md").write_text("# test")
-    subprocess.run(["git", "add", "README.md"], cwd=root, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+    git(root, "add", "README.md")
+    git(root, "commit", "-m", "init")
 
     (root / ".specify" / "templates").mkdir(parents=True)
     (root / ".specify" / "feature.json").write_text(
@@ -117,13 +92,9 @@ def _setup_feature(tmp_path: Path, phase: str = "SPECIFY") -> tuple[Path, Path]:
     feature_dir = root / "specs" / "001-test"
     feature_dir.mkdir(parents=True)
 
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True
-    ).stdout.strip()
-    branch = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root, capture_output=True, text=True
-    ).stdout.strip()
-    _make_ledger(feature_dir, phase=phase, baseline=head, branch=branch)
+    head = git(root, "rev-parse", "HEAD")
+    branch = git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    make_v1_ledger(feature_dir, feature="001-test", phase=phase, baseline=head, branch=branch)
     return root, feature_dir
 
 
@@ -715,13 +686,13 @@ def test_complete_task_auto_runs_test_command_from_root(
 
 
 def test_read_baseline_returns_ledger_value(tmp_path: Path) -> None:
-    _make_ledger(tmp_path)
+    make_v1_ledger(tmp_path)
     with patch.object(s, "get_feature_dir", return_value=tmp_path):
         assert s.read_baseline(Path(".")) == "abc1234"
 
 
 def test_read_baseline_missing_field_returns_empty(tmp_path: Path) -> None:
-    data = _make_ledger(tmp_path)
+    data = make_v1_ledger(tmp_path)
     del data["baseline"]
     (tmp_path / "status.yaml").write_text(yaml.dump(data))
     with patch.object(s, "get_feature_dir", return_value=tmp_path):
@@ -729,7 +700,7 @@ def test_read_baseline_missing_field_returns_empty(tmp_path: Path) -> None:
 
 
 def test_read_baseline_does_not_mutate_ledger(tmp_path: Path) -> None:
-    _make_ledger(tmp_path)
+    make_v1_ledger(tmp_path)
     before = (tmp_path / "status.yaml").read_bytes()
     with patch.object(s, "get_feature_dir", return_value=tmp_path):
         s.read_baseline(Path("."))

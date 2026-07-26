@@ -15,6 +15,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from specops.cli import app
+from tests.conftest import git
 
 runner = CliRunner()
 
@@ -28,16 +29,12 @@ def _run(root: Path, *args: str):
         os.chdir(cwd)
 
 
-def _git(root: Path, *args: str) -> str:
-    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True).stdout.strip()
-
-
 def _commit(root: Path, rel: str, content: str, msg: str) -> None:
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", msg)
+    git(root, "add", "-A")
+    git(root, "commit", "-m", msg)
 
 
 def _feature(tmp_git_repo: Path, *, with_config: bool = True) -> Path:
@@ -96,8 +93,8 @@ def test_destructive_deletion_halts(tmp_git_repo: Path):
     root = _feature(tmp_git_repo)
     _commit(root, "src/old.py", "legacy = 1\n", "seed file to delete")
     assert _run(root, "start", "--answers", _ELIG).exit_code == 0
-    _git(root, "rm", "src/old.py")
-    _git(root, "commit", "-m", "remove legacy")
+    git(root, "rm", "src/old.py")
+    git(root, "commit", "-m", "remove legacy")
     res = _run(root, "check", "--json")
     assert res.exit_code == 1
     assert "destructive" in json.loads(res.stdout)["categories"]
@@ -132,11 +129,11 @@ def test_promote_lands_at_plan_via_cli(tmp_git_repo: Path):
     root = _feature(tmp_git_repo)
     assert _run(root, "start", "--answers", _ELIG).exit_code == 0
     _commit(root, "src/a.py", "a = 1\n", "c1")
-    before = set(_git(root, "rev-list", "HEAD").splitlines())
+    before = set(git(root, "rev-list", "HEAD").splitlines())
     res = _run(root, "promote", "--reason", "scope-growth", "--json")
     assert res.exit_code == 0
     assert json.loads(res.stdout)["resumed_phase"] == "PLAN"
-    assert set(_git(root, "rev-list", "HEAD").splitlines()) == before
+    assert set(git(root, "rev-list", "HEAD").splitlines()) == before
     led = (root / "specs" / "013-lane" / "status.yaml").read_text()
     assert "current_phase: PLAN" in led
 

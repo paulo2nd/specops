@@ -27,7 +27,7 @@ from pathlib import Path
 import yaml
 
 from specops import contextmap, gateprofiles, ledger
-from tests.conftest import make_cycle, make_finding, make_task, make_trace_ledger
+from tests.conftest import git, make_cycle, make_finding, make_task, make_trace_ledger
 
 CAPTURES_DIR = Path(__file__).parent / "captures"
 
@@ -115,22 +115,15 @@ def capture(scenario: Scenario, root: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _git(root: Path, *args: str) -> str:
-    out = subprocess.run(
-        ["git", *args], cwd=root, check=True, capture_output=True, text=True
-    )
-    return out.stdout.strip()
-
-
 def init_repo(root: Path) -> None:
     """Initialise a git repo with a deterministic identity and one commit."""
-    _git(root, "init")
-    _git(root, "config", "user.email", "test@example.com")
-    _git(root, "config", "user.name", "Test")
-    _git(root, "checkout", "-b", "main")
+    git(root, "init")
+    git(root, "config", "user.email", "test@example.com")
+    git(root, "config", "user.name", "Test")
+    git(root, "checkout", "-b", "main")
     (root / "README.md").write_text("# fixture\n")
-    _git(root, "add", "README.md")
-    _git(root, "commit", "-m", "initial")
+    git(root, "add", "README.md")
+    git(root, "commit", "-m", "initial")
 
 
 def _feature(root: Path, name: str = "001-demo") -> Path:
@@ -201,9 +194,9 @@ def _trace_build(root: Path, *, plan_paths=(), spec_scs=("SC-001",), tasks_md_ta
     (fd / "plan.md").write_text(
         "# Plan\n\n" + "\n".join(f"- `{p}` (create)" for p in plan_paths) + "\n")
     (fd / "tasks.md").write_text("# Tasks\n\n" + "\n".join(tasks_md_tasks) + "\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "scaffolding")
-    baseline = _git(root, "rev-parse", "HEAD")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "scaffolding")
+    baseline = git(root, "rev-parse", "HEAD")
     led = make_trace_ledger(
         feature="001-demo", branch="main", baseline=baseline,
         tasks=tasks, review_cycles=review_cycles, acknowledgements=acks,
@@ -214,8 +207,8 @@ def _trace_build(root: Path, *, plan_paths=(), spec_scs=("SC-001",), tasks_md_ta
         fp.parent.mkdir(parents=True, exist_ok=True)
         fp.write_text(content)
     if changed:
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "work")
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "work")
 
 
 def build_trace_classify(root: Path) -> None:
@@ -244,9 +237,9 @@ def _handoff_build(root: Path, *, tasks=None, review_cycles=None, phase="REVIEW"
         + "\n".join(f"- **{sc}**: measurable." for sc in spec_scs) + "\n")
     (fd / "plan.md").write_text("# Plan\n")
     (fd / "tasks.md").write_text("# Tasks\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "scaffolding")
-    baseline = _git(root, "rev-parse", "HEAD")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "scaffolding")
+    baseline = git(root, "rev-parse", "HEAD")
     led = make_trace_ledger(
         feature="001-demo", branch="main", baseline=baseline, tasks=tasks,
         review_cycles=review_cycles if review_cycles is not None else [make_cycle()],
@@ -283,9 +276,9 @@ def _gate_build(root: Path) -> None:
         "    timeout: 60\n"
     )
     (fd / "spec.md").write_text("# Spec\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "scaffold")
-    baseline = _git(root, "rev-parse", "HEAD")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "scaffold")
+    baseline = git(root, "rev-parse", "HEAD")
     led = make_trace_ledger(feature="001-demo", branch="main", baseline=baseline,
                             phase="IMPLEMENT")
     led["schema_version"] = ledger.CURRENT_SCHEMA
@@ -333,9 +326,9 @@ def _report_build(root: Path) -> None:
     )
     fd = _feature(root)
     (fd / "spec.md").write_text("# Spec\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "scaffold")
-    baseline = _git(root, "rev-parse", "HEAD")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "scaffold")
+    baseline = git(root, "rev-parse", "HEAD")
     led = make_trace_ledger(feature="001-demo", branch="main", baseline=baseline,
                             phase="IMPLEMENT",
                             tasks=[make_task("T001", status="DONE")])

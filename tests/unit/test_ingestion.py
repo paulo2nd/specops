@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from specops import gitops, ingestion
-from tests.conftest import _git
+from tests.conftest import git
 
 # ---------------------------------------------------------------------------
 # T007 — JSON findings-input contract
@@ -195,8 +195,8 @@ def test_is_stale_semantics() -> None:
 
 def test_blob_sha_present_and_stable(tmp_git_repo: Path) -> None:
     (tmp_git_repo / "f.py").write_text("print(1)\n")
-    _git(tmp_git_repo, "add", "-A")
-    _git(tmp_git_repo, "commit", "-m", "add f")
+    git(tmp_git_repo, "add", "-A")
+    git(tmp_git_repo, "commit", "-m", "add f")
     repo = gitops.find_repo(tmp_git_repo)
     sha1 = gitops.blob_sha(repo, "HEAD", "f.py")
     assert sha1 and gitops.blob_sha(repo, "HEAD", "f.py") == sha1  # stable
@@ -205,13 +205,13 @@ def test_blob_sha_present_and_stable(tmp_git_repo: Path) -> None:
 def test_blob_sha_changes_with_content(tmp_git_repo: Path) -> None:
     fp = tmp_git_repo / "f.py"
     fp.write_text("print(1)\n")
-    _git(tmp_git_repo, "add", "-A")
-    _git(tmp_git_repo, "commit", "-m", "v1")
+    git(tmp_git_repo, "add", "-A")
+    git(tmp_git_repo, "commit", "-m", "v1")
     repo = gitops.find_repo(tmp_git_repo)
     before = gitops.blob_sha(repo, "HEAD", "f.py")
     fp.write_text("print(2)\n")
-    _git(tmp_git_repo, "add", "-A")
-    _git(tmp_git_repo, "commit", "-m", "v2")
+    git(tmp_git_repo, "add", "-A")
+    git(tmp_git_repo, "commit", "-m", "v2")
     assert gitops.blob_sha(repo, "HEAD", "f.py") != before
 
 

@@ -9,12 +9,11 @@ import json
 import subprocess
 from pathlib import Path
 
-from tests.conftest import make_cycle, make_finding, make_task
+from tests.conftest import cli, make_cycle, make_finding, make_task
 
 
 def _run(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["specops", *args], cwd=root, capture_output=True,
-                          text=True, stdin=subprocess.DEVNULL)
+    return cli(root, *args)
 
 
 def _repo_with_finding(handoff_repo):

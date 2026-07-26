@@ -3,9 +3,11 @@ import json
 import subprocess
 from pathlib import Path
 
+from tests.conftest import cli
+
 
 def _run(repo: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(["specops", "consistency"], cwd=repo, capture_output=True, text=True)
+    return cli(repo, "consistency")
 
 
 def _setup(tmp_path: Path) -> tuple[Path, Path]:

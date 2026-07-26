@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   internal-hardening consolidation; all other command output is byte-identical
   (enforced by the new `tests/golden/` behavior-freeze harness).
 
+### Internal
+
+- **Internal hardening (Feature 018).** Consolidated the infrastructure duplicated
+  across Features 008–013 into single definition sites, with no user-visible change
+  beyond the lane envelope above: one `outcome.CommandResult` abstraction (trace and
+  handoff joined it) and one `cli._emit`; every cross-module private helper promoted
+  to a documented public name (zero cross-module private references remain); a single
+  ledger-loading path (`ledger.load_raw`) behind `status show`/`report`/`reconcile`,
+  so a corrupted ledger yields one identical diagnostic; one evidence-grammar owner
+  (`evidence.validate_string`) and one finding factory + line grammar (`findings.py`);
+  and a deduplicated test harness (one `git()` helper, shared ledger builders,
+  in-process `CliRunner` invocation by default with a subprocess smoke set). No new
+  runtime dependencies; ledger schema unchanged (v7).
+
 ## [0.5.1] - 2026-07-26
 
 Wave 1 of the **1.0 Readiness** cycle: three defect fixes from the 2026-07-25

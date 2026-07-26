@@ -5,9 +5,11 @@ from pathlib import Path
 
 import yaml
 
+from tests.conftest import cli
+
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["specops", *args], cwd=repo, capture_output=True, text=True)
+    return cli(repo, *args)
 
 
 def _commit(repo: Path, msg: str = "work") -> str:

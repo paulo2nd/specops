@@ -4,9 +4,11 @@ import json
 import subprocess
 from pathlib import Path
 
+from tests.conftest import cli
+
 
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(["specops", *args], cwd=cwd, capture_output=True, text=True)
+    return cli(cwd, *args)
 
 
 def _commit(repo: Path, msg: str = "work") -> None:

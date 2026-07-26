@@ -7,11 +7,11 @@ from pathlib import Path
 
 import yaml
 
-from tests.conftest import make_task
+from tests.conftest import cli, make_task
 
 
 def _run(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["specops", *args], cwd=root, capture_output=True, text=True)
+    return cli(root, *args)
 
 
 def _ledger(root: Path) -> dict:

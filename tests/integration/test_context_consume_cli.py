@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from specops.cli import app
-from tests.conftest import DEP_GRAPH_MAP, write_map
+from tests.conftest import DEP_GRAPH_MAP, git, write_map
 
 runner = CliRunner()
 
@@ -30,11 +29,6 @@ def _run(root: Path, *args: str):
 
 def _json(result) -> dict:
     return json.loads(result.stdout)
-
-
-def _git(root: Path, *args: str) -> str:
-    return subprocess.run(["git", *args], cwd=root, capture_output=True,
-                          text=True).stdout.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -92,9 +86,9 @@ def test_impact_json_byte_identical(context_map_repo: Path) -> None:
 def test_impact_clean_tree_empty_exit0(context_map_repo: Path) -> None:
     # No --path, clean tree, valid ledger baseline → empty impact, exit 0.
     write_map(context_map_repo, DEP_GRAPH_MAP)
-    _git(context_map_repo, "add", "-A")
-    _git(context_map_repo, "commit", "-m", "add map")
-    head = _git(context_map_repo, "rev-parse", "HEAD")
+    git(context_map_repo, "add", "-A")
+    git(context_map_repo, "commit", "-m", "add map")
+    head = git(context_map_repo, "rev-parse", "HEAD")
     feature_dir = context_map_repo / "specs" / "001-demo"
     feature_dir.mkdir(parents=True)
     (context_map_repo / ".specify" / "feature.json").write_text(
@@ -103,7 +97,7 @@ def test_impact_clean_tree_empty_exit0(context_map_repo: Path) -> None:
     import yaml
     (feature_dir / "status.yaml").write_text(yaml.dump({
         "schema_version": 3, "revision": 1, "feature": "001-demo",
-        "branch": _git(context_map_repo, "rev-parse", "--abbrev-ref", "HEAD"),
+        "branch": git(context_map_repo, "rev-parse", "--abbrev-ref", "HEAD"),
         "baseline": head, "current_phase": "IMPLEMENT",
         "recovery": {"active_task": None, "last_commit": None, "blockers": []},
         "tasks": [], "review_cycles": [],
@@ -136,7 +130,7 @@ def test_stale_found_exit1(context_map_repo: Path) -> None:
     write_map(context_map_repo, DEP_GRAPH_MAP)
     (context_map_repo / "src" / "config").mkdir(parents=True)
     (context_map_repo / "src" / "config" / "c.py").write_text("x=1\n")
-    _git(context_map_repo, "add", "src/config/c.py")
+    git(context_map_repo, "add", "src/config/c.py")
     r = _run(context_map_repo, "stale", "--json")
     assert r.exit_code == 1
     obj = _json(r)
@@ -149,7 +143,7 @@ def test_stale_ok_exit0(context_map_repo: Path) -> None:
     for d in ("api", "web", "config"):
         (context_map_repo / "src" / d).mkdir(parents=True)
         (context_map_repo / "src" / d / "f.py").write_text("x=1\n")
-        _git(context_map_repo, "add", f"src/{d}/f.py")
+        git(context_map_repo, "add", f"src/{d}/f.py")
     r = _run(context_map_repo, "stale")
     assert r.exit_code == 0
 

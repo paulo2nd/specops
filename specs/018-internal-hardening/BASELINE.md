@@ -21,6 +21,15 @@ prior to Phase 2.
 - Wall-clock: **95.49s (1m35s)**
 - SC-005 target after US4: ≤ **66.8s** (≥30% reduction)
 
+### SC-005 result (after US4 in-process migration)
+
+- In-process portion (`pytest tests/integration/ -m 'not subprocess'`): **66.85s**
+  (262 passed, 8 deselected) → **−30.0%** vs baseline — meets the ≥30% target.
+- Full integration (`pytest tests/integration/`): **70.45s** (270 passed) → **−26.2%**;
+  the delta is the new `@pytest.mark.subprocess` smoke set (one real-binary invocation
+  per command family) that restores true exit-code / stream-separation / encoding
+  coverage the in-process CliRunner path cannot give. Both numbers reported per T031.
+
 ## SC-002 cross-module private references
 
 - Baseline: **38** sites (tasks.md/quickstart quoted 39 at the research commit `cb72e21`;

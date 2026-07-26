@@ -45,10 +45,11 @@ EOF
 ```bash
 grep -rn "def _emit" src/specops/cli.py                    # expect: _emit (+ _emit_sarif only)
 grep -rn "class TraceResult\|class HandoffResult" src/     # expect: subclass one-liners only, no duplicated bodies
-grep -rn "def _git(" tests/                                # expect: exactly 1 hit (conftest.py)
+grep -rn "def git(\|def _git(" tests/                      # expect: exactly 1 hit (conftest.py — promoted to public git())
 grep -rn "def _make_ledger" tests/                         # expect: 0 hits
 grep -rn "_FINDING_RE\|EVIDENCE_CLASSES" src/specops/ --include="*.py" -l
-# expect: findings.py / evidence.py as sole definition homes (consumers import, never redefine)
+# expect: findings.py / evidence.py as sole DEFINITION homes; status.py appears only as an
+# `evidence_mod.EVIDENCE_CLASSES` consumer (imports, never redefines)
 ```
 
 ## 4. Ledger diagnostic convergence (SC-004)

@@ -72,3 +72,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 addopts = "--cov=specops --cov-report=term-missing --cov-fail-under=85"
 testpaths = ["tests"]
+markers = [
+    "subprocess: end-to-end smoke tests that spawn the real `specops` binary (one per command family) to cover true exit codes, stream separation, and console encoding that the in-process CliRunner path cannot (Feature 018 US4).",
+]

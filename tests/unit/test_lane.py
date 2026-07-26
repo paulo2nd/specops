@@ -6,7 +6,6 @@ close (retrospective + evidence), and lossless promotion (commit-preservation).
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -14,19 +13,16 @@ import yaml
 
 from specops import lane, outcome
 from specops.errors import LedgerParseError, SpecopsError
-
-
-def _git(root: Path, *args: str) -> str:
-    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True).stdout.strip()
+from tests.conftest import git
 
 
 def _commit(root: Path, rel: str, content: str, msg: str) -> str:
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", msg)
-    return _git(root, "rev-parse", "HEAD")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", msg)
+    return git(root, "rev-parse", "HEAD")
 
 
 @pytest.fixture()
@@ -185,10 +181,10 @@ def test_promote_is_lossless_and_lands_at_plan(feat: Path):
     _start(feat)
     _commit(feat, "src/a.py", "a = 1\n", "c1")
     _commit(feat, "src/b.py", "b = 2\n", "c2")
-    before = set(_git(feat, "rev-list", "HEAD").splitlines())
+    before = set(git(feat, "rev-list", "HEAD").splitlines())
     res = lane.cmd_promote(feat, reason="scope-growth")
     assert res.cls == outcome.PASS, res.human
-    after = set(_git(feat, "rev-list", "HEAD").splitlines())
+    after = set(git(feat, "rev-list", "HEAD").splitlines())
     assert before == after  # zero commit loss (P-1)
     feature_dir = feat / "specs" / "013-lane"
     led = yaml.safe_load((feature_dir / "status.yaml").read_text())
@@ -226,8 +222,8 @@ def test_close_ignores_untracked_methodology_dir(feat: Path):
     _start(feat)
     (feat / "src").mkdir(exist_ok=True)
     (feat / "src" / "x.py").write_text("x = 1\n")
-    _git(feat, "add", "src/x.py")  # selective add — do NOT sweep specs/ or specops.json
-    _git(feat, "commit", "-m", "product only")
+    git(feat, "add", "src/x.py")  # selective add — do NOT sweep specs/ or specops.json
+    git(feat, "commit", "-m", "product only")
     lane.cmd_attest(feat, root_cause="clear", public_contract="clear")
     res = lane.cmd_close(feat)
     assert res.cls == outcome.PASS, res.human
@@ -261,8 +257,8 @@ def test_check_does_not_flag_a_rename_as_destructive(feat: Path):
     """Finding 5: an ordinary file rename must not trip the destructive category."""
     _commit(feat, "src/old_name.py", "value = 1\n", "seed")
     _start(feat)
-    _git(feat, "mv", "src/old_name.py", "src/new_name.py")
-    _git(feat, "commit", "-m", "rename")
+    git(feat, "mv", "src/old_name.py", "src/new_name.py")
+    git(feat, "commit", "-m", "rename")
     res = lane.cmd_check(feat, staged=False)
     assert res.cls == outcome.PASS, res.extra
 
