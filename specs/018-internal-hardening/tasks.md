@@ -100,17 +100,17 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 ### Tests for User Story 3 (mandatory per Constitution task gate) ⚠️
 
-- [ ] T020 [P] [US3] Add convergence tests in `tests/integration/test_ledger_diagnostics.py` (new): one corrupted-ledger fixture asserted to produce the identical `load_raw` diagnostic and exit code 2 across `status show`/`status report`/`reconcile`, and one non-mapping-task fixture asserted to render filtered (not crash) in both `show` and `report` — write first, fails on current divergence (SC-004)
-- [ ] T021 [P] [US3] Add round-trip test in `tests/unit/test_findings.py` (new): `parse_finding_line(format_finding_line(f))` lossless for findings with and without `line`; plus factory-shape test asserting the three creation paths share one identical base dict (SC-003)
-- [ ] T022 [P] [US3] Add equivalence test in `tests/unit/test_evidence_record.py`: `evidence.validate_string` accepts/rejects the exact corpus `status._validate_evidence` does today (capture the corpus from the 11 existing `_validate_evidence` tests before moving) (SC-003)
+- [X] T020 [P] [US3] Add convergence tests in `tests/integration/test_ledger_diagnostics.py` (new): one corrupted-ledger fixture asserted to produce the identical `load_raw` diagnostic and exit code 2 across `status show`/`status report`/`reconcile`, and one non-mapping-task fixture asserted to render filtered (not crash) in both `show` and `report` — write first, fails on current divergence (SC-004)
+- [X] T021 [P] [US3] Add round-trip test in `tests/unit/test_findings.py` (new): `parse_finding_line(format_finding_line(f))` lossless for findings with and without `line`; plus factory-shape test asserting the three creation paths share one identical base dict (SC-003)
+- [X] T022 [P] [US3] Add equivalence test in `tests/unit/test_evidence_record.py`: `evidence.validate_string` accepts/rejects the exact corpus `status._validate_evidence` does today (capture the corpus from the 11 existing `_validate_evidence` tests before moving) (SC-003)
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Create `src/specops/findings.py`: `new_finding(...)` (base shape per data-model.md, kwargs for `imported`/`producer`/`reviewed_digest`), `parse_finding_line`/`format_finding_line` (regex from `trace.py:63` + renderer from `handoff.py:804-820`, side by side); migrate consumers: `src/specops/handoff.py` (3 construction sites + import parse + render), `src/specops/trace.py`, `src/specops/sarif.py` (SC-003)
-- [ ] T024 [US3] Consolidate the evidence grammar into `src/specops/evidence.py`: move `EVIDENCE_CLASSES`, the part regex, and validation from `src/specops/status.py:23-27,155-167` as `evidence.validate_string`; consumers `status.py` (task close) and `handoff.py` (finding close) import from there (SC-003)
-- [ ] T025 [US3] Route `status.cmd_show` (`src/specops/status.py:533-555`) through `ledger.load_raw` and render counts/listing from the `compact_status` snapshot (adopting tolerant filtering per spec Assumptions) (SC-003, SC-004)
-- [ ] T026 [US3] Route `reconcile.load_state` (`src/specops/reconcile.py:23-34`) through `ledger.load_raw`, retiring the divergent "Cannot parse ledger" wording (contracts/cli-output.md §invalid-input convergences) (SC-004)
-- [ ] T027 [US3] Verify: T020–T022 green, full suite green, golden replay byte-identical on valid inputs; update captures only where the enumerated invalid-input convergences apply (SC-001, SC-004)
+- [X] T023 [US3] Create `src/specops/findings.py`: `new_finding(...)` (base shape per data-model.md, kwargs for `imported`/`producer`/`reviewed_digest`), `parse_finding_line`/`format_finding_line` (regex from `trace.py:63` + renderer from `handoff.py:804-820`, side by side); migrate consumers: `src/specops/handoff.py` (3 construction sites + import parse + render), `src/specops/trace.py`, `src/specops/sarif.py` (SC-003)
+- [X] T024 [US3] Consolidate the evidence grammar into `src/specops/evidence.py`: move `EVIDENCE_CLASSES`, the part regex, and validation from `src/specops/status.py:23-27,155-167` as `evidence.validate_string`; consumers `status.py` (task close) and `handoff.py` (finding close) import from there (SC-003)
+- [X] T025 [US3] Route `status.cmd_show` (`src/specops/status.py:533-555`) through `ledger.load_raw` and render counts/listing from the `compact_status` snapshot (adopting tolerant filtering per spec Assumptions) (SC-003, SC-004)
+- [X] T026 [US3] Route `reconcile.load_state` (`src/specops/reconcile.py:23-34`) through `ledger.load_raw`, retiring the divergent "Cannot parse ledger" wording (contracts/cli-output.md §invalid-input convergences) (SC-004)
+- [X] T027 [US3] Verify: T020–T022 green, full suite green, golden replay byte-identical on valid inputs; update captures only where the enumerated invalid-input convergences apply (SC-001, SC-004)
 
 **Checkpoint**: all shared grammars have exactly one owner
 

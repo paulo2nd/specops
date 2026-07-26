@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from specops import contextmap, gitops, ledger, speckit, status
+from specops import contextmap, findings, gitops, ledger, speckit, status
 from specops.errors import SpecopsError
 
 # --- Versioned JSON contract (FR-014) --------------------------------------
@@ -57,10 +57,6 @@ _CLASS_FOR_STATUS = {
     ACK_CONFLICT: outcome.INFRA_ERROR,
     ACK_UNKNOWN_TASK: outcome.INFRA_ERROR,
 }
-
-# The line number is optional so a line-less finding (`<file> - <action>`) round-
-# trips through render → import faithfully; `<file>:<line> - <action>` still matches.
-_FINDING_RE = re.compile(r"^(?P<file>[^:\s]+)(?::(?P<line>\d+))?\s*-\s*(?P<text>.+)$")
 
 # SpecOps/Speckit-managed artifact paths are methodology state, not product drift.
 # They are excluded from effective-diff classification so the drift gate never
@@ -388,12 +384,11 @@ def _legacy_findings(feature_dir: Path, skip_rounds: set[int]) -> list[dict[str,
         if rnd in skip_rounds:
             continue
         for line in rev.read_text(encoding="utf-8").splitlines():
-            fm = _FINDING_RE.match(line.strip())
-            if fm:
+            parsed = findings.parse_finding_line(line)
+            if parsed is not None:
                 out.append({
-                    "file": fm.group("file"),
-                    "line": int(fm.group("line")) if fm.group("line") else None,
-                    "text": fm.group("text").strip(), "round": rnd,
+                    "file": parsed["file"], "line": parsed["line"],
+                    "text": parsed["action"], "round": rnd,
                 })
     return out
 

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from specops.initializer import InjectionError, scan_markers, inject_block, remove_block
+from specops.initializer import InjectionError, inject_block, remove_block, scan_markers
 
 
 def _write(tmp_path: Path, name: str, content: str) -> Path:

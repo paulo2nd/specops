@@ -20,15 +20,38 @@ from pathlib import Path
 from typing import Any
 
 __all__ = [
-    "ID_PREFIX", "EVIDENCE_CLASSES", "cache_key", "derive_id", "build_record",
-    "digest_artifact", "parse_legacy_string", "append_record", "canonical_sort",
+    "ID_PREFIX", "EVIDENCE_CLASSES", "validate_string", "cache_key", "derive_id",
+    "build_record", "digest_artifact", "parse_legacy_string", "append_record",
+    "canonical_sort",
 ]
 
 ID_PREFIX = "EV-"
 
-# The legacy evidence-string grammar migrated by v5→v6 (mirrors status.EVIDENCE_CLASSES).
+# Sole owner of the `<CLASS>:<summary>[; …]` evidence grammar (Feature 018 US3):
+# the class set, the part regex, and validation live here; task-close (status) and
+# finding-close (handoff) both consume `validate_string` so the grammar has one home.
 EVIDENCE_CLASSES = ("CLI_LOG", "TEST_REPORT", "SCREENSHOT_PATH", "CODE_DIFF")
 _PART_RE = re.compile(r"^(" + "|".join(EVIDENCE_CLASSES) + r"):(.+)$")
+
+
+def validate_string(evidence: str) -> bool:
+    """Return True when *evidence* matches the strict grammar: ``CLASS:summary[; CLASS:summary …]``.
+
+    An empty string, an unknown class, a missing colon, an empty summary, a
+    leading-space summary, or any non-conformant ``; ``-separated part is rejected.
+    Promoted verbatim from the retired status helper ``validate_evidence`` (behavior
+    identical).
+    """
+    if not evidence:
+        return False
+    for part in evidence.split("; "):
+        m = _PART_RE.match(part)
+        if not m:
+            return False
+        summary = m.group(2)
+        if not summary or summary[0] == " ":
+            return False
+    return True
 
 
 def cache_key(

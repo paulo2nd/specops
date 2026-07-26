@@ -17,15 +17,6 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parents[2] / "src" / "specops"
 _REF = re.compile(r"\b([a-z_][a-z0-9_]*)\.(_[A-Za-z_][A-Za-z0-9_]*)\b")
 
-# Grammar-owner references still pending their US3 *move* (not an in-place rename):
-# `status._validate_evidence` moves to `evidence.validate_string` (T024) and
-# `trace._FINDING_RE` moves to `findings.parse_finding_line` (T023). Emptied at T027,
-# after which this scan enforces a hard zero (SC-002).
-_PENDING_US3_MOVES = {
-    ("handoff.py", "status._validate_evidence"),
-    ("handoff.py", "trace._FINDING_RE"),
-}
-
 
 def _cross_module_private_refs() -> list[tuple[str, int, str]]:
     modules = {p.stem for p in SRC.glob("*.py")}
@@ -35,8 +26,6 @@ def _cross_module_private_refs() -> list[tuple[str, int, str]]:
             for m in _REF.finditer(line):
                 qualifier, attr = m.group(1), m.group(2)
                 if qualifier in modules and qualifier != p.stem and not attr.startswith("__"):
-                    if (p.name, m.group(0)) in _PENDING_US3_MOVES:
-                        continue
                     bad.append((p.name, i, m.group(0)))
     return bad
 

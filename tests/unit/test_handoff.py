@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from specops import handoff, outcome, trace
+from specops import findings, handoff, outcome, trace
 from tests.conftest import head_commit, make_cycle, make_finding, make_task, read_ledger
 
 FEATURE_DIR = "specs/001-demo"
@@ -406,9 +406,10 @@ def test_lineless_finding_render_import_roundtrip(handoff_repo) -> None:
         make_finding("R1-F01", file="a.py", line=None, action="file-level issue")])])
     text = handoff.render_revision_text(read_ledger(_fd(root)), 1)
     assert text == "a.py - file-level issue\n"
-    # the rendered line-less form is re-parseable
-    m = trace._FINDING_RE.match(text.strip())
-    assert m and m.group("file") == "a.py" and m.group("line") is None
+    # the rendered line-less form is re-parseable via the co-located grammar (findings.py)
+    assert findings.parse_finding_line(text.strip()) == {
+        "file": "a.py", "line": None, "action": "file-level issue",
+    }
 
 
 def test_import_legacy_prose(handoff_repo) -> None:

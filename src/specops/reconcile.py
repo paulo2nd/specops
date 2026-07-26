@@ -3,10 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 from specops import gitops, ledger, speckit
-from specops.errors import LedgerParseError, SpecopsError
+from specops.errors import SpecopsError
 
 
 def load_state(root: Path) -> tuple[Path, dict, gitops.git.Repo]:
@@ -20,18 +18,10 @@ def load_state(root: Path) -> tuple[Path, dict, gitops.git.Repo]:
     if feature_dir is None:
         raise SpecopsError("Cannot resolve active feature directory.")
 
-    ledger_path = feature_dir / "status.yaml"
-    if not ledger_path.is_file():
-        raise SpecopsError(
-            f"Ledger not found: {ledger_path}. Run 'specops status init-spec' first."
-        )
-
-    try:
-        data = yaml.safe_load(ledger_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise LedgerParseError(f"Cannot parse ledger: {exc}") from exc
-    if not isinstance(data, dict):
-        raise LedgerParseError("Ledger has invalid structure.")
+    # Single ledger-loading authority (Feature 018 US3, SC-004): existence, parse, and
+    # shape diagnostics converge on ledger.load_raw's canonical, path-qualified messages
+    # (retiring reconcile's legacy "Cannot parse ledger" / "invalid structure" wordings).
+    data = ledger.load_raw(feature_dir)
 
     repo = gitops.find_repo(root)
     if repo is None:

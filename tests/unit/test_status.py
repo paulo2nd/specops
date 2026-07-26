@@ -50,28 +50,9 @@ def _task(id: str, status: str = "PENDING", started: str | None = None,
     }
 
 
-# ---------------------------------------------------------------------------
-# _validate_evidence
-# ---------------------------------------------------------------------------
-
-def test_evidence_valid_single() -> None:
-    assert s._validate_evidence("TEST_REPORT:all tests passed")
-
-
-def test_evidence_valid_multiple() -> None:
-    assert s._validate_evidence("TEST_REPORT:42 ok; CODE_DIFF:3 files")
-
-
-def test_evidence_invalid_class() -> None:
-    assert not s._validate_evidence("BAD_CLASS:something")
-
-
-def test_evidence_invalid_no_colon() -> None:
-    assert not s._validate_evidence("no colon here")
-
-
-def test_evidence_empty_string() -> None:
-    assert not s._validate_evidence("")
+# The `<CLASS>:<summary>` evidence grammar moved to specops.evidence (Feature 018 US3);
+# its accept/reject corpus now lives in tests/unit/test_evidence_record.py
+# (test_validate_string_accepts / _rejects), captured verbatim from these tests.
 
 
 # ---------------------------------------------------------------------------
@@ -574,36 +555,9 @@ def test_result_applies_to_open_cycle_after_closed_rejected(tmp_path: Path) -> N
 
 
 # ---------------------------------------------------------------------------
-# T012 — US3: evidence grammar matrix and atomic save [SC-004, SC-005]
+# US3: atomic save / stale-tmp handling [SC-004, SC-005]
+# (evidence-grammar matrix moved to tests/unit/test_evidence_record.py — Feature 018)
 # ---------------------------------------------------------------------------
-
-def test_evidence_empty_summary_rejected() -> None:
-    """CLI_LOG: with no summary is invalid."""
-    assert not s._validate_evidence("CLI_LOG:")
-
-
-def test_evidence_unknown_class_rejected() -> None:
-    """LOG:x is not a known evidence class."""
-    assert not s._validate_evidence("LOG:x")
-
-
-def test_evidence_orphan_segment_rejected() -> None:
-    """CLI_LOG:a; done — 'done' is not a valid part."""
-    assert not s._validate_evidence("CLI_LOG:a; done")
-
-
-def test_evidence_missing_colon_rejected() -> None:
-    """Missing colon is invalid."""
-    assert not s._validate_evidence("CLI_LOG no colon")
-
-
-def test_evidence_valid_single_part() -> None:
-    assert s._validate_evidence("CLI_LOG:run passed")
-
-
-def test_evidence_valid_multi_part() -> None:
-    assert s._validate_evidence("TEST_REPORT:42 ok; CODE_DIFF:3 files in 2 commits")
-
 
 def test_stale_tmp_ignored_on_read(tmp_path: Path) -> None:
     """A stale status.yaml.tmp must not affect _load_ledger."""

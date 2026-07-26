@@ -105,3 +105,34 @@ def test_append_record_supersede() -> None:
     assert len(ev) == 2
     assert ev[0]["superseded_by"] == new["id"]
     assert ev[1]["superseded_by"] is None
+
+
+# --- Feature 018 (US3, T022): evidence.validate_string equivalence corpus -----
+
+# The exact corpus the retired `status._validate_evidence` accepted/rejected, captured
+# from its 11 tests before the grammar moved to evidence.py (SC-003). validate_string
+# must reproduce that behavior identically.
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("value", [
+    "TEST_REPORT:all tests passed",
+    "TEST_REPORT:42 ok; CODE_DIFF:3 files",
+    "CLI_LOG:run passed",
+    "TEST_REPORT:42 ok; CODE_DIFF:3 files in 2 commits",
+])
+def test_validate_string_accepts(value: str) -> None:
+    assert evidence.validate_string(value) is True
+
+
+@pytest.mark.parametrize("value", [
+    "",                       # empty
+    "BAD_CLASS:something",    # unknown class
+    "no colon here",         # no colon
+    "CLI_LOG:",              # empty summary
+    "LOG:x",                 # unknown class
+    "CLI_LOG:a; done",       # orphan segment
+    "CLI_LOG no colon",      # missing colon
+])
+def test_validate_string_rejects(value: str) -> None:
+    assert evidence.validate_string(value) is False

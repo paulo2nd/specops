@@ -25,6 +25,7 @@ from typing import Any
 
 from specops import contextmap, gitops, ingestion, ledger, outcome, speckit, status, trace
 from specops import evidence as evidence_mod
+from specops import findings as findings_mod
 from specops.errors import SpecopsError
 
 # --- Versioned JSON contract (FR-012) --------------------------------------
@@ -249,14 +250,12 @@ def cmd_finding_add(
         return HandoffResult(cmd, DUPLICATE_ID_CREATE, f"{cmd}: finding id '{fid}' already exists",
                              {"id": fid})
 
-    handoff["findings"].append({
-        "id": fid, "severity": severity, "rule": rule.strip(), "file": file,
-        "line": line, "action": action.strip(),
-        "expected_evidence": (expected_evidence or "").strip() or None,
-        "closure_criteria": (closure or "").strip() or None,
-        "state": "OPEN", "task": None, "commits": [], "evidence": None,
-        "fixed_at": None, "verified_at": None,
-    })
+    handoff["findings"].append(findings_mod.new_finding(
+        id=fid, severity=severity, rule=rule.strip(), file=file, line=line,
+        action=action.strip(),
+        expected_evidence=(expected_evidence or "").strip() or None,
+        closure_criteria=(closure or "").strip() or None,
+    ))
     status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_RECORDED, f"{cmd}: recorded {fid} ({severity})", {"id": fid})
 
@@ -324,7 +323,7 @@ def cmd_finding_fix(
     if not commits:
         return HandoffResult(cmd, PRECONDITION_UNMET,
                              f"{cmd}: at least one --commit (or --auto) is required", {"id": fid})
-    if not evidence or not status._validate_evidence(evidence):
+    if not evidence or not evidence_mod.validate_string(evidence):
         return HandoffResult(cmd, PRECONDITION_UNMET,
                              f"{cmd}: valid <CLASS>:<summary> --evidence is required", {"id": fid})
 
@@ -458,22 +457,19 @@ def cmd_import(root: Path, round: int | None) -> HandoffResult:
             for f in handoff["findings"]}
     imported = 0
     for raw in rev.read_text(encoding="utf-8").splitlines():
-        m = trace._FINDING_RE.match(raw.strip())
-        if not m:
+        parsed = findings_mod.parse_finding_line(raw)
+        if parsed is None:
             continue
-        file = trace.norm_path(m.group("file"))
-        line = int(m.group("line")) if m.group("line") else None
-        action = m.group("text").strip()
+        file = trace.norm_path(parsed["file"])
+        line = parsed["line"]
+        action = parsed["action"]
         if (file, line, action) in seen:
             continue
         seen.add((file, line, action))
-        handoff["findings"].append({
-            "id": _next_id(cycle), "severity": "advisory", "rule": "imported",
-            "file": file, "line": line, "action": action,
-            "expected_evidence": None, "closure_criteria": None,
-            "state": "OPEN", "task": None, "commits": [], "evidence": None,
-            "fixed_at": None, "verified_at": None,
-        })
+        handoff["findings"].append(findings_mod.new_finding(
+            id=_next_id(cycle), severity="advisory", rule="imported",
+            file=file, line=line, action=action,
+        ))
         imported += 1
     if imported == 0:
         return HandoffResult(cmd, FINDING_RECORDED,
@@ -552,17 +548,14 @@ def _apply_import(root: Path, cmd: str, normalized: list[ingestion.NormFinding])
             refreshed += 1
             continue
         fid = _next_id(cycle)
-        rec: dict[str, Any] = {
-            "id": fid, "severity": "advisory", "rule": nf.rule, "file": nf.file,
-            "line": nf.line, "action": nf.action,
-            "expected_evidence": None, "closure_criteria": None,
-            "state": "OPEN", "task": None, "commits": [], "evidence": None,
-            "fixed_at": None, "verified_at": None,
-            "imported": {"contract_version": ingestion.INPUT_CONTRACT_VERSION,
-                         "source_format": nf.source_format},
-            "producer": {"name": nf.producer_name, "version": nf.producer_version},
-            "reviewed_digest": digest,
-        }
+        rec: dict[str, Any] = findings_mod.new_finding(
+            id=fid, severity="advisory", rule=nf.rule, file=nf.file,
+            line=nf.line, action=nf.action,
+            imported={"contract_version": ingestion.INPUT_CONTRACT_VERSION,
+                      "source_format": nf.source_format},
+            producer={"name": nf.producer_name, "version": nf.producer_version},
+            reviewed_digest=digest,
+        )
         handoff["findings"].append(rec)
         index[ingestion.content_identity(nf)] = rec
         new_ids.append(fid)
@@ -800,10 +793,7 @@ def render_revision_text(data: dict, round: int) -> str:
         findings = [f for c, f in canonical_finding(data) if c is cycle]
     if not findings:
         return "APPROVED\n"
-    lines = []
-    for f in findings:
-        loc = f"{f['file']}:{f['line']}" if f.get("line") is not None else f.get("file")
-        lines.append(f"{loc} - {f.get('action')}")
+    lines = [findings_mod.format_finding_line(f) for f in findings]
     return "\n".join(lines) + "\n"
 
 

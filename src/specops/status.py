@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import copy
-import re
 from pathlib import Path
 
 import git
@@ -10,7 +9,7 @@ import yaml
 
 from specops import config, contextmap, gitops, ledger, shell, speckit
 from specops import evidence as evidence_mod
-from specops.errors import LedgerParseError, SpecopsError
+from specops.errors import SpecopsError
 from specops.ledger import now_utc
 
 # ---------------------------------------------------------------------------
@@ -20,11 +19,9 @@ from specops.ledger import now_utc
 LEDGER_FILENAME = "status.yaml"
 PHASES = ["SPECIFY", "PLAN", "TASKS", "IMPLEMENT", "REVIEW", "DONE"]
 TASK_STATUSES = ["PENDING", "IN_PROGRESS", "DONE"]
-EVIDENCE_CLASSES = {"CLI_LOG", "TEST_REPORT", "SCREENSHOT_PATH", "CODE_DIFF"}
 
-_PART_RE = re.compile(
-    r"^(" + "|".join(re.escape(c) for c in EVIDENCE_CLASSES) + r"):(.+)$"
-)
+# The `<CLASS>:<summary>` evidence grammar now has a single owner (Feature 018 US3):
+# :mod:`specops.evidence`. Task-close validates via ``evidence_mod.validate_string``.
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -156,21 +153,6 @@ def _read_tasks_md(feature_dir: Path) -> str:
     if tasks_md.is_file():
         return tasks_md.read_text(encoding="utf-8")
     return ""
-
-
-def _validate_evidence(evidence: str) -> bool:
-    """Return True when evidence matches the strict grammar: CLASS:summary[; CLASS:summary ...]."""
-    if not evidence:
-        return False
-    parts = evidence.split("; ")
-    for part in parts:
-        m = _PART_RE.match(part)
-        if not m:
-            return False
-        summary = m.group(2)
-        if not summary or summary[0] == " ":
-            return False
-    return True
 
 
 def read_baseline(root: Path) -> str:
@@ -484,10 +466,10 @@ def cmd_complete_task(
         if commits:
             data["recovery"]["last_commit"] = commits[0]
     else:
-        if not evidence or not _validate_evidence(evidence):
+        if not evidence or not evidence_mod.validate_string(evidence):
             raise SpecopsError(
                 f"Invalid evidence format. Expected '<CLASS>:<summary>[; ...]' "
-                f"with class in {sorted(EVIDENCE_CLASSES)}."
+                f"with class in {sorted(evidence_mod.EVIDENCE_CLASSES)}."
             )
         evidence_str = evidence
         evidence_command = "(evidence)"
@@ -531,36 +513,19 @@ def cmd_show(root: Path) -> str:
             "Cannot resolve active feature directory. Check .specify/feature.json."
         )
 
-    path = _ledger_path(feature_dir)
-    if not path.is_file():
-        raise SpecopsError(
-            f"Ledger not found: {path}. Run 'specops status init-spec' first."
-        )
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise LedgerParseError(f"Cannot parse ledger {path}: {exc}") from exc
-    if not isinstance(data, dict):
-        raise LedgerParseError(f"Ledger {path} has invalid structure.")
+    # Single ledger-loading authority (Feature 018 US3, SC-004): canonical
+    # existence/parse/shape diagnostics live only in ledger.load_raw.
+    data = ledger.load_raw(feature_dir)
+    # Counts come from the one snapshot routine, which tolerantly filters non-mapping
+    # task entries (FR-006) so a hand-edited ledger renders instead of crashing.
+    snap = compact_status(root)
 
     feature_name = data.get("feature", feature_dir.name)
     branch = data.get("branch", "unknown")
     phase = data.get("current_phase", "unknown")
 
-    tasks = data.get("tasks") or []
-    pending = sum(1 for t in tasks if t.get("status") == "PENDING" and not t.get("orphaned"))
-    in_progress = sum(
-        1 for t in tasks if t.get("status") == "IN_PROGRESS" and not t.get("orphaned")
-    )
-    done = sum(1 for t in tasks if t.get("status") == "DONE" and not t.get("orphaned"))
-    orphaned = sum(1 for t in tasks if t.get("orphaned"))
-    total = len(tasks)
-
-    active = next(
-        (t["id"] for t in tasks if t.get("status") == "IN_PROGRESS" and not t.get("orphaned")),
-        "none",
-    )
-
+    counts = snap["tasks"]
+    active = snap["active_task"] or "none"
     cycles = data.get("review_cycles") or []
 
     lines = [
@@ -569,8 +534,9 @@ def cmd_show(root: Path) -> str:
         f"phase: {phase}",
         f"active task: {active}",
         (
-            f"tasks: {total} total — "
-            f"{pending} pending, {in_progress} in progress, {done} done, {orphaned} orphaned"
+            f"tasks: {counts['total']} total — "
+            f"{counts['pending']} pending, {counts['in_progress']} in progress, "
+            f"{counts['done']} done, {counts['orphaned']} orphaned"
         ),
         f"review cycles: {len(cycles)}",
     ]

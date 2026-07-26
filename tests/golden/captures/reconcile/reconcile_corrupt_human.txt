@@ -4,7 +4,7 @@ $ specops reconcile
 --- stdout ---
 
 --- stderr ---
-Cannot parse ledger: while parsing a block mapping
+Cannot parse ledger <ROOT>/specs/001-demo/status.yaml: while parsing a block mapping
 expected <block end>, but found ':'
   in "<unicode string>", line 1, column 1:
     :
