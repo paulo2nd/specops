@@ -8,23 +8,20 @@ import yaml
 
 from specops import reconcile
 from specops.errors import LedgerParseError, SpecopsError
+from tests.conftest import git
 
 
 def _setup(tmp_path: Path, tasks: list) -> tuple[Path, Path]:
     """Return (root, feature_dir) with a git repo and a ledger containing *tasks*."""
     root = tmp_path / "repo"
     root.mkdir()
-    subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"], cwd=root, check=True, capture_output=True
-    )
-    subprocess.run(["git", "config", "user.name", "T"], cwd=root, check=True, capture_output=True)
+    git(root, "init")
+    git(root, "config", "user.email", "t@t.com")
+    git(root, "config", "user.name", "T")
     (root / "README.md").write_text("# test")
-    subprocess.run(["git", "add", "README.md"], cwd=root, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True
-    ).stdout.strip()
+    git(root, "add", "README.md")
+    git(root, "commit", "-m", "init")
+    head = git(root, "rev-parse", "HEAD")
 
     (root / ".specify" / "templates").mkdir(parents=True)
     (root / ".specify" / "feature.json").write_text(

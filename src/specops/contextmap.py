@@ -74,7 +74,7 @@ S_STALE_OK = "stale_ok"
 S_STALE_FOUND = "stale_found"
 
 # outcome class per status → drives the exit code (0/1/2).
-_CLASS_FOR_STATUS = {
+CLASS_FOR_STATUS = {
     S_NO_MAP: outcome.PASS,
     S_EMPTY_VALID: outcome.PASS,
     S_VALID: outcome.PASS,
@@ -135,7 +135,7 @@ class CommandResult(outcome.CommandResult):
     """A context command's outcome — the shared :class:`outcome.CommandResult` with this
     module's status→class map."""
 
-    _CLASS_MAP = _CLASS_FOR_STATUS
+    _CLASS_MAP = CLASS_FOR_STATUS
 
 
 def _diag(code: str, message: str, *, context_id: str | None = None,
@@ -183,7 +183,7 @@ def migrate_to_current(data: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _classify_pattern(pat: Any) -> str | None:
+def classify_pattern(pat: Any) -> str | None:
     """Return a defect code for an unsafe/invalid glob, or None when acceptable."""
     if not isinstance(pat, str) or pat == "":
         return "invalid_path_pattern"
@@ -246,7 +246,13 @@ def _specificity(pattern: str) -> Specificity:
     return (literal_prefix, -wildcards, segments)
 
 
-def _matches(pattern: str, path: str) -> bool:
+def matches(pattern: str, path: str) -> bool:
+    """Return whether *path* matches the gitignore-style *pattern* (``*``/``**``/``?``).
+
+    Public cross-module contract (Feature 018): the single glob-match primitive;
+    gateprofiles consumes it for path selection. An unparseable pattern returns
+    ``False`` (never raises).
+    """
     try:
         return _translate_glob(pattern).match(path) is not None
     except re.error:
@@ -279,7 +285,7 @@ def _parse_context(raw: Any, index: int, diags: list[dict[str, Any]]) -> Context
                             context_id=ctx_id, field_name="match"))
     else:
         for pat in match_raw:
-            code = _classify_pattern(pat)
+            code = classify_pattern(pat)
             if code is not None:
                 diags.append(_diag(code, f"pattern {pat!r} is {code.replace('_', ' ')}",
                                    context_id=ctx_id, field_name="match"))
@@ -414,7 +420,7 @@ def _check_ambiguous(contexts: list[Context], diags: list[dict[str, Any]]) -> No
             cid_b, pat_b, spec_b = scored[j]
             if cid_a == cid_b or spec_a != spec_b:
                 continue
-            if _matches(pat_b, _witness(pat_a)) or _matches(pat_a, _witness(pat_b)):
+            if matches(pat_b, _witness(pat_a)) or matches(pat_a, _witness(pat_b)):
                 key = tuple(sorted((cid_a, cid_b)))
                 if key in reported:
                     continue
@@ -515,11 +521,11 @@ def _read_set_for(ctx: Context, phase: str | None) -> tuple[list[str], str]:
     return [], "empty"
 
 
-def _candidates_for_path(contexts: list[Context], path: str) -> list[Candidate]:
+def candidates_for_path(contexts: list[Context], path: str) -> list[Candidate]:
     """Best matching (context, pattern, specificity) per context, most-specific first."""
     best: list[Candidate] = []
     for ctx in contexts:
-        matched = [(pat, _specificity(pat)) for pat in ctx.match if _matches(pat, path)]
+        matched = [(pat, _specificity(pat)) for pat in ctx.match if matches(pat, path)]
         if not matched:
             continue
         pat, spec = max(matched, key=lambda t: (t[1], t[0]))
@@ -600,7 +606,7 @@ def _resolve(contexts: list[Context], by_id: dict[str, Context], *,
             return None, S_NO_MATCH, []
         return ctx, S_RESOLVED, [(ctx, ctx.match[0] if ctx.match else "", (0, 0, 0))]
     assert path is not None
-    cands = _candidates_for_path(contexts, path)
+    cands = candidates_for_path(contexts, path)
     if not cands:
         return None, S_NO_MATCH, []
     if len(cands) >= 2 and cands[0][2] == cands[1][2]:
@@ -656,7 +662,7 @@ def cmd_validate(root: Path) -> CommandResult:
 
 
 # Map states from which a path/id can be resolved (everything else fails closed).
-_RESOLVABLE = (S_VALID, S_EMPTY_VALID)
+RESOLVABLE = (S_VALID, S_EMPTY_VALID)
 
 
 def _input_error(command: str, path: str | None, ctx_id: str | None,
@@ -678,7 +684,7 @@ def cmd_resolve(root: Path, *, path: str | None, ctx_id: str | None,
     if err is not None:
         return err
     vr = validate(root)
-    if vr.status not in _RESOLVABLE:
+    if vr.status not in RESOLVABLE:
         return _invalid_map_result("resolve", vr)
     contexts = vr.contexts or []
     by_id = {c.id: c for c in contexts}
@@ -709,7 +715,7 @@ def cmd_explain(root: Path, *, path: str | None, ctx_id: str | None,
     if err is not None:
         return err
     vr = validate(root)
-    if vr.status not in _RESOLVABLE:
+    if vr.status not in RESOLVABLE:
         return _invalid_map_result("explain", vr)
     contexts = vr.contexts or []
     by_id = {c.id: c for c in contexts}
@@ -778,7 +784,7 @@ def map_digest(root: Path) -> str | None:
     :func:`provenance_for`.
     """
     vr = validate(root)
-    if vr.status not in _RESOLVABLE:
+    if vr.status not in RESOLVABLE:
         return None
     return _digest_contexts(vr.contexts or [])
 
@@ -811,7 +817,7 @@ def _owner_of(contexts: list[Context], path: str) -> tuple[Context | None, str |
     probe may miss) — impact/provenance never silently guess an owner, matching
     the fail-safe stance of `_resolve`/`cmd_plan_check`.
     """
-    cands = _candidates_for_path(contexts, path)
+    cands = candidates_for_path(contexts, path)
     if not cands:
         return None, None
     if len(cands) >= 2 and cands[0][2] == cands[1][2]:
@@ -878,7 +884,7 @@ def cmd_impact(root: Path, *, paths: list[str]) -> CommandResult:
         return CommandResult("impact", S_NO_MAP, "context impact: no map present",
                              {"impact": {"changed_paths": sorted(set(paths)),
                                          "unowned_paths": [], "affected": [], "bounded": True}})
-    if vr.status not in _RESOLVABLE:
+    if vr.status not in RESOLVABLE:
         return _invalid_map_result("impact", vr)
     contexts = vr.contexts or []
     by_id = {c.id: c for c in contexts}
@@ -913,7 +919,7 @@ def provenance_for(root: Path, changed_paths: list[str]) -> dict[str, Any]:
     vr = validate(root)
     if vr.status == S_NO_MAP:
         return {"map": "none"}
-    if vr.status not in _RESOLVABLE:
+    if vr.status not in RESOLVABLE:
         return {"map": "invalid"}
     contexts = vr.contexts or []
     return {
@@ -933,14 +939,14 @@ def cmd_stale(root: Path, tracked_files: list[str]) -> CommandResult:
     vr = validate(root)
     if vr.status == S_NO_MAP:
         return CommandResult("stale", S_NO_MAP, "context stale: no map present", {"stale": []})
-    if vr.status not in _RESOLVABLE:
+    if vr.status not in RESOLVABLE:
         return _invalid_map_result("stale", vr)
     contexts = vr.contexts or []
     tracked = set(tracked_files)
     stale: list[dict[str, str]] = []
     for ctx in contexts:
         for pat in ctx.match:
-            if not any(_matches(pat, f) for f in tracked):
+            if not any(matches(pat, f) for f in tracked):
                 stale.append({"context_id": ctx.id, "pattern": pat})
     stale.sort(key=lambda s: (s["context_id"], s["pattern"]))
     if stale:
@@ -965,7 +971,7 @@ def cmd_plan_check(root: Path, *, plan_text: str, phase: str | None = None) -> C
     if vr.status == S_NO_MAP:
         return CommandResult("plan-check", S_NO_MAP,
                              "context plan-check: no map present (no declaration required)")
-    if vr.status not in _RESOLVABLE:
+    if vr.status not in RESOLVABLE:
         return _invalid_map_result("plan-check", vr)
     contexts = vr.contexts or []
     by_id = {c.id: c for c in contexts}
@@ -989,7 +995,7 @@ def cmd_plan_check(root: Path, *, plan_text: str, phase: str | None = None) -> C
     unowned: list[str] = []
     undeclared: list[dict[str, str]] = []
     for path in declared_paths:
-        cands = _candidates_for_path(contexts, path)
+        cands = candidates_for_path(contexts, path)
         if not cands:
             unowned.append(path)
             continue

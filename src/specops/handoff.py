@@ -20,12 +20,12 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Iterator
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from specops import contextmap, gitops, ingestion, ledger, outcome, speckit, status, trace
 from specops import evidence as evidence_mod
+from specops import findings as findings_mod
 from specops.errors import SpecopsError
 
 # --- Versioned JSON contract (FR-012) --------------------------------------
@@ -91,23 +91,11 @@ _CLASS_FOR_STATUS = {
 _SEVERITY_RANK = {"blocking": 0, "advisory": 1}
 
 
-@dataclass
-class HandoffResult:
-    """A render-agnostic command outcome consumed by the CLI (mirrors
-    :class:`specops.trace.TraceResult`)."""
+class HandoffResult(outcome.CommandResult):
+    """A handoff command's outcome — the shared :class:`outcome.CommandResult` carrying
+    this module's status→class map (mirrors :class:`specops.trace.TraceResult`)."""
 
-    command: str
-    status: str
-    human: str
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def cls(self) -> str:
-        return _CLASS_FOR_STATUS[self.status]
-
-    @property
-    def exit_code(self) -> int:
-        return outcome.exit_for(self.cls)
+    _CLASS_MAP = _CLASS_FOR_STATUS
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +162,7 @@ def _sort_key(cycle: dict, f: dict) -> tuple:  # noqa: ANN401 (heterogeneous sor
     )
 
 
-def _canonical(data: dict) -> list[tuple[dict, dict]]:
+def canonical_finding(data: dict) -> list[tuple[dict, dict]]:
     """Every (cycle, finding) in canonical order (round, severity, file, line, id)."""
     return sorted(_iter_findings(data), key=lambda cf: _sort_key(*cf))
 
@@ -189,7 +177,7 @@ def blocking_approval_check(data: dict) -> list[str]:
     lacking a usable ``id`` is skipped here (it is a ledger defect surfaced by
     ``handoff validate``, not a silent, un-nameable blocker).
     """
-    return _unresolved_blocking_ids(f for _cycle, f in _canonical(data))
+    return _unresolved_blocking_ids(f for _cycle, f in canonical_finding(data))
 
 
 def _is_resolved(finding: dict) -> bool:
@@ -220,8 +208,8 @@ def _load_write(
     repo = gitops.find_repo(root)
     if repo is None:
         return HandoffResult("handoff", NOT_A_REPO, "handoff: not a Git repository")
-    feature_dir = status._get_feature_dir(root)
-    data, base_rev, base_violations, _repo = status._load_for_write(root, feature_dir)
+    feature_dir = status.get_feature_dir(root)
+    data, base_rev, base_violations, _repo = status.load_for_write(root, feature_dir)
     return feature_dir, data, base_rev, base_violations, repo
 
 
@@ -234,7 +222,7 @@ def cmd_finding_add(
     severity = (severity or "").strip()
     if severity not in ledger.SEVERITIES:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: invalid severity '{severity}'")
-    file = trace._norm(file) if file else ""
+    file = trace.norm_path(file) if file else ""
     for name, val in (("--rule", rule), ("--file", file), ("--action", action)):
         if not (val or "").strip():
             return HandoffResult(cmd, BAD_ARGS, f"{cmd}: {name} is required")
@@ -262,22 +250,20 @@ def cmd_finding_add(
         return HandoffResult(cmd, DUPLICATE_ID_CREATE, f"{cmd}: finding id '{fid}' already exists",
                              {"id": fid})
 
-    handoff["findings"].append({
-        "id": fid, "severity": severity, "rule": rule.strip(), "file": file,
-        "line": line, "action": action.strip(),
-        "expected_evidence": (expected_evidence or "").strip() or None,
-        "closure_criteria": (closure or "").strip() or None,
-        "state": "OPEN", "task": None, "commits": [], "evidence": None,
-        "fixed_at": None, "verified_at": None,
-    })
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    handoff["findings"].append(findings_mod.new_finding(
+        id=fid, severity=severity, rule=rule.strip(), file=file, line=line,
+        action=action.strip(),
+        expected_evidence=(expected_evidence or "").strip() or None,
+        closure_criteria=(closure or "").strip() or None,
+    ))
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_RECORDED, f"{cmd}: recorded {fid} ({severity})", {"id": fid})
 
 
 def cmd_authorize(root: Path, paths: list[str]) -> HandoffResult:
     """Set/extend the current round handoff's authorized corrective paths (FR-009)."""
     cmd = "handoff authorize"
-    norm = [trace._norm(p) for p in paths if (p or "").strip()]
+    norm = [trace.norm_path(p) for p in paths if (p or "").strip()]
     if not norm:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: at least one --path is required")
     loaded = _load_write(root)
@@ -291,7 +277,7 @@ def cmd_authorize(root: Path, paths: list[str]) -> HandoffResult:
     for p in norm:
         if p not in handoff["authorized_paths"]:
             handoff["authorized_paths"].append(p)
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, HANDOFF_AUTHORIZED,
                          f"{cmd}: authorized {len(norm)} path(s)",
                          {"authorized_paths": list(handoff["authorized_paths"])})
@@ -337,7 +323,7 @@ def cmd_finding_fix(
     if not commits:
         return HandoffResult(cmd, PRECONDITION_UNMET,
                              f"{cmd}: at least one --commit (or --auto) is required", {"id": fid})
-    if not evidence or not status._validate_evidence(evidence):
+    if not evidence or not evidence_mod.validate_string(evidence):
         return HandoffResult(cmd, PRECONDITION_UNMET,
                              f"{cmd}: valid <CLASS>:<summary> --evidence is required", {"id": fid})
 
@@ -357,7 +343,7 @@ def cmd_finding_fix(
         "state": "FIXED", "task": task, "commits": commits,
         "evidence": evidence, "evidence_id": stored["id"], "fixed_at": ledger.now_utc(),
     })
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_FIXED, f"{cmd}: {fid} -> FIXED (task {task})", {"id": fid})
 
 
@@ -384,7 +370,7 @@ def cmd_finding_verify(root: Path, fid: str) -> HandoffResult:
                              {"id": fid})
 
     finding.update({"state": "VERIFIED", "verified_at": ledger.now_utc()})
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_VERIFIED, f"{cmd}: {fid} -> VERIFIED", {"id": fid})
 
 
@@ -414,7 +400,7 @@ def cmd_finding_dismiss(root: Path, fid: str, *, reason: str) -> HandoffResult:
 
     finding.update({"state": "DISMISSED", "dismiss_reason": reason,
                     "verified_at": ledger.now_utc()})
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_DISMISSED, f"{cmd}: {fid} -> DISMISSED", {"id": fid})
 
 
@@ -440,7 +426,7 @@ def cmd_close(root: Path) -> HandoffResult:
                              f"{cmd}: unverified blocking findings remain: {', '.join(unverified)}",
                              {"unverified": unverified})
     handoff["closed_at"] = ledger.now_utc()
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, HANDOFF_CLOSED, f"{cmd}: handoff closed")
 
 
@@ -471,27 +457,24 @@ def cmd_import(root: Path, round: int | None) -> HandoffResult:
             for f in handoff["findings"]}
     imported = 0
     for raw in rev.read_text(encoding="utf-8").splitlines():
-        m = trace._FINDING_RE.match(raw.strip())
-        if not m:
+        parsed = findings_mod.parse_finding_line(raw)
+        if parsed is None:
             continue
-        file = trace._norm(m.group("file"))
-        line = int(m.group("line")) if m.group("line") else None
-        action = m.group("text").strip()
+        file = trace.norm_path(parsed["file"])
+        line = parsed["line"]
+        action = parsed["action"]
         if (file, line, action) in seen:
             continue
         seen.add((file, line, action))
-        handoff["findings"].append({
-            "id": _next_id(cycle), "severity": "advisory", "rule": "imported",
-            "file": file, "line": line, "action": action,
-            "expected_evidence": None, "closure_criteria": None,
-            "state": "OPEN", "task": None, "commits": [], "evidence": None,
-            "fixed_at": None, "verified_at": None,
-        })
+        handoff["findings"].append(findings_mod.new_finding(
+            id=_next_id(cycle), severity="advisory", rule="imported",
+            file=file, line=line, action=action,
+        ))
         imported += 1
     if imported == 0:
         return HandoffResult(cmd, FINDING_RECORDED,
                              f"{cmd}: nothing new to import (idempotent)", {"imported": 0})
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_RECORDED, f"{cmd}: imported {imported} finding(s)",
                          {"imported": imported})
 
@@ -565,23 +548,20 @@ def _apply_import(root: Path, cmd: str, normalized: list[ingestion.NormFinding])
             refreshed += 1
             continue
         fid = _next_id(cycle)
-        rec: dict[str, Any] = {
-            "id": fid, "severity": "advisory", "rule": nf.rule, "file": nf.file,
-            "line": nf.line, "action": nf.action,
-            "expected_evidence": None, "closure_criteria": None,
-            "state": "OPEN", "task": None, "commits": [], "evidence": None,
-            "fixed_at": None, "verified_at": None,
-            "imported": {"contract_version": ingestion.INPUT_CONTRACT_VERSION,
-                         "source_format": nf.source_format},
-            "producer": {"name": nf.producer_name, "version": nf.producer_version},
-            "reviewed_digest": digest,
-        }
+        rec: dict[str, Any] = findings_mod.new_finding(
+            id=fid, severity="advisory", rule=nf.rule, file=nf.file,
+            line=nf.line, action=nf.action,
+            imported={"contract_version": ingestion.INPUT_CONTRACT_VERSION,
+                      "source_format": nf.source_format},
+            producer={"name": nf.producer_name, "version": nf.producer_version},
+            reviewed_digest=digest,
+        )
         handoff["findings"].append(rec)
         index[ingestion.content_identity(nf)] = rec
         new_ids.append(fid)
         imported += 1
 
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDINGS_IMPORTED,
                          f"{cmd}: imported {imported}, refreshed {refreshed}",
                          {"imported": imported, "refreshed": refreshed, "ids": new_ids})
@@ -655,7 +635,7 @@ def cmd_finding_promote(
         "severity": "blocking", "closure_criteria": closure, "expected_evidence": ee,
         "promotion": {"at": ledger.now_utc()},
     })
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_PROMOTED, f"{cmd}: {fid} -> blocking (promoted)", {"id": fid})
 
 
@@ -703,7 +683,7 @@ def cmd_validate(root: Path) -> HandoffResult:
         (_STRUCTURAL_DEFECT_STATUS[kind], msg)
         for kind, msg in ledger.finding_structural_defects(data)
     ]
-    for _cycle, f in _canonical(data):
+    for _cycle, f in canonical_finding(data):
         fid = str(f.get("id"))
         task = f.get("task")
         if task and task not in known_tasks:
@@ -772,7 +752,7 @@ def cmd_report(root: Path) -> HandoffResult:
     data = _load_read(root)
     repo = gitops.find_repo(root)  # read-only: only used to recompute per-path digests
     digest_cache: dict[str, str | None] = {}  # memoize HEAD blobs across shared paths
-    views = [_finding_view(c, f, repo, digest_cache) for c, f in _canonical(data)]
+    views = [_finding_view(c, f, repo, digest_cache) for c, f in canonical_finding(data)]
     remaining = blocking_approval_check(data)
 
     if not views:
@@ -810,13 +790,10 @@ def render_revision_text(data: dict, round: int) -> str:
     cycle = next((c for c in _cycles(data) if c.get("round") == round), None)
     findings = []
     if cycle is not None and isinstance(cycle.get("handoff"), dict):
-        findings = [f for c, f in _canonical(data) if c is cycle]
+        findings = [f for c, f in canonical_finding(data) if c is cycle]
     if not findings:
         return "APPROVED\n"
-    lines = []
-    for f in findings:
-        loc = f"{f['file']}:{f['line']}" if f.get("line") is not None else f.get("file")
-        lines.append(f"{loc} - {f.get('action')}")
+    lines = [findings_mod.format_finding_line(f) for f in findings]
     return "\n".join(lines) + "\n"
 
 

@@ -69,3 +69,50 @@ def test_render_mirrors_invoked_command_name() -> None:
     assert {k: v for k, v in pre.items() if k != "command"} == {
         k: v for k, v in rev.items() if k != "command"
     }
+
+
+# --- Feature 018 (US1): trace/handoff join the canonical CommandResult ------
+
+# The exact status→exit-code contract every family must preserve after the
+# consolidation. Enumerated here (not derived from the modules) so a subclass that
+# drops or remaps a status is caught (SC-003, T007).
+_TRACE_EXIT = {
+    "trace_ok": 0, "drift_clean": 0, "ack_recorded": 0, "ack_idempotent": 0,
+    "ack_already_planned": 0,
+    "drift_blocked": 1, "trace_incomplete": 1,
+    "usage_error": 2, "ack_conflict": 2, "ack_unknown_task": 2,
+}
+_HANDOFF_EXIT = {
+    "finding_recorded": 0, "handoff_authorized": 0, "finding_fixed": 0,
+    "finding_verified": 0, "finding_dismissed": 0, "findings_imported": 0,
+    "finding_promoted": 0, "handoff_closed": 0, "handoff_already_closed": 0,
+    "validate_ok": 0, "report_ok": 0, "render_ok": 0,
+    "approval_blocked": 1, "close_blocked": 1, "dangling_reference": 1,
+    "missing_closure": 1, "contradictory_state": 1, "duplicate_id": 1,
+    "illegal_transition": 2, "precondition_unmet": 2, "unknown_task": 2,
+    "unknown_finding": 2, "duplicate_id_create": 2, "not_a_repo": 2, "bad_args": 2,
+}
+
+
+def test_trace_and_handoff_results_are_command_result_subclasses() -> None:
+    from specops import handoff, trace
+
+    assert issubclass(trace.TraceResult, outcome.CommandResult)
+    assert issubclass(handoff.HandoffResult, outcome.CommandResult)
+
+
+@pytest.mark.parametrize(
+    "module_attr, expected",
+    [("trace.TraceResult", _TRACE_EXIT), ("handoff.HandoffResult", _HANDOFF_EXIT)],
+)
+def test_result_class_map_reproduces_exit_mapping(module_attr, expected) -> None:
+    """Each family's _CLASS_MAP reproduces today's status→class→exit-code mapping exactly."""
+    import importlib
+
+    mod_name, cls_name = module_attr.split(".")
+    cls = getattr(importlib.import_module(f"specops.{mod_name}"), cls_name)
+    # Every enumerated status is present, and no extra statuses have crept in.
+    assert set(cls._CLASS_MAP) == set(expected)
+    for status, code in expected.items():
+        r = cls(command="x", status=status, human="h")
+        assert r.exit_code == code, f"{module_attr}[{status}] should exit {code}"

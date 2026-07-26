@@ -1,0 +1,8 @@
+$ specops context init
+--- exit_code ---
+0
+--- stdout ---
+context init: created .specify/specops/context-map.yaml
+
+--- stderr ---
+

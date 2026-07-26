@@ -1,7 +1,6 @@
 """
 Shared pytest fixtures: temporary Git repository and fake Speckit layout.
 """
-import datetime
 import json
 import subprocess
 from pathlib import Path
@@ -10,6 +9,20 @@ import pytest
 import yaml
 
 from specops import ledger
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register the golden-capture record flag (Feature 018 behavior freeze).
+
+    Declared in the tests-root conftest (not ``tests/golden/conftest.py``) so it is
+    honoured both by a scoped ``pytest tests/golden`` run and the full ``pytest tests/``
+    suite — a non-root conftest's ``pytest_addoption`` is skipped when the full tree
+    is collected.
+    """
+    parser.addoption(
+        "--golden-record", action="store_true", default=False,
+        help="Record golden captures instead of diffing against them (Feature 018).",
+    )
 
 
 @pytest.fixture()
@@ -103,27 +116,13 @@ def ledger_in_review(tmp_git_repo: Path) -> Path:
         json.dumps({"feature_directory": "specs/001-review-test"})
     )
     feature_dir = root / "specs" / "001-review-test"
-    feature_dir.mkdir(parents=True)
-
-    data = {
-        "feature": "001-review-test",
-        "branch": "main",
-        "baseline": "abc1234",
-        "created_at": str(datetime.date.today()),
-        "updated_at": str(datetime.date.today()),
-        "current_phase": "REVIEW",
-        "recovery": {"active_task": None, "last_commit": None, "blockers": []},
-        "tasks": [],
-        "review_cycles": [
-            {
-                "round": 1,
-                "started_at": str(datetime.date.today()),
-                "completed_at": None,
-                "result": None,
-            }
+    # Re-expressed via the shared v1 builder (Feature 018 US3, T029) — one ledger factory.
+    make_v1_ledger(
+        feature_dir, feature="001-review-test", phase="REVIEW",
+        review_cycles=[
+            {"round": 1, "started_at": "2026-07-05", "completed_at": None, "result": None},
         ],
-    }
-    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+    )
     return root
 
 
@@ -192,11 +191,38 @@ def snapshot_tree(root: Path) -> dict[str, bytes]:
 # ---------------------------------------------------------------------------
 
 
-def _git(root: Path, *args: str) -> str:
+def git(root: Path, *args: str) -> str:
     out = subprocess.run(
         ["git", *args], cwd=root, check=True, capture_output=True, text=True
     )
     return out.stdout.strip()
+
+
+def cli(root: Path, *args: str) -> subprocess.CompletedProcess:
+    """Invoke the ``specops`` CLI in-process via Typer's CliRunner (Feature 018 US4).
+
+    Returns a :class:`subprocess.CompletedProcess`-compatible object
+    (``returncode``/``stdout``/``stderr``, streams separated) so call sites read exactly
+    as the retired ``subprocess.run(["specops", …])`` path did — but without spawning a
+    Python interpreter per call (the SC-005 speed win). Real exit codes, stream
+    separation, and console encoding stay covered by the ``@pytest.mark.subprocess``
+    smoke set (tests/integration/test_cli_smoke.py)."""
+    import os
+
+    from typer.testing import CliRunner
+
+    from specops.cli import app
+
+    cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        result = CliRunner().invoke(app, [str(a) for a in args])
+    finally:
+        os.chdir(cwd)
+    return subprocess.CompletedProcess(
+        args=["specops", *args], returncode=result.exit_code,
+        stdout=result.stdout, stderr=result.stderr,
+    )
 
 
 def make_trace_ledger(
@@ -266,11 +292,11 @@ def trace_repo(tmp_git_repo: Path):
         plan_lines = "\n".join(f"- `{p}` (create)" for p in plan_paths)
         (feature_dir / "plan.md").write_text("# Plan\n\n" + plan_lines + "\n")
         (feature_dir / "tasks.md").write_text("# Tasks\n\n" + "\n".join(tasks_md_tasks) + "\n")
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "scaffolding")
-        baseline = _git(root, "rev-parse", "HEAD")
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "scaffolding")
+        baseline = git(root, "rev-parse", "HEAD")
         ledger = make_trace_ledger(
-            feature="001-demo", branch=_git(root, "rev-parse", "--abbrev-ref", "HEAD"),
+            feature="001-demo", branch=git(root, "rev-parse", "--abbrev-ref", "HEAD"),
             baseline=baseline, tasks=tasks, review_cycles=review_cycles,
             acknowledgements=acks,
         )
@@ -280,8 +306,8 @@ def trace_repo(tmp_git_repo: Path):
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content)
         if changed:
-            _git(root, "add", "-A")
-            _git(root, "commit", "-m", "work")
+            git(root, "add", "-A")
+            git(root, "commit", "-m", "work")
         return root
 
     return build
@@ -354,12 +380,12 @@ def handoff_repo(tmp_git_repo: Path):
             + "\n".join(f"- **{sc}**: measurable." for sc in spec_scs) + "\n")
         (feature_dir / "plan.md").write_text("# Plan\n")
         (feature_dir / "tasks.md").write_text("# Tasks\n\n" + "\n".join(tasks_md_tasks) + "\n")
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "scaffolding")
-        baseline = _git(root, "rev-parse", "HEAD")
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "scaffolding")
+        baseline = git(root, "rev-parse", "HEAD")
         led = make_trace_ledger(
             feature="001-demo",
-            branch=_git(root, "rev-parse", "--abbrev-ref", "HEAD"),
+            branch=git(root, "rev-parse", "--abbrev-ref", "HEAD"),
             baseline=baseline, tasks=tasks,
             review_cycles=review_cycles if review_cycles is not None else [make_cycle()],
             phase=phase,
@@ -373,7 +399,7 @@ def handoff_repo(tmp_git_repo: Path):
 
 def head_commit(root: Path) -> str:
     """Return the current HEAD sha of the repo at *root* (for finding-fix links)."""
-    return _git(root, "rev-parse", "HEAD")
+    return git(root, "rev-parse", "HEAD")
 
 
 # ---------------------------------------------------------------------------
@@ -408,10 +434,10 @@ def doctor_healthy_repo(fake_speckit_repo: Path) -> Path:
     )
     feature_dir = root / "specs" / "001-demo"
     (feature_dir / "spec.md").write_text("# Spec\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "scaffold")
-    baseline = _git(root, "rev-parse", "HEAD")
-    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "scaffold")
+    baseline = git(root, "rev-parse", "HEAD")
+    branch = git(root, "rev-parse", "--abbrev-ref", "HEAD")
     led = make_trace_ledger(
         feature="001-demo", branch=branch, baseline=baseline, phase="IMPLEMENT"
     )

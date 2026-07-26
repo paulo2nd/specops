@@ -56,5 +56,5 @@ def from_ledger(data: dict[str, Any], *, tool_version: str = "0.0.0") -> dict[st
     """Project every structured finding in *data* (canonical order) to SARIF 2.1.0."""
     from specops import handoff
 
-    findings = [f for _cycle, f in handoff._canonical(data)]
+    findings = [f for _cycle, f in handoff.canonical_finding(data)]
     return project(findings, tool_version=tool_version)

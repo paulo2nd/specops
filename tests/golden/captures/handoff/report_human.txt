@@ -1,0 +1,9 @@
+$ specops handoff report
+--- exit_code ---
+0
+--- stdout ---
+handoff report: 1 finding(s)
+  R1-F01 [advisory] OPEN src/a.py:1 — do the thing
+
+--- stderr ---
+

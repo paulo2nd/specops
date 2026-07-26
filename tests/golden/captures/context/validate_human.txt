@@ -1,0 +1,8 @@
+$ specops context validate
+--- exit_code ---
+0
+--- stdout ---
+validate: valid (2 contexts, schema v1)
+
+--- stderr ---
+

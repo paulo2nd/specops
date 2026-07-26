@@ -1,0 +1,8 @@
+$ specops trace classify --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "trace classify", "outcome": "ok", "class": "pass", "status": "trace_ok", "output_version": 1, "paths": [{"path": "src/planned.py", "change": "added", "class": "planned", "attribution": "plan-declared"}, {"path": "src/surprise.py", "change": "added", "class": "unexplained", "attribution": "none"}], "counts": {"planned": 1, "discovered-and-acknowledged": 0, "unexplained": 1}}
+
+--- stderr ---
+

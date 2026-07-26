@@ -127,7 +127,7 @@ def _safe_read(path: Path) -> str:
 def _strip_all_specops_blocks(path: Path) -> None:
     """Remove every SpecOps marker block from *path*, preserving surrounding
     content (delegates to the tested :func:`initializer.remove_block`)."""
-    regions = initializer._scan_markers(path.read_text(encoding="utf-8"))
+    regions = initializer.scan_markers(path.read_text(encoding="utf-8"))
     for block_id, _begin, _end in regions:
         initializer.remove_block(path, block_id)
 

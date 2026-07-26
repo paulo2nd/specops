@@ -180,7 +180,7 @@ def _norm_contract_finding(
         return None, d
     commit = item.get("reviewed_commit") or doc_commit
     return NormFinding(
-        rule=rule, file=trace._norm(file), line=line, action=action,  # type: ignore[arg-type]
+        rule=rule, file=trace.norm_path(file), line=line, action=action,  # type: ignore[arg-type]
         producer_name=name, producer_version=version,  # type: ignore[arg-type]
         reviewed_commit=commit if isinstance(commit, str) else None,
         source_format="json", declared_severity=item.get("severity"),
@@ -277,7 +277,7 @@ def _norm_sarif_result(
     if uri is None:
         return None, [f"run {ri} result {xi}: no usable physical location"]
     return NormFinding(
-        rule=rule, file=trace._norm(uri), line=line, action=action,
+        rule=rule, file=trace.norm_path(uri), line=line, action=action,
         producer_name=name, producer_version=version,
         reviewed_commit=None, source_format="sarif",
         declared_severity=res.get("level"),

@@ -287,7 +287,7 @@ def _match(
         if ref is not None and ref in gate_refs:
             return True, f"{R_GATE_REF}:{ref}"
     for glob in ap.paths:
-        if any(contextmap._matches(glob, path) for path in changed_paths):
+        if any(contextmap.matches(glob, path) for path in changed_paths):
             return True, f"{R_PATH}:{glob}"
     for key, value in ap.risk:
         if key in risk_index and (value is None or _norm(value) in risk_index[key]):
@@ -316,7 +316,7 @@ def select_gates(
     return results
 
 
-def _affected_for(root: Path, changed_paths: list[str]) -> list[dict[str, Any]]:
+def affected_for(root: Path, changed_paths: list[str]) -> list[dict[str, Any]]:
     """Resolve affected contexts (with gates/risk) for the changed paths.
 
     Degrades to an empty list when no map is present or it is unresolvable — so
@@ -441,7 +441,7 @@ def _validate_applies(
             diags.append(f"{name}: `applies.paths` must be a list.")
         else:
             for pat in paths:
-                code = contextmap._classify_pattern(pat)
+                code = contextmap.classify_pattern(pat)
                 if code:
                     diags.append(f"{name}: {code} in `applies.paths`: {pat!r}.")
     if known_ids is not None and isinstance(contexts, list):
@@ -460,7 +460,7 @@ def cmd_list(root: Path, changed_paths: list[str]) -> GateCommandResult:
     profiles, raw = parse(root)
     used_default = not profiles
     gates = profiles if profiles else default_profile(root)
-    affected = _affected_for(root, changed_paths)
+    affected = affected_for(root, changed_paths)
     selection = select_gates(gates, changed_paths, affected)
 
     rows = [

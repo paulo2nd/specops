@@ -188,7 +188,7 @@ def register_commands(root: Path) -> list[dict]:
     for target in speckit.review_command_targets(root):
         review_path: Path = target["review_path"]
         sep = target["separator"]
-        initializer._install_review(review_path, review_content, sep)
+        initializer.install_review(review_path, review_content, sep)
         commands.append(
             {
                 "id": f"specops{sep}review",

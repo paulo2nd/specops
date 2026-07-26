@@ -161,10 +161,10 @@ def test_specificity_fewer_wildcards_wins_on_equal_prefix() -> None:
 
 
 def test_glob_matching() -> None:
-    assert cm._matches("src/api/**", "src/api/auth/login.py")
-    assert cm._matches("**/*.py", "src/a.py")
-    assert cm._matches("src/**/*.py", "src/api/a.py")
-    assert not cm._matches("src/api/**", "src/config/x.py")
+    assert cm.matches("src/api/**", "src/api/auth/login.py")
+    assert cm.matches("**/*.py", "src/a.py")
+    assert cm.matches("src/**/*.py", "src/api/a.py")
+    assert not cm.matches("src/api/**", "src/config/x.py")
 
 
 # ---------------------------------------------------------------------------

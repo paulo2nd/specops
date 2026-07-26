@@ -1,0 +1,9 @@
+$ specops gate list
+--- exit_code ---
+0
+--- stdout ---
+gate-list: 1/1 selected from 1 declared profile(s):
+  [x] smoke (required) — always
+
+--- stderr ---
+

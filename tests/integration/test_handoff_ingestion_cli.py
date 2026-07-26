@@ -10,11 +10,11 @@ from pathlib import Path
 
 import yaml
 
-from tests.conftest import _git, make_cycle, make_task
+from tests.conftest import cli, git, make_cycle, make_task
 
 
 def _run(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["specops", *args], cwd=root, capture_output=True, text=True)
+    return cli(root, *args)
 
 
 def _ledger_text(root: Path) -> str:
@@ -37,8 +37,8 @@ def _add_commit(root: Path, path: str, content: str) -> None:
     fp = root / path
     fp.parent.mkdir(parents=True, exist_ok=True)
     fp.write_text(content)
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", f"touch {path}")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", f"touch {path}")
 
 
 def _json_doc(findings=None):

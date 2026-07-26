@@ -1,0 +1,10 @@
+$ specops context validate
+--- exit_code ---
+1
+--- stdout ---
+
+--- stderr ---
+validate: schema_invalid (2 issues)
+  - [duplicate_context_id] context id 'api' is declared twice
+  - [dangling_dependency] context 'api' depends on unknown context 'ghost'
+

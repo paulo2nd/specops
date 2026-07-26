@@ -639,13 +639,19 @@ def backup_ledger(root: Path, feature_dir: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _ledger_path(feature_dir: Path) -> Path:
+def ledger_path(feature_dir: Path) -> Path:
+    """Return the canonical ``status.yaml`` path for *feature_dir*.
+
+    Public cross-module contract (Feature 018): the single source of the ledger's
+    on-disk location; lane resolves the ledger path through this rather than
+    re-deriving it. Pure — never touches disk.
+    """
     return feature_dir / LEDGER_FILENAME
 
 
 def load_raw(feature_dir: Path) -> dict:
     """Read the ledger dict. Never mutates disk. Ignores any stale `.tmp` sidecar."""
-    path = _ledger_path(feature_dir)
+    path = ledger_path(feature_dir)
     if not path.is_file():
         raise SpecopsError(
             f"Ledger not found: {path}. Run 'specops status init-spec' first."
@@ -764,7 +770,7 @@ class _LedgerLock:
 
 def write_new(feature_dir: Path, data: dict) -> None:
     """Atomically write a brand-new ledger (init-spec). No CAS (file must be absent)."""
-    _atomic_write(_ledger_path(feature_dir), _dump(data))
+    _atomic_write(ledger_path(feature_dir), _dump(data))
 
 
 def save(feature_dir: Path, data: dict, *, base_revision: int) -> None:
@@ -776,7 +782,7 @@ def save(feature_dir: Path, data: dict, *, base_revision: int) -> None:
     - Otherwise advances the revision, refreshes timestamps and recovery metadata,
       and writes atomically.
     """
-    path = _ledger_path(feature_dir)
+    path = ledger_path(feature_dir)
     with _LedgerLock(path):
         on_disk: dict | None = None
         if path.is_file():

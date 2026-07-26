@@ -1,0 +1,8 @@
+$ specops context validate --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "validate", "outcome": "ok", "class": "pass", "status": "valid", "output_version": 1, "context_count": 2, "schema_version": 1}
+
+--- stderr ---
+

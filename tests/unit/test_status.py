@@ -1,5 +1,4 @@
 """Unit tests for status.py — phase machine, task transitions, evidence validation."""
-import datetime
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -10,33 +9,11 @@ import yaml
 from specops import ledger
 from specops import status as s
 from specops.errors import SpecopsError
+from tests.conftest import git, make_v1_ledger
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _make_ledger(
-    tmp_path: Path,
-    phase: str = "SPECIFY",
-    tasks: list | None = None,
-    baseline: str = "abc1234",
-    branch: str = "main",
-) -> dict:
-    data = {
-        "feature": "001-test",
-        "branch": branch,
-        "baseline": baseline,
-        "created_at": str(datetime.date.today()),
-        "updated_at": str(datetime.date.today()),
-        "current_phase": phase,
-        "recovery": {"active_task": None, "last_commit": None, "blockers": []},
-        "tasks": tasks or [],
-        "review_cycles": [],
-    }
-    ledger = tmp_path / "status.yaml"
-    ledger.write_text(yaml.dump(data))
-    return data
-
 
 def _task(id: str, status: str = "PENDING", started: str | None = None,
           commits: list | None = None, evidence: str | None = None) -> dict:
@@ -50,28 +27,9 @@ def _task(id: str, status: str = "PENDING", started: str | None = None,
     }
 
 
-# ---------------------------------------------------------------------------
-# _validate_evidence
-# ---------------------------------------------------------------------------
-
-def test_evidence_valid_single() -> None:
-    assert s._validate_evidence("TEST_REPORT:all tests passed")
-
-
-def test_evidence_valid_multiple() -> None:
-    assert s._validate_evidence("TEST_REPORT:42 ok; CODE_DIFF:3 files")
-
-
-def test_evidence_invalid_class() -> None:
-    assert not s._validate_evidence("BAD_CLASS:something")
-
-
-def test_evidence_invalid_no_colon() -> None:
-    assert not s._validate_evidence("no colon here")
-
-
-def test_evidence_empty_string() -> None:
-    assert not s._validate_evidence("")
+# The `<CLASS>:<summary>` evidence grammar moved to specops.evidence (Feature 018 US3);
+# its accept/reject corpus now lives in tests/unit/test_evidence_record.py
+# (test_validate_string_accepts / _rejects), captured verbatim from these tests.
 
 
 # ---------------------------------------------------------------------------
@@ -120,14 +78,12 @@ def _setup_feature(tmp_path: Path, phase: str = "SPECIFY") -> tuple[Path, Path]:
     import json
     root = tmp_path / "repo"
     root.mkdir()
-    subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"], cwd=root, check=True, capture_output=True
-    )
-    subprocess.run(["git", "config", "user.name", "T"], cwd=root, check=True, capture_output=True)
+    git(root, "init")
+    git(root, "config", "user.email", "t@t.com")
+    git(root, "config", "user.name", "T")
     (root / "README.md").write_text("# test")
-    subprocess.run(["git", "add", "README.md"], cwd=root, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=root, check=True, capture_output=True)
+    git(root, "add", "README.md")
+    git(root, "commit", "-m", "init")
 
     (root / ".specify" / "templates").mkdir(parents=True)
     (root / ".specify" / "feature.json").write_text(
@@ -136,13 +92,9 @@ def _setup_feature(tmp_path: Path, phase: str = "SPECIFY") -> tuple[Path, Path]:
     feature_dir = root / "specs" / "001-test"
     feature_dir.mkdir(parents=True)
 
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True
-    ).stdout.strip()
-    branch = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root, capture_output=True, text=True
-    ).stdout.strip()
-    _make_ledger(feature_dir, phase=phase, baseline=head, branch=branch)
+    head = git(root, "rev-parse", "HEAD")
+    branch = git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    make_v1_ledger(feature_dir, feature="001-test", phase=phase, baseline=head, branch=branch)
     return root, feature_dir
 
 
@@ -574,36 +526,9 @@ def test_result_applies_to_open_cycle_after_closed_rejected(tmp_path: Path) -> N
 
 
 # ---------------------------------------------------------------------------
-# T012 — US3: evidence grammar matrix and atomic save [SC-004, SC-005]
+# US3: atomic save / stale-tmp handling [SC-004, SC-005]
+# (evidence-grammar matrix moved to tests/unit/test_evidence_record.py — Feature 018)
 # ---------------------------------------------------------------------------
-
-def test_evidence_empty_summary_rejected() -> None:
-    """CLI_LOG: with no summary is invalid."""
-    assert not s._validate_evidence("CLI_LOG:")
-
-
-def test_evidence_unknown_class_rejected() -> None:
-    """LOG:x is not a known evidence class."""
-    assert not s._validate_evidence("LOG:x")
-
-
-def test_evidence_orphan_segment_rejected() -> None:
-    """CLI_LOG:a; done — 'done' is not a valid part."""
-    assert not s._validate_evidence("CLI_LOG:a; done")
-
-
-def test_evidence_missing_colon_rejected() -> None:
-    """Missing colon is invalid."""
-    assert not s._validate_evidence("CLI_LOG no colon")
-
-
-def test_evidence_valid_single_part() -> None:
-    assert s._validate_evidence("CLI_LOG:run passed")
-
-
-def test_evidence_valid_multi_part() -> None:
-    assert s._validate_evidence("TEST_REPORT:42 ok; CODE_DIFF:3 files in 2 commits")
-
 
 def test_stale_tmp_ignored_on_read(tmp_path: Path) -> None:
     """A stale status.yaml.tmp must not affect _load_ledger."""
@@ -761,22 +686,22 @@ def test_complete_task_auto_runs_test_command_from_root(
 
 
 def test_read_baseline_returns_ledger_value(tmp_path: Path) -> None:
-    _make_ledger(tmp_path)
-    with patch.object(s, "_get_feature_dir", return_value=tmp_path):
+    make_v1_ledger(tmp_path)
+    with patch.object(s, "get_feature_dir", return_value=tmp_path):
         assert s.read_baseline(Path(".")) == "abc1234"
 
 
 def test_read_baseline_missing_field_returns_empty(tmp_path: Path) -> None:
-    data = _make_ledger(tmp_path)
+    data = make_v1_ledger(tmp_path)
     del data["baseline"]
     (tmp_path / "status.yaml").write_text(yaml.dump(data))
-    with patch.object(s, "_get_feature_dir", return_value=tmp_path):
+    with patch.object(s, "get_feature_dir", return_value=tmp_path):
         assert s.read_baseline(Path(".")) == ""
 
 
 def test_read_baseline_does_not_mutate_ledger(tmp_path: Path) -> None:
-    _make_ledger(tmp_path)
+    make_v1_ledger(tmp_path)
     before = (tmp_path / "status.yaml").read_bytes()
-    with patch.object(s, "_get_feature_dir", return_value=tmp_path):
+    with patch.object(s, "get_feature_dir", return_value=tmp_path):
         s.read_baseline(Path("."))
     assert (tmp_path / "status.yaml").read_bytes() == before

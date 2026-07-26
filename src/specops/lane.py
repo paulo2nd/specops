@@ -15,7 +15,6 @@ arrive as arguments supplied by the ``specops-lite`` workflow's native gate/prom
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +26,11 @@ from specops.errors import LedgerParseError, SpecopsError
 LANE_FILENAME = "lane.yaml"
 LANE_SCHEMA = 1
 STATES = ("OPEN", "CLOSED", "PROMOTED")
+
+# Versioned JSON contract (Feature 018): lane joins the standard output envelope
+# emitted by every other command family. Its ``--json`` now carries ``output_version``
+# and a top-level ``status`` — the feature's one sanctioned, additive behavior delta.
+OUTPUT_VERSION = 1
 
 CRITERIA_VERSION = 1
 # The stable, deterministic eligibility checklist (FR-004). SpecOps presents it and
@@ -42,22 +46,32 @@ ATTEST_FLAG = "flag"
 # Result type (agent/workflow-facing; rendered by the CLI via outcome.render)
 # ---------------------------------------------------------------------------
 
-@dataclass
-class LaneResult:
-    """A lane command outcome: an outcome *class*, human text, and JSON extras."""
+class LaneResult(outcome.CommandResult):
+    """A lane command outcome — the shared :class:`outcome.CommandResult`.
 
-    cls: str  # outcome.PASS | outcome.GATE_REJECTION | outcome.INFRA_ERROR
-    human: str
-    extra: dict[str, Any] = field(default_factory=dict)
+    Lane has no status vocabulary finer than the outcome status, so its ``status``
+    token *is* the outcome status (``ok``/``blocked``/``error``); the ``command`` value
+    (``lane-start`` …) is stamped by the CLI at emit time. Errors surface as raised
+    exceptions, so a LaneResult is only ever ``ok`` or ``blocked``."""
+
+    _CLASS_MAP = {
+        outcome.OK: outcome.PASS,
+        outcome.BLOCKED: outcome.GATE_REJECTION,
+        outcome.ERROR: outcome.INFRA_ERROR,
+    }
 
 
 def _ok(human: str, **extra: Any) -> LaneResult:
-    return LaneResult(outcome.PASS, human, {k: v for k, v in extra.items() if v is not None})
+    return LaneResult(
+        command="", status=outcome.OK, human=human,
+        extra={k: v for k, v in extra.items() if v is not None},
+    )
 
 
 def _blocked(human: str, **extra: Any) -> LaneResult:
     return LaneResult(
-        outcome.GATE_REJECTION, human, {k: v for k, v in extra.items() if v is not None}
+        command="", status=outcome.BLOCKED, human=human,
+        extra={k: v for k, v in extra.items() if v is not None},
     )
 
 
@@ -159,7 +173,7 @@ def _parse_name_status(raw: str) -> list[tuple[str, str]]:
 def _unmanaged_dirty(repo: Any, feature_name: str) -> list[str]:
     """Return uncommitted PRODUCT paths, excluding SpecOps/Speckit methodology artifacts.
 
-    Reuses :func:`specops.trace._is_managed` (the single definition of methodology state:
+    Reuses :func:`specops.trace.is_managed` (the single definition of methodology state:
     ``.specify/**``, ``specops.json``, and the active feature's ``specs/<name>/`` dir) so the
     lane's own ``lane.yaml``/``retrospective.md`` never count as a dirty tree at close.
     """
@@ -176,7 +190,7 @@ def _unmanaged_dirty(repo: Any, feature_name: str) -> list[str]:
         if " -> " in path:  # rename: report the destination path
             path = path.split(" -> ", 1)[1]
         path = path.strip().strip('"')
-        if path and not trace._is_managed(path, feature_name):
+        if path and not trace.is_managed(path, feature_name):
             out.append(path)
     return out
 
@@ -233,7 +247,7 @@ def cmd_start(root: Path, *, answers: list[str], bundle: str | None) -> LaneResu
     feature_dir, repo = _resolve(root)
     if exists(feature_dir):
         raise SpecopsError(f"A lane is already open: {_lane_path(feature_dir)}.")
-    if ledger._ledger_path(feature_dir).is_file():
+    if ledger.ledger_path(feature_dir).is_file():
         raise SpecopsError(
             "A full ledger (status.yaml) already exists — use the full workflow, not the lane."
         )
@@ -379,7 +393,7 @@ def cmd_close(root: Path) -> LaneResult:
         )
     # 4. run the deterministic gate-profile suite (fail-closed on a required gate).
     report = review_mod.GateReport()
-    report.results.extend(review_mod._profile_gates(root, repo, data["baseline"]))
+    report.results.extend(review_mod.profile_gates(root, repo, data["baseline"]))
     gates = [_gate_evidence(r) for r in report.results]
     if not report.passed:
         return _blocked(
@@ -426,7 +440,7 @@ def cmd_promote(root: Path, *, reason: str) -> LaneResult:
         return _blocked("Lane is already promoted.")
     if data["state"] != "OPEN":
         raise SpecopsError(f"Lane is {data['state']}, not OPEN.")
-    if ledger._ledger_path(feature_dir).is_file():
+    if ledger.ledger_path(feature_dir).is_file():
         return _blocked("A full ledger (status.yaml) already exists; nothing to promote.")
 
     # P-1 (zero commit loss): the baseline must still resolve AND be an ancestor of HEAD.
@@ -448,16 +462,16 @@ def cmd_promote(root: Path, *, reason: str) -> LaneResult:
     data["promotion"] = {
         "at": ledger.now_utc(),
         "reason": reason,
-        "synthesized_ledger": str(ledger._ledger_path(feature_dir).relative_to(root.resolve())
+        "synthesized_ledger": str(ledger.ledger_path(feature_dir).relative_to(root.resolve())
                                   if str(feature_dir).startswith(str(root.resolve()))
-                                  else ledger._ledger_path(feature_dir)),
+                                  else ledger.ledger_path(feature_dir)),
         "imported_commits": imported,
         "resumed_phase": "PLAN",
     }
     save(feature_dir, data)
     return _ok(
         f"Lane promoted at PLAN ({len(imported)} commit(s) preserved).",
-        synthesized_ledger=str(ledger._ledger_path(feature_dir)),
+        synthesized_ledger=str(ledger.ledger_path(feature_dir)),
         imported_commits=len(imported), resumed_phase="PLAN",
     )
 

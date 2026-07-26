@@ -1,0 +1,8 @@
+$ specops report --json
+--- exit_code ---
+2
+--- stdout ---
+{"command": "report", "outcome": "error", "class": "infra-error", "output_version": 1, "detail": "Cannot parse ledger <ROOT>/specs/001-demo/status.yaml: while parsing a block mapping\nexpected <block end>, but found ':'\n  in \"<unicode string>\", line 1, column 1:\n    :\n    ^"}
+
+--- stderr ---
+

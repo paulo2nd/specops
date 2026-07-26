@@ -1,0 +1,8 @@
+$ specops handoff report --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "handoff report", "outcome": "ok", "class": "pass", "status": "report_ok", "output_version": 1, "findings": [{"id": "R1-F01", "round": 1, "severity": "advisory", "rule": "R1", "file": "src/a.py", "line": 1, "state": "OPEN", "action": "do the thing", "task": null, "commits": [], "evidence": null}], "remaining_blocking": []}
+
+--- stderr ---
+

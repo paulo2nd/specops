@@ -8,16 +8,11 @@ from pathlib import Path
 import yaml
 
 from specops import ledger
+from tests.conftest import cli, git
 
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["specops", *args], cwd=repo, capture_output=True, text=True)
-
-
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=repo, capture_output=True, text=True
-    ).stdout.strip()
+    return cli(repo, *args)
 
 
 def _write_v1(
@@ -31,8 +26,8 @@ def _write_v1(
     """Write a v1-shaped ledger (no schema_version) with valid workspace identity."""
     data = {
         "feature": feature_dir.name,
-        "branch": _git(repo, "rev-parse", "--abbrev-ref", "HEAD"),
-        "baseline": _git(repo, "rev-parse", "HEAD"),
+        "branch": git(repo, "rev-parse", "--abbrev-ref", "HEAD"),
+        "baseline": git(repo, "rev-parse", "HEAD"),
         "created_at": "2026-07-05",
         "updated_at": "2026-07-05",
         "current_phase": phase,
@@ -118,8 +113,8 @@ class TestWorkflowBlockBackfill:
         data = {
             "schema_version": ledger.CURRENT_SCHEMA, "revision": 1,
             "feature": feature_dir.name,
-            "branch": _git(repo, "rev-parse", "--abbrev-ref", "HEAD"),
-            "baseline": _git(repo, "rev-parse", "HEAD"),
+            "branch": git(repo, "rev-parse", "--abbrev-ref", "HEAD"),
+            "baseline": git(repo, "rev-parse", "HEAD"),
             "workflow_lane": "full", "active_artifact": "spec.md",
             "created_at": ts, "updated_at": ts, "current_phase": "SPECIFY",
             "recovery": {"active_task": None, "last_commit": None, "blockers": [],

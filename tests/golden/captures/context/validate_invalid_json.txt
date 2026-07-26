@@ -1,0 +1,8 @@
+$ specops context validate --json
+--- exit_code ---
+1
+--- stdout ---
+{"command": "validate", "outcome": "blocked", "class": "gate-rejection", "status": "schema_invalid", "output_version": 1, "diagnostics": [{"code": "duplicate_context_id", "message": "context id 'api' is declared twice", "context_id": "api", "field": "id"}, {"code": "dangling_dependency", "message": "context 'api' depends on unknown context 'ghost'", "context_id": "api", "field": "dependencies"}]}
+
+--- stderr ---
+

@@ -1,0 +1,8 @@
+$ specops lane start --answers small,reversible,no-high-risk-category
+--- exit_code ---
+0
+--- stdout ---
+Lane opened (013-lane); baseline <HEX>.
+
+--- stderr ---
+

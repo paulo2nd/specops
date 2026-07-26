@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from tests.conftest import git
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -16,13 +18,6 @@ def _run_preflight(root: Path) -> subprocess.CompletedProcess:
         ["specops", "preflight"],
         cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
     )
-
-
-def _git(root: Path, *args: str) -> str:
-    out = subprocess.run(
-        ["git", *args], cwd=root, check=True, capture_output=True, text=True
-    )
-    return out.stdout.strip()
 
 
 def _write_config(root: Path, lint: str = "", test: str = "") -> None:
@@ -37,7 +32,7 @@ def _write_ledger(root: Path, baseline: str, phase: str = "IMPLEMENT") -> Path:
     feature_dir = root / "specs" / "001-demo"
     data = {
         "feature": "001-demo",
-        "branch": _git(root, "branch", "--show-current"),
+        "branch": git(root, "branch", "--show-current"),
         "baseline": baseline,
         "current_phase": phase,
         "recovery": {"active_task": None, "last_commit": None, "blockers": []},
@@ -54,13 +49,13 @@ def _all_pass_setup(root: Path, phase: str = "IMPLEMENT") -> Path:
     # branches from a point that already contains it), so the post-baseline
     # effective diff is only SpecOps-managed state, which the Feature 010 drift
     # gate excludes — leaving zero unexplained paths.
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "scaffolding")
-    baseline = _git(root, "rev-parse", "HEAD")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "scaffolding")
+    baseline = git(root, "rev-parse", "HEAD")
     _write_config(root)
     ledger = _write_ledger(root, baseline, phase=phase)
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "setup")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "setup")
     return ledger
 
 
@@ -144,7 +139,7 @@ class TestPreflightExitCodes:
         assert result.returncode == 2
 
     def test_missing_config_exit_one_with_init_guidance(self, fake_speckit_repo: Path) -> None:
-        baseline = _git(fake_speckit_repo, "rev-parse", "HEAD")
+        baseline = git(fake_speckit_repo, "rev-parse", "HEAD")
         _write_ledger(fake_speckit_repo, baseline)
         result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 1

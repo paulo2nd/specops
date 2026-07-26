@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import copy
-import re
 from pathlib import Path
 
 import git
@@ -10,7 +9,7 @@ import yaml
 
 from specops import config, contextmap, gitops, ledger, shell, speckit
 from specops import evidence as evidence_mod
-from specops.errors import LedgerParseError, SpecopsError
+from specops.errors import SpecopsError
 from specops.ledger import now_utc
 
 # ---------------------------------------------------------------------------
@@ -20,11 +19,9 @@ from specops.ledger import now_utc
 LEDGER_FILENAME = "status.yaml"
 PHASES = ["SPECIFY", "PLAN", "TASKS", "IMPLEMENT", "REVIEW", "DONE"]
 TASK_STATUSES = ["PENDING", "IN_PROGRESS", "DONE"]
-EVIDENCE_CLASSES = {"CLI_LOG", "TEST_REPORT", "SCREENSHOT_PATH", "CODE_DIFF"}
 
-_PART_RE = re.compile(
-    r"^(" + "|".join(re.escape(c) for c in EVIDENCE_CLASSES) + r"):(.+)$"
-)
+# The `<CLASS>:<summary>` evidence grammar now has a single owner (Feature 018 US3):
+# :mod:`specops.evidence`. Task-close validates via ``evidence_mod.validate_string``.
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -136,7 +133,13 @@ def _sync_tasks(data: dict, tasks_text: str) -> None:
     data["tasks"] = synced
 
 
-def _get_feature_dir(root: Path) -> Path:
+def get_feature_dir(root: Path) -> Path:
+    """Resolve the active feature directory from ``.specify/feature.json``.
+
+    Public cross-module contract (Feature 018): handoff and trace resolve the feature
+    dir through this one path. Raises :class:`SpecopsError` (exit 2) when no active
+    feature can be resolved.
+    """
     fd = speckit.resolve_feature_dir(root)
     if fd is None:
         raise SpecopsError(
@@ -152,24 +155,9 @@ def _read_tasks_md(feature_dir: Path) -> str:
     return ""
 
 
-def _validate_evidence(evidence: str) -> bool:
-    """Return True when evidence matches the strict grammar: CLASS:summary[; CLASS:summary ...]."""
-    if not evidence:
-        return False
-    parts = evidence.split("; ")
-    for part in parts:
-        m = _PART_RE.match(part)
-        if not m:
-            return False
-        summary = m.group(2)
-        if not summary or summary[0] == " ":
-            return False
-    return True
-
-
 def read_baseline(root: Path) -> str:
     """Return the ledger's baseline commit hash, or '' when absent. Read-only."""
-    feature_dir = _get_feature_dir(root)
+    feature_dir = get_feature_dir(root)
     data = _load_ledger(feature_dir)
     return str(data.get("baseline") or "")
 
@@ -187,7 +175,7 @@ def _identity_mismatch(diverged: str) -> SpecopsError:
     )
 
 
-def _load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str], git.Repo]:
+def load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str], git.Repo]:
     """Load, classify, identity-check, and (if needed) migrate the ledger for a write.
 
     Returns (data, base_revision, base_violations, repo). Refuses too-new/unsupported
@@ -195,7 +183,7 @@ def _load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str]
     Migratable ledgers are backed up and migrated in memory (persisted only on save).
     ``base_violations`` are the invariant violations already present at load time —
     pre-existing legacy defects that must not, on their own, block an unrelated
-    command (only violations a command newly introduces are blocking; see _finalize).
+    command (only violations a command newly introduces are blocking; see finalize).
     """
     on_disk = _load_ledger(feature_dir)
 
@@ -223,7 +211,7 @@ def _load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str]
     return data, base_revision, base_violations, repo
 
 
-def _finalize(
+def finalize(
     feature_dir: Path, data: dict, base_revision: int, base_violations: list[str]
 ) -> None:
     """Commit the ledger with revision CAS, failing closed only on *new* invalid state.
@@ -246,7 +234,7 @@ def _finalize(
 
 def cmd_init_spec(root: Path, name: str | None) -> str:
     """Create status.yaml for the active feature (cli-contract: init-spec)."""
-    feature_dir = _get_feature_dir(root)
+    feature_dir = get_feature_dir(root)
 
     if name is not None:
         expected = root / "specs" / name
@@ -362,21 +350,21 @@ def cmd_record_step(root: Path, step: str, *, decision: str) -> str:
     if decision not in _STEP_DECISIONS:
         raise SpecopsError(f"Invalid decision '{decision}'. Expected 'run' or 'skip'.")
 
-    feature_dir = _get_feature_dir(root)
-    data, base_rev, base_violations, _repo = _load_for_write(root, feature_dir)
+    feature_dir = get_feature_dir(root)
+    data, base_rev, base_violations, _repo = load_for_write(root, feature_dir)
 
-    steps = data["workflow"]["skipped_steps"]  # ensured present by _load_for_write
+    steps = data["workflow"]["skipped_steps"]  # ensured present by load_for_write
     steps[:] = [s for s in steps if s.get("step") != step]
     steps.append({"step": step, "decision": decision, "at": now_utc()})
 
-    _finalize(feature_dir, data, base_rev, base_violations)
+    finalize(feature_dir, data, base_rev, base_violations)
     return f"Recorded optional step '{step}': {decision}."
 
 
 def cmd_start_task(root: Path, task_id: str) -> str:
     """Mark task_id IN_PROGRESS (cli-contract: start-task)."""
-    feature_dir = _get_feature_dir(root)
-    data, base_rev, base_violations, repo = _load_for_write(root, feature_dir)
+    feature_dir = get_feature_dir(root)
+    data, base_rev, base_violations, repo = load_for_write(root, feature_dir)
 
     tasks_text = _read_tasks_md(feature_dir)
     _sync_tasks(data, tasks_text)
@@ -407,7 +395,7 @@ def cmd_start_task(root: Path, task_id: str) -> str:
     task["started_commit"] = gitops.head_sha(repo)
     data["recovery"]["active_task"] = task_id
 
-    _finalize(feature_dir, data, base_rev, base_violations)
+    finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' started."
 
 
@@ -420,8 +408,8 @@ def cmd_complete_task(
     if auto and evidence:
         raise SpecopsError("Provide --auto or --evidence, not both.")
 
-    feature_dir = _get_feature_dir(root)
-    data, base_rev, base_violations, repo = _load_for_write(root, feature_dir)
+    feature_dir = get_feature_dir(root)
+    data, base_rev, base_violations, repo = load_for_write(root, feature_dir)
 
     tasks_text = _read_tasks_md(feature_dir)
     _sync_tasks(data, tasks_text)
@@ -478,10 +466,10 @@ def cmd_complete_task(
         if commits:
             data["recovery"]["last_commit"] = commits[0]
     else:
-        if not evidence or not _validate_evidence(evidence):
+        if not evidence or not evidence_mod.validate_string(evidence):
             raise SpecopsError(
                 f"Invalid evidence format. Expected '<CLASS>:<summary>[; ...]' "
-                f"with class in {sorted(EVIDENCE_CLASSES)}."
+                f"with class in {sorted(evidence_mod.EVIDENCE_CLASSES)}."
             )
         evidence_str = evidence
         evidence_command = "(evidence)"
@@ -513,7 +501,7 @@ def cmd_complete_task(
     stored = evidence_mod.append_record(data.setdefault("evidence", []), ev_record)
     task["evidence_refs"] = [stored["id"]]
 
-    _finalize(feature_dir, data, base_rev, base_violations)
+    finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' completed. Evidence: {evidence_str}"
 
 
@@ -525,36 +513,19 @@ def cmd_show(root: Path) -> str:
             "Cannot resolve active feature directory. Check .specify/feature.json."
         )
 
-    path = _ledger_path(feature_dir)
-    if not path.is_file():
-        raise SpecopsError(
-            f"Ledger not found: {path}. Run 'specops status init-spec' first."
-        )
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise LedgerParseError(f"Cannot parse ledger {path}: {exc}") from exc
-    if not isinstance(data, dict):
-        raise LedgerParseError(f"Ledger {path} has invalid structure.")
+    # Single ledger-loading authority (Feature 018 US3, SC-004): canonical
+    # existence/parse/shape diagnostics live only in ledger.load_raw.
+    data = ledger.load_raw(feature_dir)
+    # Counts come from the one snapshot routine, which tolerantly filters non-mapping
+    # task entries (FR-006) so a hand-edited ledger renders instead of crashing.
+    snap = compact_status(root)
 
     feature_name = data.get("feature", feature_dir.name)
     branch = data.get("branch", "unknown")
     phase = data.get("current_phase", "unknown")
 
-    tasks = data.get("tasks") or []
-    pending = sum(1 for t in tasks if t.get("status") == "PENDING" and not t.get("orphaned"))
-    in_progress = sum(
-        1 for t in tasks if t.get("status") == "IN_PROGRESS" and not t.get("orphaned")
-    )
-    done = sum(1 for t in tasks if t.get("status") == "DONE" and not t.get("orphaned"))
-    orphaned = sum(1 for t in tasks if t.get("orphaned"))
-    total = len(tasks)
-
-    active = next(
-        (t["id"] for t in tasks if t.get("status") == "IN_PROGRESS" and not t.get("orphaned")),
-        "none",
-    )
-
+    counts = snap["tasks"]
+    active = snap["active_task"] or "none"
     cycles = data.get("review_cycles") or []
 
     lines = [
@@ -563,8 +534,9 @@ def cmd_show(root: Path) -> str:
         f"phase: {phase}",
         f"active task: {active}",
         (
-            f"tasks: {total} total — "
-            f"{pending} pending, {in_progress} in progress, {done} done, {orphaned} orphaned"
+            f"tasks: {counts['total']} total — "
+            f"{counts['pending']} pending, {counts['in_progress']} in progress, "
+            f"{counts['done']} done, {counts['orphaned']} orphaned"
         ),
         f"review cycles: {len(cycles)}",
     ]
@@ -617,8 +589,8 @@ def cmd_transition_phase(
             )
         normalized_result = upper
 
-    feature_dir = _get_feature_dir(root)
-    data, base_rev, base_violations, repo = _load_for_write(root, feature_dir)
+    feature_dir = get_feature_dir(root)
+    data, base_rev, base_violations, repo = load_for_write(root, feature_dir)
 
     current = data.get("current_phase", "SPECIFY")
     target = phase.upper()
@@ -750,7 +722,7 @@ def cmd_transition_phase(
 
     data["current_phase"] = target
     data["active_artifact"] = ledger.artifact_for_phase(target)
-    _finalize(feature_dir, data, base_rev, base_violations)
+    finalize(feature_dir, data, base_rev, base_violations)
     return f"Phase transition: {current} → {target}."
 
 
@@ -762,7 +734,7 @@ def cmd_migrate(root: Path) -> str:
     Like every write path, it fails closed on a workspace-identity mismatch
     (consistent with state changes; use 'rebaseline' after a deliberate move).
     """
-    feature_dir = _get_feature_dir(root)
+    feature_dir = get_feature_dir(root)
     on_disk = _load_ledger(feature_dir)
 
     cls = ledger.classify(on_disk)
@@ -796,7 +768,7 @@ def cmd_rebaseline(root: Path) -> str:
     It refuses to cross feature identity — if the resolved feature no longer
     matches the ledger's `feature`, it fails closed (that is not a re-baseline).
     """
-    feature_dir = _get_feature_dir(root)
+    feature_dir = get_feature_dir(root)
     # Load + migrate (if needed) but bypass ONLY the branch/baseline identity check;
     # the feature-identity check is still enforced below.
     on_disk = _load_ledger(feature_dir)
@@ -830,5 +802,5 @@ def cmd_rebaseline(root: Path) -> str:
     data["branch"] = new_branch
     data["baseline"] = new_baseline
 
-    _finalize(feature_dir, data, base_rev, base_violations)
+    finalize(feature_dir, data, base_rev, base_violations)
     return f"Rebaselined to branch '{new_branch}' at {new_baseline[:7]}."

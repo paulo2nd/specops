@@ -1,0 +1,8 @@
+$ specops trace validate --json
+--- exit_code ---
+1
+--- stdout ---
+{"command": "trace validate", "outcome": "blocked", "class": "gate-rejection", "status": "trace_incomplete", "output_version": 1, "defects": [{"kind": "uncovered-sc", "detail": "SC 'SC-001' has no covering task", "ref": "SC-001"}], "unexplained": ["src/surprise.py"]}
+
+--- stderr ---
+

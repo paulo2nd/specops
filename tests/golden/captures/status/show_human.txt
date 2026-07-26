@@ -1,0 +1,13 @@
+$ specops status show
+--- exit_code ---
+0
+--- stdout ---
+feature: 001-demo
+branch: main
+phase: IMPLEMENT
+active task: none
+tasks: 1 total — 0 pending, 0 in progress, 1 done, 0 orphaned
+review cycles: 0
+
+--- stderr ---
+
