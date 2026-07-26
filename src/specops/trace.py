@@ -72,7 +72,7 @@ _MANAGED_PREFIXES = (".specify/",)
 _MANAGED_FILES = ("specops.json",)
 
 
-def _norm(path: str) -> str:
+def norm_path(path: str) -> str:
     """Normalize a repo-relative path to match Git's reporting (``./a`` → ``a``).
 
     User-supplied paths (``--path``, ``acknowledge <path>``, plan declarations)
@@ -83,7 +83,7 @@ def _norm(path: str) -> str:
     return posixpath.normpath(path.strip())
 
 
-def _is_managed(path: str, feature_name: str | None = None) -> bool:
+def is_managed(path: str, feature_name: str | None = None) -> bool:
     if path in _MANAGED_FILES or path.startswith(_MANAGED_PREFIXES):
         return True
     return feature_name is not None and path.startswith(f"specs/{feature_name}/")
@@ -147,7 +147,7 @@ def _name_status(repo: gitops.git.Repo, baseline: str) -> list[tuple[str, str]]:
     """
     mapping = {"A": "added", "D": "removed"}
     return [
-        (mapping.get(code, "modified"), _norm(path))
+        (mapping.get(code, "modified"), norm_path(path))
         for code, path in gitops.effective_diff_status(repo, baseline, "HEAD")
     ]
 
@@ -164,7 +164,7 @@ def _plan_text(root: Path) -> str:
 
 
 def _planned_paths(plan_text: str) -> set[str]:
-    return {_norm(p) for (p, _action) in _iter_plan_paths(plan_text)}
+    return {norm_path(p) for (p, _action) in _iter_plan_paths(plan_text)}
 
 
 def _iter_plan_paths(plan_text: str) -> list[tuple[str, str]]:
@@ -178,7 +178,7 @@ def _iter_plan_paths(plan_text: str) -> list[tuple[str, str]]:
 
 def _owning_context(path: str, contexts: list[contextmap.Context]) -> str | None:
     """Return the id of a context that owns *path* (most-specific), else None."""
-    cands = contextmap._candidates_for_path(contexts, path)
+    cands = contextmap.candidates_for_path(contexts, path)
     return cands[0][0].id if cands else None
 
 
@@ -227,7 +227,7 @@ def _load_ctx(root: Path) -> _Ctx:
         if isinstance(t, dict):
             accounted.update((t.get("context_provenance") or {}).get("context_ids") or [])
     vr = contextmap.validate(root)
-    contexts = vr.contexts if vr.status in contextmap._RESOLVABLE else None
+    contexts = vr.contexts if vr.status in contextmap.RESOLVABLE else None
     return _Ctx(
         data=data, acks=_acknowledged_paths(data), planned=_planned_paths(plan_text),
         accounted=accounted, contexts=contexts, feature_name=fd.name if fd is not None else None,
@@ -236,7 +236,7 @@ def _load_ctx(root: Path) -> _Ctx:
 
 def _acknowledged_paths(data: dict) -> set[str]:
     return {
-        _norm(a["path"])
+        norm_path(a["path"])
         for a in data.get("acknowledgements") or []
         if isinstance(a, dict) and isinstance(a.get("path"), str)
     }
@@ -250,7 +250,7 @@ def classify(
     ctx = ctx or _load_ctx(root)
 
     if explicit_paths is not None:
-        changes = [("specified", _norm(p)) for p in explicit_paths]
+        changes = [("specified", norm_path(p)) for p in explicit_paths]
     else:
         repo = gitops.find_repo(root)
         if repo is None:
@@ -269,7 +269,7 @@ def classify(
     rows: list[dict[str, str]] = []
     seen: set[str] = set()
     for change, path in sorted(changes, key=lambda t: t[1]):
-        if path in seen or _is_managed(path, ctx.feature_name):
+        if path in seen or is_managed(path, ctx.feature_name):
             continue
         seen.add(path)
         cls, attribution = _classify_one(path, ctx)
@@ -571,7 +571,7 @@ def _ownership_defects(root: Path, ctx: _Ctx) -> list[dict[str, str]]:
         return []
     out: list[dict[str, str]] = []
     for _change, path in sorted(_name_status(repo, baseline), key=lambda t: t[1]):
-        if _is_managed(path, ctx.feature_name) or path in ctx.planned or path in ctx.acks:
+        if is_managed(path, ctx.feature_name) or path in ctx.planned or path in ctx.acks:
             continue
         owner = _owning_context(path, ctx.contexts)
         if owner is not None and owner not in ctx.accounted:
@@ -643,15 +643,15 @@ def cmd_acknowledge(root: Path, path: str, *, task: str, reason: str) -> TraceRe
     if not path or not task or not reason:
         return TraceResult("trace acknowledge", USAGE_ERROR,
                            "trace acknowledge: path, --task and --reason are all required")
-    path = _norm(path)  # store normalized so classification matches Git-reported paths
+    path = norm_path(path)  # store normalized so classification matches Git-reported paths
 
     repo = gitops.find_repo(root)
     if repo is None:
         return TraceResult("trace acknowledge", USAGE_ERROR,
                            "trace acknowledge: not a Git repository")
 
-    feature_dir = status._get_feature_dir(root)
-    data, base_rev, base_violations, _repo = status._load_for_write(root, feature_dir)
+    feature_dir = status.get_feature_dir(root)
+    data, base_rev, base_violations, _repo = status.load_for_write(root, feature_dir)
 
     known = {t.get("id") for t in data.get("tasks") or [] if not t.get("orphaned")}
     if task not in known:
@@ -663,7 +663,7 @@ def cmd_acknowledge(root: Path, path: str, *, task: str, reason: str) -> TraceRe
     # existing acknowledgements (acks=∅) so it reflects only plan/ownership.
     check_ctx = replace(_load_ctx(root), acks=set())
     existing = {
-        _norm(a["path"]): a for a in data.get("acknowledgements") or []
+        norm_path(a["path"]): a for a in data.get("acknowledgements") or []
         if isinstance(a, dict) and isinstance(a.get("path"), str)
     }
     if path not in existing:
@@ -690,7 +690,7 @@ def cmd_acknowledge(root: Path, path: str, *, task: str, reason: str) -> TraceRe
         "map_digest": contextmap.map_digest(root), "at": ledger.now_utc(),
     }
     data.setdefault("acknowledgements", []).append(record)
-    status._finalize(feature_dir, data, base_rev, base_violations)
+    status.finalize(feature_dir, data, base_rev, base_violations)
     return TraceResult("trace acknowledge", ACK_RECORDED,
                        f"trace acknowledge: recorded '{path}' (task {task})",
                        {"path": path, "task": task})

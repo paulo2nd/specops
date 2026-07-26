@@ -343,7 +343,7 @@ def _domain_ledger(
 def _domain_context_map(root: Path) -> DomainResult:
     findings: list[Finding] = []
     result = contextmap.validate(root)
-    cls = contextmap._CLASS_FOR_STATUS.get(result.status, outcome.INFRA_ERROR)
+    cls = contextmap.CLASS_FOR_STATUS.get(result.status, outcome.INFRA_ERROR)
     if cls == outcome.GATE_REJECTION:
         detail = "; ".join(
             d.get("message", d.get("code", "?")) for d in result.diagnostics

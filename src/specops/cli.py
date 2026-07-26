@@ -1057,7 +1057,7 @@ def gate_report(
         raise typer.Exit(2) from None
     from specops import evidence as evidence_mod
     gates = [_gate_json(r) for r in report.results]
-    ev = evidence_mod.canonical_sort(review._existing_evidence(root))  # FR-021 ordering
+    ev = evidence_mod.canonical_sort(review.existing_evidence(root))  # FR-021 ordering
     if json_out:
         import json as _json
         typer.echo(_json.dumps({

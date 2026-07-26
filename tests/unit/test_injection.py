@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from specops.initializer import InjectionError, _scan_markers, inject_block, remove_block
+from specops.initializer import InjectionError, scan_markers, inject_block, remove_block
 
 
 def _write(tmp_path: Path, name: str, content: str) -> Path:
@@ -13,16 +13,16 @@ def _write(tmp_path: Path, name: str, content: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# _scan_markers
+# scan_markers
 # ---------------------------------------------------------------------------
 
 def test_scan_markers_empty_file() -> None:
-    assert _scan_markers("") == []
+    assert scan_markers("") == []
 
 
 def test_scan_markers_clean_block() -> None:
     text = "# header\n\n<!-- SPECOPS:BEGIN plan v1 -->\ncontent\n<!-- SPECOPS:END plan -->\n"
-    regions = _scan_markers(text)
+    regions = scan_markers(text)
     assert len(regions) == 1
     assert regions[0][0] == "plan"
 
@@ -30,13 +30,13 @@ def test_scan_markers_clean_block() -> None:
 def test_scan_markers_begin_without_end_raises() -> None:
     text = "<!-- SPECOPS:BEGIN plan v1 -->\ncontent without end\n"
     with pytest.raises(InjectionError, match="without matching END"):
-        _scan_markers(text)
+        scan_markers(text)
 
 
 def test_scan_markers_end_without_begin_raises() -> None:
     text = "<!-- SPECOPS:END plan -->\n"
     with pytest.raises(InjectionError, match="without matching BEGIN"):
-        _scan_markers(text)
+        scan_markers(text)
 
 
 def test_scan_markers_duplicate_begin_raises() -> None:
@@ -46,7 +46,7 @@ def test_scan_markers_duplicate_begin_raises() -> None:
         "<!-- SPECOPS:END plan -->\n"
     )
     with pytest.raises(InjectionError, match="duplicate BEGIN"):
-        _scan_markers(text)
+        scan_markers(text)
 
 
 def test_scan_markers_nested_raises() -> None:
@@ -57,7 +57,7 @@ def test_scan_markers_nested_raises() -> None:
         "<!-- SPECOPS:END implement -->\n"
     )
     with pytest.raises(InjectionError, match="nested BEGIN"):
-        _scan_markers(text)
+        scan_markers(text)
 
 
 # ---------------------------------------------------------------------------

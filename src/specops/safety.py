@@ -64,7 +64,7 @@ def _basename(path: str) -> str:
     return path.rsplit("/", 1)[-1]
 
 
-def _matches(path: str, patterns: list[str]) -> bool:
+def matches(path: str, patterns: list[str]) -> bool:
     base = _basename(path)
     return any(fnmatch.fnmatch(path, p) or fnmatch.fnmatch(base, p) for p in patterns)
 
@@ -98,7 +98,7 @@ def detect(
     seen: set[tuple[str, str]] = set()
     for status, path in diff_status:
         for category in _PATTERN_CATEGORIES:
-            if _matches(path, patterns[category]):
+            if matches(path, patterns[category]):
                 key = (category, path)
                 if key not in seen:
                     seen.add(key)

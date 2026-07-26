@@ -112,7 +112,7 @@ def _cli_version() -> str:
         return "0.0.0"
 
 
-def _existing_evidence(root: Path) -> list[dict]:
+def existing_evidence(root: Path) -> list[dict]:
     """Read the active ledger's structured evidence list (read-only; [] when absent).
 
     Used only for the cache-lookup: `specops preflight` never writes the ledger (the
@@ -200,7 +200,7 @@ def _run_profile_gate(
     return _blocking_result(p, sel.reason, detail, "failed", eid, commit_range, changed)
 
 
-def _profile_gates(root: Path, repo: git.Repo, baseline: str) -> list[GateResult]:
+def profile_gates(root: Path, repo: git.Repo, baseline: str) -> list[GateResult]:
     """The selected profile suite (replaces the fixed lint/test gates — FR-011).
 
     Deterministically selects gates from the effective diff + context impact, then runs
@@ -214,12 +214,12 @@ def _profile_gates(root: Path, repo: git.Repo, baseline: str) -> list[GateResult
     # Fail closed on an invalid *present* config — never silently fall back to the
     # default suite (which would skip declared required gates and pass, a fail-open).
     gates = gateprofiles.resolve_suite(root)
-    affected = gateprofiles._affected_for(root, changed)
+    affected = gateprofiles.affected_for(root, changed)
     selection = gateprofiles.select_gates(gates, changed, affected)
     head = gitops.head_sha(repo)
     commit_range = f"{baseline}..{head}" if baseline else head
     map_digest = contextmap.map_digest(root)
-    existing = _existing_evidence(root)
+    existing = existing_evidence(root)
     results: list[GateResult] = []
     for sel in selection:
         gr = _run_profile_gate(sel, root, changed, commit_range, map_digest, existing)
@@ -309,7 +309,7 @@ def evaluate(root: Path) -> GateReport:
     if not report.passed:
         return report
     # 2. the selected profile suite replaces the fixed lint/test gates (FR-011).
-    for gr in _profile_gates(root, repo, baseline_at_start):
+    for gr in profile_gates(root, repo, baseline_at_start):
         report.results.append(gr)
         if gr.status == "FAIL":
             return report  # early stop on the first blocking gate failure

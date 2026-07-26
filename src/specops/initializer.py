@@ -23,7 +23,7 @@ class InjectionError(SpecopsError):
     CLI error boundary reports it cleanly (exit 1) rather than as a traceback."""
 
 
-def _scan_markers(text: str) -> list[tuple[str, int, int]]:
+def scan_markers(text: str) -> list[tuple[str, int, int]]:
     """
     Parse all SPECOPS marker regions in *text*.
 
@@ -89,7 +89,7 @@ def inject_block(file_path: Path, block_id: str, block_content: str, version: in
     - Raises InjectionError on corrupted markers (no write performed).
     """
     text = file_path.read_text(encoding="utf-8")
-    regions = _scan_markers(text)
+    regions = scan_markers(text)
 
     begin_marker = f"<!-- SPECOPS:BEGIN {block_id} v{version} -->"
     end_marker = f"<!-- SPECOPS:END {block_id} -->"
@@ -131,7 +131,7 @@ def remove_block(file_path: Path, block_id: str) -> bool:
     Raises InjectionError on corrupted markers.
     """
     text = file_path.read_text(encoding="utf-8")
-    regions = _scan_markers(text)
+    regions = scan_markers(text)
     existing = {r[0]: r for r in regions}
     if block_id not in existing:
         return False
@@ -233,7 +233,7 @@ def run(root: Path, non_interactive: bool = False) -> None:
         tasks_path: Path | None = target.get("tasks_path")
         # Step 5: install review.md
         review_path = speckit.derive_review_path(plan_path, root, sep)
-        _install_review(review_path, review_content, sep)
+        install_review(review_path, review_content, sep)
         typer.echo(f"  {review_path.relative_to(root)}: installed review command")
 
         # Step 6: inject directive blocks (specify/tasks are best-effort)
@@ -257,7 +257,7 @@ def run(root: Path, non_interactive: bool = False) -> None:
     typer.echo("specops init: done.")
 
 
-def _install_review(review_path: Path, content: str, sep: str) -> None:
+def install_review(review_path: Path, content: str, sep: str) -> None:
     """Install the review prompt file, wrapping with skills-mode frontmatter when needed."""
     review_path.parent.mkdir(parents=True, exist_ok=True)
     if review_path.name == "SKILL.md":

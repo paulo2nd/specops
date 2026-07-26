@@ -762,7 +762,7 @@ def test_complete_task_auto_runs_test_command_from_root(
 
 def test_read_baseline_returns_ledger_value(tmp_path: Path) -> None:
     _make_ledger(tmp_path)
-    with patch.object(s, "_get_feature_dir", return_value=tmp_path):
+    with patch.object(s, "get_feature_dir", return_value=tmp_path):
         assert s.read_baseline(Path(".")) == "abc1234"
 
 
@@ -770,13 +770,13 @@ def test_read_baseline_missing_field_returns_empty(tmp_path: Path) -> None:
     data = _make_ledger(tmp_path)
     del data["baseline"]
     (tmp_path / "status.yaml").write_text(yaml.dump(data))
-    with patch.object(s, "_get_feature_dir", return_value=tmp_path):
+    with patch.object(s, "get_feature_dir", return_value=tmp_path):
         assert s.read_baseline(Path(".")) == ""
 
 
 def test_read_baseline_does_not_mutate_ledger(tmp_path: Path) -> None:
     _make_ledger(tmp_path)
     before = (tmp_path / "status.yaml").read_bytes()
-    with patch.object(s, "_get_feature_dir", return_value=tmp_path):
+    with patch.object(s, "get_feature_dir", return_value=tmp_path):
         s.read_baseline(Path("."))
     assert (tmp_path / "status.yaml").read_bytes() == before

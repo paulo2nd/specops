@@ -74,19 +74,19 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 ### Tests for User Story 2 (mandatory per Constitution task gate) ⚠️
 
-- [ ] T012 [US2] Add `tests/unit/test_module_boundaries.py` implementing the SC-002 scan (quickstart §2) as a pytest that fails while any cross-module private reference remains in `src/specops/` (fails now at 39 — must fail before T013) (SC-002)
+- [X] T012 [US2] Add `tests/unit/test_module_boundaries.py` implementing the SC-002 scan (quickstart §2) as a pytest that fails while any cross-module private reference remains in `src/specops/` (fails now at 39 — must fail before T013) (SC-002)
 
 ### Implementation for User Story 2
 
 > Renames follow contracts/internal-api.md exactly (no aliases; docstring contract at each definition site; consumers updated in the same task). Sequential — the batches share consumer files.
 
-- [ ] T013 [US2] Promote `status.py` helpers: `_load_for_write`→`load_for_write`, `_finalize`→`finalize`, `_get_feature_dir`→`get_feature_dir`; update consumers `src/specops/handoff.py` (11 sites) and `src/specops/trace.py` (3 sites) and all test references (SC-002)
-- [ ] T014 [US2] Promote `trace.py` helpers: `_norm`→`norm_path`, `_is_managed`→`is_managed`; update consumers `src/specops/handoff.py`, `src/specops/ingestion.py`, `src/specops/lane.py` and test references (SC-002)
-- [ ] T015 [US2] Promote `contextmap.py` names: `_matches`→`matches`, `_classify_pattern`→`classify_pattern`, `_candidates_for_path`→`candidates_for_path`, `_RESOLVABLE`→`RESOLVABLE`, `_CLASS_FOR_STATUS`→`CLASS_FOR_STATUS`; update consumers `src/specops/gateprofiles.py`, `src/specops/trace.py`, `src/specops/doctor.py` and test references (SC-002)
-- [ ] T016 [US2] Promote `ledger._ledger_path`→`ledger.ledger_path` (consumer `src/specops/lane.py`, 5 sites), `review._profile_gates`→`profile_gates` (lane), `review._existing_evidence`→`existing_evidence` (cli), `gateprofiles._affected_for`→`affected_for` (review) and test references (SC-002)
-- [ ] T017 [US2] Promote `handoff._canonical`→`canonical_finding` (consumer `src/specops/sarif.py`), `initializer._install_review`→`install_review` (extension), `initializer._scan_markers`→`scan_markers` (migration) and test references (SC-002)
-- [ ] T018 [US2] Sweep remaining test-side private references (FR-014): rewrite behavior-level tests against the public surface where it expresses the same assertion (`review._run_profile_gate`→via `evaluate`, `extension._merge_manifest`→via `install`, per research.md R7 list); pure-helper unit tests may keep testing the now-public names (SC-002)
-- [ ] T019 [US2] Verify: T012 boundary test green (0 sites), full suite green, golden replay byte-identical (no delta expected in this story) (SC-001, SC-002)
+- [X] T013 [US2] Promote `status.py` helpers: `_load_for_write`→`load_for_write`, `_finalize`→`finalize`, `_get_feature_dir`→`get_feature_dir`; update consumers `src/specops/handoff.py` (11 sites) and `src/specops/trace.py` (3 sites) and all test references (SC-002)
+- [X] T014 [US2] Promote `trace.py` helpers: `_norm`→`norm_path`, `_is_managed`→`is_managed`; update consumers `src/specops/handoff.py`, `src/specops/ingestion.py`, `src/specops/lane.py` and test references (SC-002)
+- [X] T015 [US2] Promote `contextmap.py` names: `_matches`→`matches`, `_classify_pattern`→`classify_pattern`, `_candidates_for_path`→`candidates_for_path`, `_RESOLVABLE`→`RESOLVABLE`, `_CLASS_FOR_STATUS`→`CLASS_FOR_STATUS`; update consumers `src/specops/gateprofiles.py`, `src/specops/trace.py`, `src/specops/doctor.py` and test references (SC-002)
+- [X] T016 [US2] Promote `ledger._ledger_path`→`ledger.ledger_path` (consumer `src/specops/lane.py`, 5 sites), `review._profile_gates`→`profile_gates` (lane), `review._existing_evidence`→`existing_evidence` (cli), `gateprofiles._affected_for`→`affected_for` (review) and test references (SC-002)
+- [X] T017 [US2] Promote `handoff._canonical`→`canonical_finding` (consumer `src/specops/sarif.py`), `initializer._install_review`→`install_review` (extension), `initializer._scan_markers`→`scan_markers` (migration) and test references (SC-002)
+- [X] T018 [US2] Sweep remaining test-side private references (FR-014): rewrite behavior-level tests against the public surface where it expresses the same assertion (`review._run_profile_gate`→via `evaluate`, `extension._merge_manifest`→via `install`, per research.md R7 list); pure-helper unit tests may keep testing the now-public names (SC-002)
+- [X] T019 [US2] Verify: T012 boundary test green (0 sites), full suite green, golden replay byte-identical (no delta expected in this story) (SC-001, SC-002)
 
 **Checkpoint**: US1 + US2 independently verified — boundaries are contracts
 
