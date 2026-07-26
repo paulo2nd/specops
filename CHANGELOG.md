@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **PEP 440 version comparison in the CLI-compatibility gate ([#24]).** The
+  hand-rolled parser truncated pre-release suffixes, so `0.3.0rc1` wrongly
+  satisfied a `>= 0.3.0` floor (PEP 440: `0.3.0rc1 < 0.3.0`). Because the floor
+  can come from the user's `specops.json` `min_cli_version`, the gate could pass
+  when it should block. Replaced the ~25-line custom parser with
+  `packaging.version.Version`, giving full PEP 440 semantics (pre-releases,
+  epochs, dev builds); an unparseable version now fails closed. Adds `packaging`
+  as a runtime dependency (pure Python, zero transitive deps) and a corresponding
+  constitution PATCH amendment (1.9.0 → 1.9.1).
+
+[#24]: https://github.com/paulo2nd/specops/issues/24
 - **Config robustness ([#23]).** `config.create_or_merge` no longer silently
   discards a corrupted `specops.json` and overwrites it with defaults. It now
   reuses `config.load`, so a corrupted file raises `ConfigError` (same contract

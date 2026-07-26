@@ -35,8 +35,18 @@ def test_check_fails_when_missing(monkeypatch) -> None:
     assert "not installed" in result.reason()
 
 
-def test_prerelease_suffix_is_ignored(monkeypatch) -> None:
-    monkeypatch.setattr(compat, "installed_version", lambda: "0.3.0.dev1")
+def test_prerelease_below_floor_is_rejected(monkeypatch) -> None:
+    # PEP 440: a pre-release of the floor version is *older* than the floor (#24).
+    # 0.3.0rc1 < 0.3.0 and 0.3.0.dev1 < 0.3.0, so both must NOT satisfy >= 0.3.0.
+    for pre in ("0.3.0rc1", "0.3.0.dev1", "0.3.0a1", "0.3.0b2"):
+        monkeypatch.setattr(compat, "installed_version", lambda pre=pre: pre)
+        assert not compat.check().satisfied, f"{pre} must not satisfy the 0.3.0 floor"
+
+
+def test_prerelease_above_floor_satisfies(monkeypatch) -> None:
+    # A pre-release of a *higher* version still clears the floor (version-aware,
+    # not a blanket pre-release reject): 1.0.0.dev1 > 0.3.0.
+    monkeypatch.setattr(compat, "installed_version", lambda: "1.0.0.dev1")
     assert compat.check().satisfied
 
 
@@ -44,3 +54,10 @@ def test_two_component_version_satisfies_three_component_floor(monkeypatch) -> N
     # '0.3' means the same as the '0.3.0' floor — must not be rejected as older.
     monkeypatch.setattr(compat, "installed_version", lambda: "0.3")
     assert compat.check().satisfied
+
+
+def test_malformed_installed_version_is_fail_closed(monkeypatch) -> None:
+    # An unparseable installed version compares as not-satisfied (fail-closed, R7),
+    # rather than crashing the gate.
+    monkeypatch.setattr(compat, "installed_version", lambda: "not-a-version")
+    assert not compat.check().satisfied
