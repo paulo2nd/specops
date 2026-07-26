@@ -1,0 +1,12 @@
+$ specops status show --json
+--- exit_code ---
+2
+--- stdout ---
+
+--- stderr ---
+Usage: specops status show [OPTIONS]
+Try 'specops status show --help' for help.
+╭─ Error ──────────────────────────────────────────────────────────────────────╮
+│ No such option: --json                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+

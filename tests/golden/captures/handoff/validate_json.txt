@@ -1,0 +1,8 @@
+$ specops handoff validate --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "handoff validate", "outcome": "ok", "class": "pass", "status": "validate_ok", "output_version": 1, "defects": []}
+
+--- stderr ---
+

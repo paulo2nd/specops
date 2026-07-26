@@ -1,0 +1,8 @@
+$ specops handoff validate
+--- exit_code ---
+0
+--- stdout ---
+handoff validate: OK — no handoff defects
+
+--- stderr ---
+

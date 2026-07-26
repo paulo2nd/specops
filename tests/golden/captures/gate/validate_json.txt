@@ -1,0 +1,8 @@
+$ specops gate validate --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "gate-validate", "outcome": "ok", "class": "pass", "status": "valid", "output_version": 1, "profiles": 1}
+
+--- stderr ---
+

@@ -1,0 +1,8 @@
+$ specops trace report --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "trace report", "outcome": "ok", "class": "pass", "status": "trace_ok", "output_version": 1, "graph": {"success_criteria": [{"sc": "SC-001", "tasks": ["T001"], "completed": true}], "tasks": [{"id": "T001", "status": "DONE", "evidence": "CLI_LOG:ok", "commits": ["<HEX>"], "contexts": [], "digest": null}], "review_cycles": [], "findings": [], "acknowledgements": []}}
+
+--- stderr ---
+

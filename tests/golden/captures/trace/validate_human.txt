@@ -1,0 +1,9 @@
+$ specops trace validate
+--- exit_code ---
+1
+--- stdout ---
+
+--- stderr ---
+trace: uncovered-sc - SC 'SC-001' has no covering task
+trace: unexplained path - src/surprise.py
+

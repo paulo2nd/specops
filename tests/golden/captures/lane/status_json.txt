@@ -1,0 +1,8 @@
+$ specops lane status --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "lane-status", "outcome": "ok", "class": "pass", "state": "OPEN", "baseline": "<HEX>", "decisions": 0}
+
+--- stderr ---
+

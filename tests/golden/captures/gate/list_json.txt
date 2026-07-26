@@ -1,0 +1,8 @@
+$ specops gate list --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "gate-list", "outcome": "ok", "class": "pass", "status": "list_ok", "output_version": 1, "selection": [{"name": "smoke", "selected": true, "reason": "always", "required": true}], "changed_paths": [], "default_profile": false}
+
+--- stderr ---
+

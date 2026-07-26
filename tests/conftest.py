@@ -12,6 +12,20 @@ import yaml
 from specops import ledger
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register the golden-capture record flag (Feature 018 behavior freeze).
+
+    Declared in the tests-root conftest (not ``tests/golden/conftest.py``) so it is
+    honoured both by a scoped ``pytest tests/golden`` run and the full ``pytest tests/``
+    suite — a non-root conftest's ``pytest_addoption`` is skipped when the full tree
+    is collected.
+    """
+    parser.addoption(
+        "--golden-record", action="store_true", default=False,
+        help="Record golden captures instead of diffing against them (Feature 018).",
+    )
+
+
 @pytest.fixture()
 def tmp_git_repo(tmp_path: Path) -> Path:
     """Return a path to a freshly initialised Git repository."""

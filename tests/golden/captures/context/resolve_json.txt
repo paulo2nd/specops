@@ -1,0 +1,8 @@
+$ specops context resolve --path src/api/x.py --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "resolve", "outcome": "ok", "class": "pass", "status": "resolved", "output_version": 1, "package": {"context_id": "api", "phase": null, "read_set": ["src/api"], "read_set_source": "base", "dependencies": ["config"], "expanded_read_set": [{"path": "src/api", "via": "api"}, {"path": "src/config", "via": "api->config"}], "gates": ["contract-tests"], "risk": {"tier": "high"}}}
+
+--- stderr ---
+

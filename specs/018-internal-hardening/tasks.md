@@ -27,7 +27,7 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 - [X] T001 Create branch `018-internal-hardening` from `main`; commit the `specs/018-internal-hardening/` artifacts and the `.specify/feature.json` pointer
 - [X] T002 Feature 018 entry (ACTIVE) registered in `ROADMAP.md` via the dedicated plan PR #31 (merged 2026-07-25); the ACTIVE→MERGED flip still happens inside this feature's PR at merge time, per repo convention
-- [ ] T003 Record baselines for later comparison in the PR description: baseline commit SHA, `time pytest tests/ -q` wall-clock (full suite and `tests/integration/` alone), and the SC-002 scan output (expected: 39 sites) using the script in `specs/018-internal-hardening/quickstart.md` §2 (SC-002, SC-005)
+- [X] T003 Record baselines for later comparison in the PR description: baseline commit SHA, `time pytest tests/ -q` wall-clock (full suite and `tests/integration/` alone), and the SC-002 scan output (expected: 39 sites) using the script in `specs/018-internal-hardening/quickstart.md` §2 (SC-002, SC-005)
 
 ---
 
@@ -37,8 +37,8 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 **⚠️ CRITICAL**: no refactor lands before the golden baseline is recorded
 
-- [ ] T004 Build the golden-capture harness in `tests/golden/` (new): fixture repos per command family (context, trace, handoff, gate, lane, status/report, reconcile), capturing `(stdout, stderr, exit_code)` in human and `--json` modes; `--golden-record` flag in `tests/golden/conftest.py` writes captures, default mode diffs against them (SC-001, SC-006)
-- [ ] T005 Record the baseline captures on the unmodified tree and commit them under `tests/golden/captures/`; replay must pass with zero diffs before any refactor task starts (SC-001)
+- [X] T004 Build the golden-capture harness in `tests/golden/` (new): fixture repos per command family (context, trace, handoff, gate, lane, status/report, reconcile), capturing `(stdout, stderr, exit_code)` in human and `--json` modes; `--golden-record` flag in `tests/golden/conftest.py` writes captures, default mode diffs against them (SC-001, SC-006)
+- [X] T005 Record the baseline captures on the unmodified tree and commit them under `tests/golden/captures/`; replay must pass with zero diffs before any refactor task starts (SC-001)
 
 **Checkpoint**: golden replay green on the untouched tree — refactoring may begin
 

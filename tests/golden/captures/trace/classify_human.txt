@@ -1,0 +1,10 @@
+$ specops trace classify
+--- exit_code ---
+0
+--- stdout ---
+trace classify: 1 planned, 0 discovered-and-acknowledged, 1 unexplained
+planned                      src/planned.py  (plan-declared)
+unexplained                  src/surprise.py  (none)
+
+--- stderr ---
+

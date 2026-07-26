@@ -1,0 +1,8 @@
+$ specops report --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "report", "output_version": 1, "outcome": "ok", "class": "pass", "active_feature": "001-demo", "branch": "main", "phase": "IMPLEMENT", "tasks": {"pending": 0, "in_progress": 0, "done": 1, "orphaned": 0, "total": 1}, "active_task": null, "review": {"cycles": 0, "blocking_open": 0}, "workflow_lane": "full"}
+
+--- stderr ---
+

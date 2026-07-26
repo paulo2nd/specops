@@ -1,0 +1,8 @@
+$ specops lane start --answers small,reversible,no-high-risk-category --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "lane-start", "outcome": "ok", "class": "pass", "lane_id": "013-lane", "baseline": "<HEX>", "bundled": false}
+
+--- stderr ---
+
