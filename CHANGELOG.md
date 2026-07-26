@@ -11,8 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-26
+
+Wave 1 of the **1.0 Readiness** cycle: three defect fixes from the 2026-07-25
+code/process review (issues #23, #24, #28). Bug fixes only — no new features, no
+migration; the CLI surface, `specops.json` schema, and ledger format are unchanged.
+
 ### Fixed
 
+- **Config robustness ([#23]).** `config.create_or_merge` no longer silently
+  discards a corrupted `specops.json` and overwrites it with defaults. It now
+  reuses `config.load`, so a corrupted file raises `ConfigError` (same contract
+  as `load`, honoring the unknown-keys-are-preserved guarantee), and it skips the
+  write entirely when the merge produces no change — keeping the user's exact
+  bytes and byte-for-byte install idempotence.
+- **UTF-8 file reads ([#28]).** Pinned `encoding="utf-8"` on the five remaining
+  `read_text()` calls in `config.py` and `speckit.py` that fell back to the
+  platform locale, preventing cp1252 divergence on Windows.
 - **PEP 440 version comparison in the CLI-compatibility gate ([#24]).** The
   hand-rolled parser truncated pre-release suffixes, so `0.3.0rc1` wrongly
   satisfied a `>= 0.3.0` floor (PEP 440: `0.3.0rc1 < 0.3.0`). Because the floor
@@ -23,18 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as a runtime dependency (pure Python, zero transitive deps) and a corresponding
   constitution PATCH amendment (1.9.0 → 1.9.1).
 
-[#24]: https://github.com/paulo2nd/specops/issues/24
-- **Config robustness ([#23]).** `config.create_or_merge` no longer silently
-  discards a corrupted `specops.json` and overwrites it with defaults. It now
-  reuses `config.load`, so a corrupted file raises `ConfigError` (same contract
-  as `load`, honoring the unknown-keys-are-preserved guarantee), and it skips the
-  write entirely when the merge produces no change — keeping the user's exact
-  bytes and byte-for-byte install idempotence.
-- **UTF-8 file reads ([#28]).** Pinned `encoding="utf-8"` on the five remaining
-  `read_text()` calls in `config.py` and `speckit.py` that fell back to the
-  platform locale, preventing cp1252 divergence on Windows.
-
 [#23]: https://github.com/paulo2nd/specops/issues/23
+[#24]: https://github.com/paulo2nd/specops/issues/24
 [#28]: https://github.com/paulo2nd/specops/issues/28
 
 ## [0.5.0] - 2026-07-25
