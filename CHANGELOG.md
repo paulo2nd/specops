@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`specops lane … --json` now emits the standard output envelope (Feature 018).**
+  Lane JSON output gained two top-level fields — `output_version` and `status` —
+  bringing it into conformance with the envelope every other command family
+  (`context`, `trace`, `handoff`, `gate`, `report`) already emits. Additive only:
+  no existing key is removed, renamed, or reordered, and lane human-mode output and
+  exit codes are unchanged. This is the single sanctioned behavior change of the
+  internal-hardening consolidation; all other command output is byte-identical
+  (enforced by the new `tests/golden/` behavior-freeze harness).
+
 ## [0.5.1] - 2026-07-26
 
 Wave 1 of the **1.0 Readiness** cycle: three defect fixes from the 2026-07-25

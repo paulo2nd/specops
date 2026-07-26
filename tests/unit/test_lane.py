@@ -338,3 +338,51 @@ def test_bundle_combined_set_halts_when_one_change_is_risky(feat: Path):
     res = lane.cmd_check(feat, staged=False)
     assert res.cls == outcome.GATE_REJECTION
     assert "migration" in res.extra["categories"]
+
+
+# --- Feature 018: lane JSON envelope conformance (SC-001) -------------------
+
+
+def _lane_cli(root: Path, *args: str):
+    """Invoke the lane CLI in *root* (the emit path is where the envelope is built)."""
+    import os
+
+    from typer.testing import CliRunner
+
+    from specops.cli import app
+
+    runner = CliRunner()
+    cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        return runner.invoke(app, list(args))
+    finally:
+        os.chdir(cwd)
+
+
+def test_lane_json_carries_output_version_and_status(feat: Path) -> None:
+    """The one sanctioned delta: lane ``--json`` gains the standard envelope fields
+    (``output_version`` + top-level ``status``) that every other family already emits.
+    Additive only — the pre-existing keys are unchanged."""
+    result = _lane_cli(
+        feat, "lane", "start", "--answers", ",".join(lane.ELIGIBILITY_CRITERIA), "--json"
+    )
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["output_version"] == lane.OUTPUT_VERSION
+    assert payload["status"] == outcome.OK
+    # additive: the envelope keys lane already emitted stay exactly as before
+    assert payload["command"] == "lane-start"
+    assert payload["outcome"] == "ok"
+    assert payload["class"] == "pass"
+    assert payload["lane_id"] == "013-lane"
+
+
+def test_lane_json_status_is_blocked_on_gate_rejection(feat: Path) -> None:
+    """A gate-rejection lane result carries status=blocked in the envelope."""
+    result = _lane_cli(feat, "lane", "start", "--answers", "small", "--json")
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == outcome.BLOCKED
+    assert payload["class"] == "gate-rejection"
+    assert payload["output_version"] == lane.OUTPUT_VERSION

@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Iterator
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -91,23 +90,11 @@ _CLASS_FOR_STATUS = {
 _SEVERITY_RANK = {"blocking": 0, "advisory": 1}
 
 
-@dataclass
-class HandoffResult:
-    """A render-agnostic command outcome consumed by the CLI (mirrors
-    :class:`specops.trace.TraceResult`)."""
+class HandoffResult(outcome.CommandResult):
+    """A handoff command's outcome — the shared :class:`outcome.CommandResult` carrying
+    this module's status→class map (mirrors :class:`specops.trace.TraceResult`)."""
 
-    command: str
-    status: str
-    human: str
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def cls(self) -> str:
-        return _CLASS_FOR_STATUS[self.status]
-
-    @property
-    def exit_code(self) -> int:
-        return outcome.exit_for(self.cls)
+    _CLASS_MAP = _CLASS_FOR_STATUS
 
 
 # ---------------------------------------------------------------------------

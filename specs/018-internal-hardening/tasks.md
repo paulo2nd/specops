@@ -52,15 +52,15 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 ### Tests for User Story 1 (mandatory per Constitution task gate) ⚠️
 
-- [ ] T006 [P] [US1] Add failing test in `tests/unit/test_lane.py` asserting lane `--json` output contains top-level `output_version` and `status` (currently absent — must fail before T010) (SC-001)
-- [ ] T007 [P] [US1] Add tests in `tests/unit/test_outcome_contract.py` asserting the trace and handoff result types are `outcome.CommandResult` subclasses whose `_CLASS_MAP` reproduces today's status→exit-code mapping exactly (enumerate all statuses of both families) (SC-003)
+- [X] T006 [P] [US1] Add failing test in `tests/unit/test_lane.py` asserting lane `--json` output contains top-level `output_version` and `status` (currently absent — must fail before T010) (SC-001)
+- [X] T007 [P] [US1] Add tests in `tests/unit/test_outcome_contract.py` asserting the trace and handoff result types are `outcome.CommandResult` subclasses whose `_CLASS_MAP` reproduces today's status→exit-code mapping exactly (enumerate all statuses of both families) (SC-003)
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Refactor `src/specops/trace.py`: delete the `TraceResult` dataclass body and module-level `_CLASS_FOR_STATUS`-as-API; define `TraceResult(outcome.CommandResult)` carrying only `_CLASS_MAP` (mirroring `contextmap.py:134-138`); update all in-module constructors/usages (SC-003)
-- [ ] T009 [US1] Refactor `src/specops/handoff.py` the same way: `HandoffResult(outcome.CommandResult)` with `_CLASS_MAP`; update all in-module usages (including the `_load_write` isinstance sites — mechanical, no contract change in this story) (SC-003)
-- [ ] T010 [US1] Unify the five emit helpers in `src/specops/cli.py` (`_emit_context` 587, `_emit_trace` 725, `_emit_handoff` 790, `_emit_gate` 1001, `_emit_lane` 1096) into one `_emit(result, json_out, *, output_version, soft=False)`; all call sites pass their module's `OUTPUT_VERSION`; lane adopts the full envelope (sanctioned delta) and keeps `soft` exit semantics (SC-001, SC-003)
-- [ ] T011 [US1] Re-record only the lane captures (`--golden-record` scoped to lane), verify every other family's replay is byte-identical, run the full suite, and add the CHANGELOG `[Unreleased]` entry describing the lane envelope addition as the feature's single behavior change (SC-001, SC-006)
+- [X] T008 [US1] Refactor `src/specops/trace.py`: delete the `TraceResult` dataclass body and module-level `_CLASS_FOR_STATUS`-as-API; define `TraceResult(outcome.CommandResult)` carrying only `_CLASS_MAP` (mirroring `contextmap.py:134-138`); update all in-module constructors/usages (SC-003)
+- [X] T009 [US1] Refactor `src/specops/handoff.py` the same way: `HandoffResult(outcome.CommandResult)` with `_CLASS_MAP`; update all in-module usages (including the `_load_write` isinstance sites — mechanical, no contract change in this story) (SC-003)
+- [X] T010 [US1] Unify the five emit helpers in `src/specops/cli.py` (`_emit_context` 587, `_emit_trace` 725, `_emit_handoff` 790, `_emit_gate` 1001, `_emit_lane` 1096) into one `_emit(result, json_out, *, output_version, soft=False)`; all call sites pass their module's `OUTPUT_VERSION`; lane adopts the full envelope (sanctioned delta) and keeps `soft` exit semantics (SC-001, SC-003)
+- [X] T011 [US1] Re-record only the lane captures (`--golden-record` scoped to lane), verify every other family's replay is byte-identical, run the full suite, and add the CHANGELOG `[Unreleased]` entry describing the lane envelope addition as the feature's single behavior change (SC-001, SC-006)
 
 **Checkpoint**: US1 fully functional — golden replay green (lane delta only), suite green
 

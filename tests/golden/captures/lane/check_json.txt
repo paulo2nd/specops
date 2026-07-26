@@ -2,7 +2,7 @@ $ specops lane check --json
 --- exit_code ---
 0
 --- stdout ---
-{"command": "lane-check", "outcome": "ok", "class": "pass", "detections": []}
+{"command": "lane-check", "outcome": "ok", "class": "pass", "status": "ok", "output_version": 1, "detections": []}
 
 --- stderr ---
 

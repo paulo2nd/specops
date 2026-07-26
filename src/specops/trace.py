@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import posixpath
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -89,23 +89,11 @@ def _is_managed(path: str, feature_name: str | None = None) -> bool:
     return feature_name is not None and path.startswith(f"specs/{feature_name}/")
 
 
-@dataclass
-class TraceResult:
-    """A render-agnostic command outcome consumed by the CLI layer (mirrors
-    :class:`contextmap.CommandResult`)."""
+class TraceResult(outcome.CommandResult):
+    """A trace command's outcome — the shared :class:`outcome.CommandResult` carrying
+    this module's status→class map (mirrors :class:`contextmap.CommandResult`)."""
 
-    command: str
-    status: str
-    human: str
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def cls(self) -> str:
-        return _CLASS_FOR_STATUS[self.status]
-
-    @property
-    def exit_code(self) -> int:
-        return outcome.exit_for(self.cls)
+    _CLASS_MAP = _CLASS_FOR_STATUS
 
 
 # ---------------------------------------------------------------------------

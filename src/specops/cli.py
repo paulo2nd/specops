@@ -584,17 +584,27 @@ def extension_remove(
 # ---------------------------------------------------------------------------
 
 
-def _emit_context(result: Any, json_out: bool) -> None:
-    """Render a contextmap.CommandResult and exit with its mapped code."""
-    from specops import contextmap, outcome
+def _emit(result: Any, json_out: bool, *, output_version: int, soft: bool = False) -> None:
+    """Render any command family's :class:`outcome.CommandResult` and exit (Feature 018).
+
+    The single emit path for every family (context/trace/handoff/gate/lane): the JSON
+    mode renders the stable envelope (``command``, ``outcome``, ``class``, top-level
+    ``status``, ``output_version`` + the result's ``extra`` payload); human mode prints
+    ``result.human`` to stdout on PASS, stderr otherwise. ``soft`` (lane ``--json``)
+    forces exit 0 so a gate-rejection drives a native workflow ``if`` instead of aborting
+    the shell step — the class/verdict remains in the JSON.
+    """
+    from specops import outcome
     if json_out:
         typer.echo(outcome.render(
             result.command, result.cls,
-            status=result.status, output_version=contextmap.OUTPUT_VERSION,
+            status=result.status, output_version=output_version,
             **result.extra,
         ))
     else:
         typer.echo(result.human, err=result.cls != outcome.PASS)
+    if soft and json_out:
+        raise typer.Exit(0)
     raise typer.Exit(result.exit_code)
 
 
@@ -605,7 +615,7 @@ def context_init(
 ) -> None:
     """Create the starter context map when absent (idempotent, atomic)."""
     from specops import contextmap
-    _emit_context(contextmap.cmd_init(Path(".")), json_out)
+    _emit(contextmap.cmd_init(Path(".")), json_out, output_version=contextmap.OUTPUT_VERSION)
 
 
 @context_app.command("validate")
@@ -615,7 +625,7 @@ def context_validate(
 ) -> None:
     """Validate the context map; report all defects in one pass."""
     from specops import contextmap
-    _emit_context(contextmap.cmd_validate(Path(".")), json_out)
+    _emit(contextmap.cmd_validate(Path(".")), json_out, output_version=contextmap.OUTPUT_VERSION)
 
 
 @context_app.command("resolve")
@@ -628,9 +638,9 @@ def context_resolve(
 ) -> None:
     """Resolve a path or id to its ordered, phase-specific context package."""
     from specops import contextmap
-    _emit_context(
-        contextmap.cmd_resolve(Path("."), path=path, ctx_id=ctx_id, phase=phase), json_out
-    )
+    _emit(
+        contextmap.cmd_resolve(Path("."), path=path, ctx_id=ctx_id, phase=phase), json_out,
+        output_version=contextmap.OUTPUT_VERSION)
 
 
 @context_app.command("explain")
@@ -643,9 +653,9 @@ def context_explain(
 ) -> None:
     """Explain why a context was resolved (ordered reason trace)."""
     from specops import contextmap
-    _emit_context(
-        contextmap.cmd_explain(Path("."), path=path, ctx_id=ctx_id, phase=phase), json_out
-    )
+    _emit(
+        contextmap.cmd_explain(Path("."), path=path, ctx_id=ctx_id, phase=phase), json_out,
+        output_version=contextmap.OUTPUT_VERSION)
 
 
 @context_app.command("plan-check")
@@ -664,9 +674,9 @@ def context_plan_check(
         feature_dir = speckit.resolve_feature_dir(root)
         plan_path = (feature_dir / "plan.md") if feature_dir is not None else Path("plan.md")
     plan_text = plan_path.read_text(encoding="utf-8") if plan_path.is_file() else ""
-    _emit_context(
-        contextmap.cmd_plan_check(root, plan_text=plan_text, phase=phase), json_out
-    )
+    _emit(
+        contextmap.cmd_plan_check(root, plan_text=plan_text, phase=phase), json_out,
+        output_version=contextmap.OUTPUT_VERSION)
 
 
 @context_app.command("impact")
@@ -683,21 +693,24 @@ def context_impact(
     else:
         repo = gitops.find_repo(root)
         if repo is None:
-            _emit_context(contextmap.CommandResult(
+            _emit(contextmap.CommandResult(
                 "impact", contextmap.S_USAGE_ERROR,
-                "context impact: not a Git repository and no --path given"), json_out)
+                "context impact: not a Git repository and no --path given"), json_out,
+                output_version=contextmap.OUTPUT_VERSION)
             return
         try:
             baseline = status.read_baseline(root)
         except Exception:
             baseline = ""
         if not baseline or not gitops.commit_exists(repo, baseline):
-            _emit_context(contextmap.CommandResult(
+            _emit(contextmap.CommandResult(
                 "impact", contextmap.S_USAGE_ERROR,
-                "context impact: no resolvable ledger baseline; pass --path explicitly"), json_out)
+                "context impact: no resolvable ledger baseline; pass --path explicitly"), json_out,
+                output_version=contextmap.OUTPUT_VERSION)
             return
         paths = gitops.name_only_diff(repo, baseline, "HEAD")
-    _emit_context(contextmap.cmd_impact(root, paths=paths), json_out)
+    _emit(contextmap.cmd_impact(root, paths=paths), json_out,
+    output_version=contextmap.OUTPUT_VERSION)
 
 
 @context_app.command("stale")
@@ -710,30 +723,17 @@ def context_stale(
     root = Path(".")
     repo = gitops.find_repo(root)
     if repo is None:
-        _emit_context(contextmap.CommandResult(
-            "stale", contextmap.S_USAGE_ERROR, "context stale: not a Git repository"), json_out)
+        _emit(contextmap.CommandResult(
+            "stale", contextmap.S_USAGE_ERROR, "context stale: not a Git repository"), json_out,
+            output_version=contextmap.OUTPUT_VERSION)
         return
     tracked = [f for f in repo.git.ls_files().splitlines() if f]
-    _emit_context(contextmap.cmd_stale(root, tracked), json_out)
+    _emit(contextmap.cmd_stale(root, tracked), json_out, output_version=contextmap.OUTPUT_VERSION)
 
 
 # ---------------------------------------------------------------------------
 # trace subcommands (Feature 010 — end-to-end traceability)
 # ---------------------------------------------------------------------------
-
-
-def _emit_trace(result: Any, json_out: bool) -> None:
-    """Render a trace.TraceResult and exit with its mapped code."""
-    from specops import outcome, trace
-    if json_out:
-        typer.echo(outcome.render(
-            result.command, result.cls,
-            status=result.status, output_version=trace.OUTPUT_VERSION,
-            **result.extra,
-        ))
-    else:
-        typer.echo(result.human, err=result.cls != outcome.PASS)
-    raise typer.Exit(result.exit_code)
 
 
 @trace_app.command("classify")
@@ -744,9 +744,9 @@ def trace_classify(
 ) -> None:
     """Classify every effective-diff path (planned / discovered / unexplained)."""
     from specops import trace
-    _emit_trace(
-        trace.cmd_classify(Path("."), explicit_paths=list(path) if path else None), json_out
-    )
+    _emit(
+        trace.cmd_classify(Path("."), explicit_paths=list(path) if path else None), json_out,
+        output_version=trace.OUTPUT_VERSION)
 
 
 @trace_app.command("validate")
@@ -756,7 +756,7 @@ def trace_validate(
 ) -> None:
     """Fail closed on any trace defect or unexplained effective-diff path."""
     from specops import trace
-    _emit_trace(trace.cmd_validate(Path(".")), json_out)
+    _emit(trace.cmd_validate(Path(".")), json_out, output_version=trace.OUTPUT_VERSION)
 
 
 @trace_app.command("report")
@@ -766,7 +766,7 @@ def trace_report(
 ) -> None:
     """Render the full trace: success criteria → tasks → commits → evidence → findings."""
     from specops import trace
-    _emit_trace(trace.cmd_report(Path(".")), json_out)
+    _emit(trace.cmd_report(Path(".")), json_out, output_version=trace.OUTPUT_VERSION)
 
 
 @trace_app.command("acknowledge")
@@ -779,26 +779,13 @@ def trace_acknowledge(
 ) -> None:
     """Record a one-time path-level acknowledgement of a discovered path."""
     from specops import trace
-    _emit_trace(trace.cmd_acknowledge(Path("."), path, task=task, reason=reason), json_out)
+    _emit(trace.cmd_acknowledge(Path("."), path, task=task, reason=reason), json_out,
+    output_version=trace.OUTPUT_VERSION)
 
 
 # ---------------------------------------------------------------------------
 # handoff — structured corrective handoffs (Feature 011)
 # ---------------------------------------------------------------------------
-
-
-def _emit_handoff(result: Any, json_out: bool) -> None:
-    """Render a handoff.HandoffResult and exit with its mapped code."""
-    from specops import handoff, outcome
-    if json_out:
-        typer.echo(outcome.render(
-            result.command, result.cls,
-            status=result.status, output_version=handoff.OUTPUT_VERSION,
-            **result.extra,
-        ))
-    else:
-        typer.echo(result.human, err=result.cls != outcome.PASS)
-    raise typer.Exit(result.exit_code)
 
 
 @finding_app.command("add")
@@ -816,10 +803,10 @@ def handoff_finding_add(
 ) -> None:
     """Record a structured finding in the current review round's handoff."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_finding_add(
+    _emit(handoff.cmd_finding_add(
         Path("."), severity=severity, rule=rule, file=file, line=line, action=action,
         expected_evidence=expected_evidence, closure=closure,
-    ), json_out)
+    ), json_out, output_version=handoff.OUTPUT_VERSION)
 
 
 @finding_app.command("fix")
@@ -834,10 +821,10 @@ def handoff_finding_fix(
 ) -> None:
     """OPEN -> FIXED: link the resolving task, commit(s), and evidence."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_finding_fix(
+    _emit(handoff.cmd_finding_fix(
         Path("."), finding_id, task=task, commits=list(commit) if commit else [],
         evidence=evidence, auto=auto,
-    ), json_out)
+    ), json_out, output_version=handoff.OUTPUT_VERSION)
 
 
 @finding_app.command("verify")
@@ -848,7 +835,8 @@ def handoff_finding_verify(
 ) -> None:
     """FIXED -> VERIFIED: mechanical precondition guard; the reviewer's closure judgment."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_finding_verify(Path("."), finding_id), json_out)
+    _emit(handoff.cmd_finding_verify(Path("."), finding_id), json_out,
+    output_version=handoff.OUTPUT_VERSION)
 
 
 @finding_app.command("dismiss")
@@ -860,7 +848,8 @@ def handoff_finding_dismiss(
 ) -> None:
     """Withdraw a false-positive or superseded finding to the terminal DISMISSED state."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_finding_dismiss(Path("."), finding_id, reason=reason), json_out)
+    _emit(handoff.cmd_finding_dismiss(Path("."), finding_id, reason=reason), json_out,
+    output_version=handoff.OUTPUT_VERSION)
 
 
 @finding_app.command("import-json")
@@ -871,7 +860,8 @@ def handoff_finding_import_json(
 ) -> None:
     """Import external review findings from the versioned JSON contract (Feature 015)."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_finding_import_json(Path("."), file=file), json_out)
+    _emit(handoff.cmd_finding_import_json(Path("."), file=file), json_out,
+    output_version=handoff.OUTPUT_VERSION)
 
 
 @finding_app.command("import-sarif")
@@ -882,7 +872,8 @@ def handoff_finding_import_sarif(
 ) -> None:
     """Import external review findings from a SARIF 2.1.0 document (Feature 015)."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_finding_import_sarif(Path("."), file=file), json_out)
+    _emit(handoff.cmd_finding_import_sarif(Path("."), file=file), json_out,
+    output_version=handoff.OUTPUT_VERSION)
 
 
 @finding_app.command("promote")
@@ -896,8 +887,9 @@ def handoff_finding_promote(
 ) -> None:
     """Escalate an imported advisory finding to blocking (human, audited triage)."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_finding_promote(
-        Path("."), finding_id, closure=closure, expected_evidence=expected_evidence), json_out)
+    _emit(handoff.cmd_finding_promote(
+        Path("."), finding_id, closure=closure, expected_evidence=expected_evidence), json_out,
+        output_version=handoff.OUTPUT_VERSION)
 
 
 @handoff_app.command("authorize")
@@ -908,7 +900,8 @@ def handoff_authorize(
 ) -> None:
     """Set/extend the current round handoff's authorized corrective paths."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_authorize(Path("."), list(path)), json_out)
+    _emit(handoff.cmd_authorize(Path("."), list(path)), json_out,
+    output_version=handoff.OUTPUT_VERSION)
 
 
 @handoff_app.command("close")
@@ -918,7 +911,7 @@ def handoff_close(
 ) -> None:
     """Close the current round's handoff (all blocking findings VERIFIED); idempotent."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_close(Path(".")), json_out)
+    _emit(handoff.cmd_close(Path(".")), json_out, output_version=handoff.OUTPUT_VERSION)
 
 
 @handoff_app.command("validate")
@@ -928,7 +921,7 @@ def handoff_validate(
 ) -> None:
     """Fail closed on any handoff defect (dangling ref, missing closure, contradictory)."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_validate(Path(".")), json_out)
+    _emit(handoff.cmd_validate(Path(".")), json_out, output_version=handoff.OUTPUT_VERSION)
 
 
 @handoff_app.command("report")
@@ -938,7 +931,7 @@ def handoff_report(
 ) -> None:
     """Render every handoff finding and the remaining unverified blocking set."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_report(Path(".")), json_out)
+    _emit(handoff.cmd_report(Path(".")), json_out, output_version=handoff.OUTPUT_VERSION)
 
 
 @handoff_app.command("import")
@@ -949,7 +942,7 @@ def handoff_import(
 ) -> None:
     """Import legacy revision-X.md prose into structured advisory findings."""
     from specops import handoff
-    _emit_handoff(handoff.cmd_import(Path("."), round), json_out)
+    _emit(handoff.cmd_import(Path("."), round), json_out, output_version=handoff.OUTPUT_VERSION)
 
 
 @handoff_app.command("render")
@@ -960,7 +953,8 @@ def handoff_render(
 ) -> None:
     """Project the round's handoff to revisions/revision-<round>.md (structured -> Markdown)."""
     from specops import handoff
-    _emit_handoff(handoff.render_revision(Path("."), round), json_out)
+    _emit(handoff.render_revision(Path("."), round), json_out,
+    output_version=handoff.OUTPUT_VERSION)
 
 
 # ---------------------------------------------------------------------------
@@ -998,20 +992,6 @@ def _gate_json(r: Any) -> dict[str, Any]:
     return obj
 
 
-def _emit_gate(result: Any, json_out: bool) -> None:
-    """Render a gateprofiles.GateCommandResult and exit with its mapped code."""
-    from specops import gateprofiles, outcome
-    if json_out:
-        typer.echo(outcome.render(
-            result.command, result.cls,
-            status=result.status, output_version=gateprofiles.OUTPUT_VERSION,
-            **result.extra,
-        ))
-    else:
-        typer.echo(result.human, err=result.cls != outcome.PASS)
-    raise typer.Exit(result.exit_code)
-
-
 def _effective_diff_paths(root: Path) -> list[str]:
     """Best-effort effective-diff paths for selection; [] when undeterminable."""
     from specops import gitops, status
@@ -1037,7 +1017,8 @@ def gate_list(
     from specops import gateprofiles
     root = Path(".")
     changed = list(path) if path else _effective_diff_paths(root)
-    _emit_gate(gateprofiles.cmd_list(root, changed), json_out)
+    _emit(gateprofiles.cmd_list(root, changed), json_out,
+    output_version=gateprofiles.OUTPUT_VERSION)
 
 
 @gate_app.command("validate")
@@ -1047,7 +1028,7 @@ def gate_validate(
 ) -> None:
     """Validate the gate-profile config; report every defect in one pass (FR-014)."""
     from specops import gateprofiles
-    _emit_gate(gateprofiles.validate(Path(".")), json_out)
+    _emit(gateprofiles.validate(Path(".")), json_out, output_version=gateprofiles.OUTPUT_VERSION)
 
 
 @gate_app.command("report")
@@ -1093,23 +1074,6 @@ def gate_report(
 # lane subcommands (Feature 013) — agent/workflow-facing, non-interactive
 # ---------------------------------------------------------------------------
 
-def _emit_lane(command: str, res: Any, json_out: bool, soft: bool = False) -> None:
-    """Render a LaneResult via the outcome contract and exit with the mapped code.
-
-    With ``--json --soft`` the process always exits 0 (the class/verdict is in the JSON),
-    so a gate-rejection DRIVES a native workflow `if` condition instead of aborting the
-    shell step — the same discipline `specops preflight --soft` uses (Feature 007/013).
-    """
-    from specops import outcome
-    if json_out:
-        typer.echo(outcome.render(command, res.cls, **res.extra))
-    else:
-        typer.echo(res.human, err=res.cls != outcome.PASS)
-    if soft and json_out:
-        raise typer.Exit(0)
-    raise typer.Exit(outcome.exit_for(res.cls))
-
-
 @lane_app.command("start")
 @_handle_errors
 def lane_start(
@@ -1127,7 +1091,8 @@ def lane_start(
     from specops import lane
     _require_git(Path("."))
     res = lane.cmd_start(Path("."), answers=answers.split(","), bundle=bundle)
-    _emit_lane("lane-start", res, json_out)
+    res.command = "lane-start"
+    _emit(res, json_out, output_version=lane.OUTPUT_VERSION)
 
 
 @lane_app.command("status")
@@ -1139,7 +1104,8 @@ def lane_status(
     from specops import lane
     _require_git(Path("."))
     res = lane.cmd_status(Path("."))
-    _emit_lane("lane-status", res, json_out)
+    res.command = "lane-status"
+    _emit(res, json_out, output_version=lane.OUTPUT_VERSION)
 
 
 @lane_app.command("check")
@@ -1157,7 +1123,8 @@ def lane_check(
     from specops import lane
     _require_git(Path("."))
     res = lane.cmd_check(Path("."), staged=staged)
-    _emit_lane("lane-check", res, json_out, soft)
+    res.command = "lane-check"
+    _emit(res, json_out, output_version=lane.OUTPUT_VERSION, soft=soft)
 
 
 @lane_app.command("attest")
@@ -1180,7 +1147,8 @@ def lane_attest(
     from specops import lane
     _require_git(Path("."))
     res = lane.cmd_attest(Path("."), root_cause=root_cause, public_contract=public_contract)
-    _emit_lane("lane-attest", res, json_out, soft)
+    res.command = "lane-attest"
+    _emit(res, json_out, output_version=lane.OUTPUT_VERSION, soft=soft)
 
 
 @lane_app.command("close")
@@ -1192,7 +1160,8 @@ def lane_close(
     from specops import lane
     _require_git(Path("."))
     res = lane.cmd_close(Path("."))
-    _emit_lane("lane-close", res, json_out)
+    res.command = "lane-close"
+    _emit(res, json_out, output_version=lane.OUTPUT_VERSION)
 
 
 @lane_app.command("promote")
@@ -1207,7 +1176,8 @@ def lane_promote(
     from specops import lane
     _require_git(Path("."))
     res = lane.cmd_promote(Path("."), reason=reason)
-    _emit_lane("lane-promote", res, json_out)
+    res.command = "lane-promote"
+    _emit(res, json_out, output_version=lane.OUTPUT_VERSION)
 
 
 if __name__ == "__main__":
