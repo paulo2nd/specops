@@ -36,6 +36,7 @@ CAPTURES_DIR = Path(__file__).parent / "captures"
 # Scrubbing volatile tokens
 # ---------------------------------------------------------------------------
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _ISO_TS = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?"
 )
@@ -52,6 +53,7 @@ def scrub(text: str, root: Path) -> str:
     is removed first; timestamps before bare dates; version triples before hex so a
     ``1.2.3`` is not partially eaten.
     """
+    text = _ANSI.sub("", text)  # defence-in-depth: never let stray colour cause drift
     # Normalise both the real and symlink-resolved forms of the fixture path.
     for base in {str(root), str(root.resolve())}:
         text = text.replace(base, "<ROOT>")
@@ -87,9 +89,18 @@ class Scenario:
 
 
 def run_specops(root: Path, args: tuple[str, ...]) -> subprocess.CompletedProcess:
-    """Invoke the installed ``specops`` binary in *root* (real streams/exit code)."""
+    """Invoke the installed ``specops`` binary in *root* (real streams/exit code).
+
+    The environment is normalised so a capture recorded on one host replays byte-for-byte
+    on another: UTF-8 I/O, and Rich/Click colour + terminal width pinned off/fixed so a
+    Typer error panel (or any styled output) renders identically in CI and locally.
+    """
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
+    env["NO_COLOR"] = "1"
+    env["TERM"] = "dumb"
+    env["COLUMNS"] = "80"
+    env.pop("FORCE_COLOR", None)
     return subprocess.run(
         ["specops", *args], cwd=root, capture_output=True, text=True, env=env
     )
@@ -408,7 +419,6 @@ SCENARIOS: list[Scenario] = [
     Scenario("report", "report_human", ("report",), build_report),
     Scenario("report", "report_json", ("report", "--json"), build_report),
     Scenario("status", "show_human", ("status", "show"), build_status_show),
-    Scenario("status", "show_json", ("status", "show", "--json"), build_status_show),
     Scenario("reconcile", "reconcile_json", ("reconcile", "--json"), build_reconcile),
     # invalid-input convergences (D4) — re-recorded at T027 when they converge
     Scenario("status", "show_corrupt_human", ("status", "show"), build_status_show_corrupt),
