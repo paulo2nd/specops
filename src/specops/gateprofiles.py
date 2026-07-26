@@ -135,7 +135,7 @@ def _load_raw(root: Path) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-def norm_path(value: Any) -> Any:
+def _norm(value: Any) -> Any:
     """Normalize a value to a stable, hashable form for risk equality/aggregation."""
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
@@ -267,7 +267,7 @@ def _risk_index(affected: list[dict[str, Any]]) -> dict[str, set[Any]]:
     index: dict[str, set[Any]] = {}
     for a in affected:
         for k, v in (a.get("risk") or {}).items():
-            index.setdefault(str(k), set()).add(norm_path(v))
+            index.setdefault(str(k), set()).add(_norm(v))
     return index
 
 
@@ -290,7 +290,7 @@ def _match(
         if any(contextmap.matches(glob, path) for path in changed_paths):
             return True, f"{R_PATH}:{glob}"
     for key, value in ap.risk:
-        if key in risk_index and (value is None or norm_path(value) in risk_index[key]):
+        if key in risk_index and (value is None or _norm(value) in risk_index[key]):
             return True, f"{R_RISK}:{key}"
     return False, R_OUT
 

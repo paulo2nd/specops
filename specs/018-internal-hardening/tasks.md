@@ -139,10 +139,10 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T032 [P] Run the full `specs/018-internal-hardening/quickstart.md` validation end-to-end (all six sections) and fix any residue (SC-001, SC-002, SC-003, SC-004, SC-005, SC-006)
-- [ ] T033 [P] Final gates: `ruff check .`, `mypy src/`, full suite with coverage, golden replay — all green on the branch tip (SC-006)
-- [ ] T034 Flip the ROADMAP.md Feature 018 entry ACTIVE→MERGED inside this feature's PR (repo convention); confirm the CHANGELOG `[Unreleased]` section lists the lane envelope delta and the internal consolidation summary (SC-006)
-- [ ] T035 Close absorbed overlaps: verify none of issues #23–#28 was accidentally implemented here (scope guard per spec Assumptions); cross-link the PR to the review triage (issues #29/#30 remain untouched)
+- [X] T032 [P] Run the full `specs/018-internal-hardening/quickstart.md` validation end-to-end (all six sections) and fix any residue (SC-001, SC-002, SC-003, SC-004, SC-005, SC-006)
+- [X] T033 [P] Final gates: `ruff check .`, `mypy src/`, full suite with coverage, golden replay — all green on the branch tip (SC-006)
+- [X] T034 Flip the ROADMAP.md Feature 018 entry ACTIVE→MERGED inside this feature's PR (repo convention); confirm the CHANGELOG `[Unreleased]` section lists the lane envelope delta and the internal consolidation summary (SC-006)
+- [X] T035 Close absorbed overlaps: verify none of issues #23–#28 was accidentally implemented here (scope guard per spec Assumptions); cross-link the PR to the review triage (issues #29/#30 remain untouched)
 
 ---
 
