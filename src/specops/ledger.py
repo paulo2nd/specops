@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 
 from specops import evidence as evidence_mod
-from specops import gitops, speckit
+from specops import fsutil, gitops, speckit
 from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 # ---------------------------------------------------------------------------
@@ -688,30 +688,13 @@ def _dump(data: dict) -> str:
 
 
 def atomic_write(path: Path, content: str) -> None:
-    """Write *content* to *path* atomically: tmp -> fsync -> os.replace -> dir fsync.
+    """Write *content* to *path* atomically and durably.
 
-    Shared interruption-safe write idiom reused by the context map (Feature 008)
-    so the ledger and the map use one durable-write path. An interrupted write
-    leaves the previous file (if any) intact and never promotes a partial `.tmp`.
+    Public cross-module contract (Feature 018): the ledger, context map, lane
+    state, and handoff revisions all write through this one name. The
+    implementation is the shared :func:`specops.fsutil.atomic_write` (#25).
     """
-    tmp_path = path.parent / (path.name + ".tmp")
-    # One writable handle for write+flush+fsync: on Windows fsync (_commit)
-    # rejects a read-only handle with EBADF, so the write-then-reopen-"rb"
-    # idiom crashes every ledger write there (#37).
-    with open(tmp_path, "w", encoding="utf-8") as fh:
-        fh.write(content)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(str(tmp_path), str(path))
-    # Durability of the rename itself (FR-022): fsync the containing directory.
-    try:
-        dir_fd = os.open(str(path.parent), os.O_RDONLY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
-    except OSError:
-        pass  # directory fsync is best-effort (not supported on all platforms)
+    fsutil.atomic_write(path, content)
 
 
 # Back-compat private alias (retained so existing call sites need no change).
