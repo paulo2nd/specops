@@ -47,16 +47,27 @@ def run_client_command(command: str, cwd: Path, timeout: int | None = None) -> S
         out, err = proc.communicate(timeout=timeout)
         return ShellResult(proc.returncode, out or "", err or "", timed_out=False)
     except subprocess.TimeoutExpired:
-        _kill_tree(proc, posix)
+        _kill_tree(proc)
         out, err = proc.communicate()  # the whole group is dead → does not block
         return ShellResult(124, out or "", err or "", timed_out=True)
 
 
-def _kill_tree(proc: subprocess.Popen, posix: bool) -> None:
+def _kill_tree(proc: subprocess.Popen) -> None:
     """Kill the timed-out process and its descendants (best-effort, never raises)."""
-    if posix:
+    # Tested inline (not via the caller's `posix` flag) so mypy's sys.platform
+    # narrowing marks the POSIX-only os/signal attributes unreachable on win32.
+    if sys.platform != "win32":
         with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             return
+    else:
+        # Tree-kill equivalent: plain proc.kill() would terminate only the
+        # shell wrapper, and an orphaned grandchild holding the output pipe
+        # blocks communicate() past the timeout (#38).
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True, check=False,
+            )
     with contextlib.suppress(ProcessLookupError, OSError):
         proc.kill()

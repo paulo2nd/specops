@@ -2,16 +2,27 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint-type-test:
-    name: "lint + type + test (Python ${{ matrix.python-version }})"
-    runs-on: ubuntu-latest
+    name: "lint + type + test (${{ matrix.os }}, Python ${{ matrix.python-version }})"
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.14"]
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.12", "3.14"]
+        include:
+          # One Windows leg is enough to catch the encoding/path bug class
+          # (0.2.1 shipped a Windows-only UTF-8 hotfix the old matrix missed).
+          - os: windows-latest
+            python-version: "3.12"
 
     steps:
       - uses: actions/checkout@v7
@@ -20,6 +31,8 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install project and dev dependencies
         run: pip install -e ".[dev]"
@@ -31,4 +44,24 @@ jobs:
         run: mypy src/specops
 
       - name: Test with coverage (pytest)
-        run: pytest
+        run: pytest -n auto --cov-report=xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: coverage.xml
+
+  package-smoke:
+    name: package build + smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: ./.github/actions/package-smoke

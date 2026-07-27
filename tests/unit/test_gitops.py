@@ -1,6 +1,9 @@
 """Unit tests for gitops.py."""
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from specops import gitops
 
@@ -146,6 +149,9 @@ def test_effective_diff_decomposes_rename(tmp_git_repo: Path) -> None:
     assert diff == ["new_name.py", "old_name.py"]
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX file modes are invisible to git on Windows"
+)
 def test_effective_diff_includes_mode_only_change(tmp_git_repo: Path) -> None:
     import os
     f = tmp_git_repo / "script.sh"

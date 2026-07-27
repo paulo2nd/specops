@@ -298,4 +298,4 @@ def test_resolve_tasks_none_when_only_taskstoissues_present(tmp_path: Path) -> N
 def test_derive_review_path(fake_speckit_repo: Path) -> None:
     plan_path = fake_speckit_repo / ".claude" / "skills" / "speckit-plan" / "SKILL.md"
     review = speckit.derive_review_path(plan_path, fake_speckit_repo, sep="-")
-    assert str(review).endswith(".claude/skills/specops-review/SKILL.md")
+    assert review.as_posix().endswith(".claude/skills/specops-review/SKILL.md")

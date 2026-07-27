@@ -36,7 +36,7 @@ class TestConsistencyJsonOutcome:
 
     def _run_json(self, repo: Path) -> subprocess.CompletedProcess:
         return subprocess.run(
-            ["specops", "consistency", "--json"], cwd=repo, capture_output=True, text=True
+            ["specops", "consistency", "--json"], cwd=repo, capture_output=True, encoding="utf-8"
         )
 
     def test_json_pass(self, tmp_path: Path) -> None:
@@ -89,7 +89,7 @@ class TestScenarioD:
         (fd / "spec.md").write_text("## Success Criteria\n")
         (fd / "tasks.md").write_text("- [ ] T001 task\n")
         (fd / "plan.md").write_text(
-            "├── `src/ghost.py` (modify) — does not exist\n"
+            "├── `src/ghost.py` (modify) — does not exist\n", encoding="utf-8"
         )
         r = _run(root)
         assert r.returncode == 1
@@ -100,7 +100,8 @@ class TestScenarioD:
         root, fd = _setup(tmp_path)
         # Portuguese prose but English structural tokens
         (fd / "spec.md").write_text(
-            "## Critérios de Sucesso\n- **SC-001**: o sistema deve funcionar\n"
+            "## Critérios de Sucesso\n- **SC-001**: o sistema deve funcionar\n",
+            encoding="utf-8",
         )
         (fd / "tasks.md").write_text(
             "- [ ] T001 [SC-001] Implementar funcionalidade principal\n"

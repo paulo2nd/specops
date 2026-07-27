@@ -15,10 +15,25 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build sdist and wheel
+      - name: Validate release tag against pyproject version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        # Publishing to PyPI is irreversible; refuse to build a release whose
+        # tag (e.g. v0.6.0) does not match the version pyproject.toml declares.
         run: |
-          pip install build
-          python -m build
+          python - <<'EOF'
+          import os, sys, tomllib
+
+          tag = os.environ["TAG"]
+          with open("pyproject.toml", "rb") as f:
+              version = tomllib.load(f)["project"]["version"]
+          if tag.removeprefix("v") != version:
+              sys.exit(f"Release tag '{tag}' does not match pyproject.toml version '{version}'.")
+          print(f"Release tag '{tag}' matches pyproject.toml version '{version}'.")
+          EOF
+
+      - name: Build and smoke-test distribution
+        uses: ./.github/actions/package-smoke
 
       - uses: actions/upload-artifact@v7
         with:

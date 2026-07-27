@@ -29,7 +29,7 @@ def test_native_hook_registers_lite_before_specify() -> None:
 
 
 def test_directive_content_encodes_required_behavior() -> None:
-    text = LITE_MD.read_text().lower()
+    text = LITE_MD.read_text(encoding="utf-8").lower()
     assert "propose" in text                     # B-2: propose, don't auto-enter
     assert "auto-classify" in text or "auto-enter" in text  # B-2 negative
     assert "specops lane" in text                # B-3: agent drives the CLI
@@ -41,11 +41,11 @@ def test_directive_content_encodes_required_behavior() -> None:
 def test_legacy_inject_is_idempotent(tmp_path: Path) -> None:
     prompt = tmp_path / "specify.md"
     prompt.write_text("# specify prompt\n")
-    content = LITE_MD.read_text().strip()
+    content = LITE_MD.read_text(encoding="utf-8").strip()
 
     first = initializer.inject_block(prompt, "lite", content)
     second = initializer.inject_block(prompt, "lite", content)
     assert first == "created"
     assert second == "unchanged"  # a second identical inject is a no-op (idempotent)
     # Exactly one lite block — never duplicated.
-    assert prompt.read_text().count("SpecOps: lightweight-lane recognition") == 1
+    assert prompt.read_text(encoding="utf-8").count("SpecOps: lightweight-lane recognition") == 1

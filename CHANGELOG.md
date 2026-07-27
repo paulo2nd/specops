@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every ledger write crashed on Windows (#37).** `ledger.atomic_write` fsynced
+  the temp file through a read-only handle; Windows' `fsync` (`_commit`) rejects
+  those with `EBADF`, so any command that writes the ledger, context map, lane
+  state, or a handoff revision failed. The write, flush, and fsync now go through
+  a single writable handle. Found by the Windows CI leg introduced by #29.
+- **Client-command timeouts could hang on Windows (#38).** On timeout,
+  `shell._kill_tree` killed only the shell wrapper; a grandchild (e.g. the real
+  test process) survived holding the output pipe, blocking the deterministic
+  FR-010 timeout until it exited on its own. Windows now uses the tree-kill
+  equivalent (`taskkill /T /F`). Also found by the new Windows CI leg.
+
 ### Changed
 
 - **`specops lane … --json` now emits the standard output envelope (Feature 018).**
@@ -24,6 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Internal
 
+- **CI/release hardening (#29).** The CI matrix now covers Python 3.10/3.12/3.14
+  on Ubuntu plus a Windows leg (the 0.2.1 UTF-8 hotfix was exactly the bug class
+  the old Ubuntu-only matrix missed); pushes to PR branches no longer run the
+  suite twice, superseded runs are cancelled, pip is cached, and tests run under
+  `pytest-xdist` with `coverage.xml` published as an artifact. A new
+  package-smoke job builds the sdist/wheel, `twine check`s metadata, and
+  exercises the wheel from a clean-venv install, so packaging errors fail CI
+  instead of surfacing on PyPI. The release workflow reuses that smoke step and
+  refuses to publish when the release tag does not match the `pyproject.toml`
+  version.
 - **Internal hardening (Feature 018).** Consolidated the infrastructure duplicated
   across Features 008–013 into single definition sites, with no user-visible change
   beyond the lane envelope above: one `outcome.CommandResult` abstraction (trace and

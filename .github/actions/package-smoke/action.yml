@@ -1,0 +1,33 @@
+name: Package build + smoke test
+description: >
+  Build sdist and wheel, validate metadata with twine, install the wheel into a
+  clean venv, and exercise the installed binary (--version plus the subprocess
+  smoke set). Catches packaging errors — e.g. a template left out of the wheel
+  by [tool.hatch.build] — before they surface on PyPI. Leaves the artifacts in
+  dist/ for callers that publish them. Linux runners only (uses venv bin/ paths).
+runs:
+  using: composite
+  steps:
+    - name: Build sdist and wheel
+      shell: bash
+      run: |
+        pip install build twine
+        python -m build
+
+    - name: Validate metadata (twine check)
+      shell: bash
+      run: twine check dist/*
+
+    - name: Install the wheel into a clean venv
+      shell: bash
+      run: |
+        python -m venv /tmp/specops-smoke
+        /tmp/specops-smoke/bin/pip install dist/*.whl pytest pytest-cov
+
+    - name: Smoke-test the installed package
+      shell: bash
+      # The subprocess-marked set spawns whatever `specops` is on PATH — here,
+      # the wheel install, so missing package data fails these tests, not PyPI.
+      run: |
+        /tmp/specops-smoke/bin/specops --version
+        PATH="/tmp/specops-smoke/bin:$PATH" /tmp/specops-smoke/bin/pytest -m subprocess --no-cov -q
