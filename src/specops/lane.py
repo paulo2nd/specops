@@ -458,13 +458,16 @@ def cmd_promote(root: Path, *, reason: str) -> LaneResult:
         )
     imported = gitops.commits_in_range(repo, baseline, head)
     status_mod.synthesize_ledger_at_plan(feature_dir, repo, data)
+    root_resolved = root.resolve()
+    feature_resolved = feature_dir.resolve()
     data["state"] = "PROMOTED"
     data["promotion"] = {
         "at": ledger.now_utc(),
         "reason": reason,
-        "synthesized_ledger": str(ledger.ledger_path(feature_dir).relative_to(root.resolve())
-                                  if str(feature_dir).startswith(str(root.resolve()))
-                                  else ledger.ledger_path(feature_dir)),
+        "synthesized_ledger": str(
+            ledger.ledger_path(feature_resolved).relative_to(root_resolved)
+            if feature_resolved.is_relative_to(root_resolved)
+            else ledger.ledger_path(feature_dir)),
         "imported_commits": imported,
         "resumed_phase": "PLAN",
     }
