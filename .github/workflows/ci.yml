@@ -44,4 +44,4 @@ jobs:
         run: mypy src/specops
 
       - name: Test with coverage (pytest)
-        run: pytest
+        run: pytest -n auto
