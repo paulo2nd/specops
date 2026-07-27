@@ -30,11 +30,11 @@ def _setup(tmp_path: Path, spec: str = "", tasks: str = "", plan: str = "") -> P
     feature_dir.mkdir(parents=True)
 
     if spec:
-        (feature_dir / "spec.md").write_text(spec)
+        (feature_dir / "spec.md").write_text(spec, encoding="utf-8")
     if tasks:
-        (feature_dir / "tasks.md").write_text(tasks)
+        (feature_dir / "tasks.md").write_text(tasks, encoding="utf-8")
     if plan:
-        (feature_dir / "plan.md").write_text(plan)
+        (feature_dir / "plan.md").write_text(plan, encoding="utf-8")
 
     return root
 
@@ -83,7 +83,7 @@ def test_create_suffix_existing_parent_passes(tmp_path: Path) -> None:
     root = _setup(tmp_path)
     (root / "src").mkdir()
     plan = "├── `src/newfile.py` (create) — new module\n"
-    (root / "specs" / "001-test" / "plan.md").write_text(plan)
+    (root / "specs" / "001-test" / "plan.md").write_text(plan, encoding="utf-8")
     warnings, violations = consistency.run(root)
     assert violations == []
 
@@ -92,7 +92,7 @@ def test_modify_suffix_existing_file_passes(tmp_path: Path) -> None:
     root = _setup(tmp_path)
     (root / "existing.py").write_text("x = 1")
     plan = "├── `existing.py` (modify) — update\n"
-    (root / "specs" / "001-test" / "plan.md").write_text(plan)
+    (root / "specs" / "001-test" / "plan.md").write_text(plan, encoding="utf-8")
     warnings, violations = consistency.run(root)
     assert violations == []
 
@@ -100,7 +100,7 @@ def test_modify_suffix_existing_file_passes(tmp_path: Path) -> None:
 def test_modify_suffix_missing_file_fails(tmp_path: Path) -> None:
     root = _setup(tmp_path)
     plan = "├── `ghost.py` (modify) — ghost file\n"
-    (root / "specs" / "001-test" / "plan.md").write_text(plan)
+    (root / "specs" / "001-test" / "plan.md").write_text(plan, encoding="utf-8")
     warnings, violations = consistency.run(root)
     assert any("ghost.py" in v for v in violations)
 
