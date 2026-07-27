@@ -11,12 +11,18 @@ concurrency:
 
 jobs:
   lint-type-test:
-    name: "lint + type + test (Python ${{ matrix.python-version }})"
-    runs-on: ubuntu-latest
+    name: "lint + type + test (${{ matrix.os }}, Python ${{ matrix.python-version }})"
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.14"]
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.12", "3.14"]
+        include:
+          # One Windows leg is enough to catch the encoding/path bug class
+          # (0.2.1 shipped a Windows-only UTF-8 hotfix the old matrix missed).
+          - os: windows-latest
+            python-version: "3.12"
 
     steps:
       - uses: actions/checkout@v7
