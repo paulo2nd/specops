@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in SpecOps misbehaves
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, what did you expect, and what happened instead?
+      placeholder: |
+        1. Ran `specops ...` in a repo with ...
+        2. Expected ...
+        3. Got ...
+    validations:
+      required: true
+  - type: input
+    id: specops-version
+    attributes:
+      label: SpecOps version
+      description: Output of `specops --version`
+      placeholder: specops 0.5.1
+    validations:
+      required: true
+  - type: input
+    id: speckit-version
+    attributes:
+      label: Spec Kit version
+      description: The Spec Kit release the repository was initialized with (if known)
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: OS and Python version
+      placeholder: e.g. Windows 11 / Python 3.12, macOS 15 / Python 3.10
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: Paste the full command output (it is rendered as a code block).
+      render: shell
+    validations:
+      required: false
