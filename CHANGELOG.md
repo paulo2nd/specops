@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Internal
 
+- **CI/release hardening (#29).** The CI matrix now covers Python 3.10/3.12/3.14
+  on Ubuntu plus a Windows leg (the 0.2.1 UTF-8 hotfix was exactly the bug class
+  the old Ubuntu-only matrix missed); pushes to PR branches no longer run the
+  suite twice, superseded runs are cancelled, pip is cached, and tests run under
+  `pytest-xdist` with `coverage.xml` published as an artifact. A new
+  package-smoke job builds the sdist/wheel, `twine check`s metadata, and
+  exercises the wheel from a clean-venv install, so packaging errors fail CI
+  instead of surfacing on PyPI. The release workflow reuses that smoke step and
+  refuses to publish when the release tag does not match the `pyproject.toml`
+  version.
 - **Internal hardening (Feature 018).** Consolidated the infrastructure duplicated
   across Features 008–013 into single definition sites, with no user-visible change
   beyond the lane envelope above: one `outcome.CommandResult` abstraction (trace and
