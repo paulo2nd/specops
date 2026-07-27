@@ -22,8 +22,16 @@ mypy src/specops          # type check (strict: untyped defs disallowed)
 pytest                    # tests + coverage (≥ 85% required)
 ```
 
-CI runs on every push and pull request against a Python 3.10 / 3.14 matrix. A
-pull request must pass all three gates.
+Optionally, install the [pre-commit](https://pre-commit.com) hook so the lint
+gate runs automatically on every commit:
+
+```bash
+pip install pre-commit && pre-commit install
+```
+
+CI runs on pull requests (and pushes to `main`) across Python 3.10–3.14 on
+Ubuntu plus a Windows leg, and also builds and smoke-tests the wheel. A pull
+request must pass every check.
 
 ## Project principles
 
