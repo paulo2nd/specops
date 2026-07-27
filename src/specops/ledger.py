@@ -695,8 +695,11 @@ def atomic_write(path: Path, content: str) -> None:
     leaves the previous file (if any) intact and never promotes a partial `.tmp`.
     """
     tmp_path = path.parent / (path.name + ".tmp")
-    tmp_path.write_text(content, encoding="utf-8")
-    with open(tmp_path, "rb") as fh:
+    # One writable handle for write+flush+fsync: on Windows fsync (_commit)
+    # rejects a read-only handle with EBADF, so the write-then-reopen-"rb"
+    # idiom crashes every ledger write there (#37).
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        fh.write(content)
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(str(tmp_path), str(path))

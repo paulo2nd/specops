@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every ledger write crashed on Windows (#37).** `ledger.atomic_write` fsynced
+  the temp file through a read-only handle; Windows' `fsync` (`_commit`) rejects
+  those with `EBADF`, so any command that writes the ledger, context map, lane
+  state, or a handoff revision failed. The write, flush, and fsync now go through
+  a single writable handle. Found by the Windows CI leg introduced by #29.
+
 ### Changed
 
 - **`specops lane … --json` now emits the standard output envelope (Feature 018).**
