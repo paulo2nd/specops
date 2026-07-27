@@ -7,7 +7,7 @@ published version.
 
 | Version | Supported |
 |---------|-----------|
-| latest `0.1.x` | ✅ |
+| latest `0.x` release | ✅ |
 | older | ❌ |
 
 ## Reporting a vulnerability

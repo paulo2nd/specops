@@ -1,0 +1,10 @@
+# Deterministic gate before commit, mirroring the CI lint step exactly.
+# ruff-format is deliberately absent: the codebase predates it and is not
+# format-clean; adopting it would be a whole-repo reformat, decided separately.
+# mypy also runs in CI but is too slow for a per-commit hook — run it manually
+# (`mypy src/specops`) or rely on CI.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.0
+    hooks:
+      - id: ruff-check

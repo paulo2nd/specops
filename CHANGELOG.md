@@ -37,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Internal
 
+- **Repo hygiene (#30).** The command reference, `/specops-review` description,
+  and review-workflow guide moved from the README to `docs/commands.md`; the
+  README (also the PyPI long description) keeps the overview, install, quick
+  start, and a new commands-at-a-glance table, and `README.pt-br.md` became a
+  short pointer page (ending its manual-sync divergence). PyPI metadata gained
+  explicit 3.10–3.14 classifiers, `Development Status :: 4 - Beta`, and project
+  URLs. Added a PR checklist template, a bug-report issue form, a pre-commit
+  config running the CI lint gate, and dependabot grouping for dev-dependency
+  bumps; SECURITY.md now reads "latest `0.x` release".
 - **CI/release hardening (#29).** The CI matrix now covers Python 3.10/3.12/3.14
   on Ubuntu plus a Windows leg (the 0.2.1 UTF-8 hotfix was exactly the bug class
   the old Ubuntu-only matrix missed); pushes to PR branches no longer run the
