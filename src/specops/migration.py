@@ -171,12 +171,13 @@ def migrate(root: Path) -> str:
 
     Returns "already native" (no-op) or "migrated".
 
-    Crash-recovery limitation (deferred): the host-file strip uses
-    `initializer.remove_block`, whose write is not atomic. Automatic rollback
-    fires only on an in-process exception — a hard process kill or power loss
-    mid-strip can leave a host file truncated. The pre-edit snapshots under
-    `.specify/.specops-backup/` preserve the original bytes for manual recovery;
-    an automatic restore-on-restart is a planned follow-up.
+    Crash-recovery limitation (deferred): each host-file strip is atomic
+    per file (`initializer.remove_block` writes via `fsutil.atomic_write`, #25),
+    so a hard kill can no longer truncate a file — but it can still interrupt
+    the flow *between* files, leaving some stripped and some not. Automatic
+    rollback fires only on an in-process exception; the pre-edit snapshots under
+    `.specify/.specops-backup/` preserve the original bytes for manual recovery,
+    and an automatic restore-on-restart is a planned follow-up.
     """
     extension.preflight(root)  # fail closed before touching any file
 

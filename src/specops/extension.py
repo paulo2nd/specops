@@ -10,14 +10,12 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from specops import compat, config, gitops, initializer, speckit
+from specops import compat, config, fsutil, gitops, initializer, speckit
 from specops.errors import SpecopsError
 
 OWNER = "specops"
@@ -72,16 +70,8 @@ def _directive(stem: str) -> str:
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    """Write *text* to *path* atomically (temp-then-rename), interruption-safe."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".ext-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp):
-            os.remove(tmp)
+    """Write *text* to *path* atomically (delegates to the shared fsutil, #25)."""
+    fsutil.atomic_write(path, text)
 
 
 def read_manifest(root: Path) -> dict[str, Any]:
