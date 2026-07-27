@@ -43,6 +43,7 @@ _ISO_TS = re.compile(
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _HEX = re.compile(r"\b[0-9a-f]{7,}\b")
 _VER = re.compile(r"\b\d+\.\d+\.\d+(?:[.-][0-9A-Za-z.]+)?\b")
+_ROOT_PATH = re.compile(r"<ROOT>[^\s\"':,]*")
 
 
 def scrub(text: str, root: Path) -> str:
@@ -57,6 +58,11 @@ def scrub(text: str, root: Path) -> str:
     # Normalise both the real and symlink-resolved forms of the fixture path.
     for base in {str(root), str(root.resolve())}:
         text = text.replace(base, "<ROOT>")
+    # Windows prints OS-native separators under the fixture root (JSON mode
+    # escapes them as '\\'); normalise <ROOT>-prefixed runs to '/' so captures
+    # recorded on POSIX replay. Scoped to <ROOT> paths — a blanket backslash
+    # rewrite would corrupt JSON escapes like '\n' elsewhere in the capture.
+    text = _ROOT_PATH.sub(lambda m: m.group(0).replace("\\\\", "/").replace("\\", "/"), text)
     text = _ISO_TS.sub("<TS>", text)
     text = _VER.sub("<VER>", text)
     text = _DATE.sub("<DATE>", text)
@@ -102,7 +108,10 @@ def run_specops(root: Path, args: tuple[str, ...]) -> subprocess.CompletedProces
     env["COLUMNS"] = "80"
     env.pop("FORCE_COLOR", None)
     return subprocess.run(
-        ["specops", *args], cwd=root, capture_output=True, text=True, env=env
+        ["specops", *args], cwd=root, capture_output=True, env=env,
+        # Decode with the encoding the child is pinned to above — Windows would
+        # otherwise decode the UTF-8 stream as cp1252 and mojibake every capture.
+        encoding="utf-8", errors="replace",
     )
 
 
