@@ -13,7 +13,7 @@ def run_init(repo: Path, non_interactive: bool = True) -> subprocess.CompletedPr
         ["specops", "init", "--non-interactive"] if non_interactive else ["specops", "init"],
         cwd=repo,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
     )
 
 

@@ -43,7 +43,9 @@ _ISO_TS = re.compile(
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _HEX = re.compile(r"\b[0-9a-f]{7,}\b")
 _VER = re.compile(r"\b\d+\.\d+\.\d+(?:[.-][0-9A-Za-z.]+)?\b")
-_ROOT_PATH = re.compile(r"<ROOT>[^\s\"':,]*")
+# Path runs whose separators Windows prints natively: absolute (under <ROOT>)
+# and repo-relative ones rooted at the fixture layout's known directories.
+_NATIVE_PATH = re.compile(r"(?:<ROOT>|(?<![\w/\\])(?:\.specify|\.claude|specs)(?=\\))[^\s\"':,]*")
 
 
 def scrub(text: str, root: Path) -> str:
@@ -55,14 +57,16 @@ def scrub(text: str, root: Path) -> str:
     ``1.2.3`` is not partially eaten.
     """
     text = _ANSI.sub("", text)  # defence-in-depth: never let stray colour cause drift
-    # Normalise both the real and symlink-resolved forms of the fixture path.
+    # Normalise both the real and symlink-resolved forms of the fixture path —
+    # including the backslash-escaped form JSON output embeds on Windows.
     for base in {str(root), str(root.resolve())}:
+        text = text.replace(base.replace("\\", "\\\\"), "<ROOT>")
         text = text.replace(base, "<ROOT>")
-    # Windows prints OS-native separators under the fixture root (JSON mode
-    # escapes them as '\\'); normalise <ROOT>-prefixed runs to '/' so captures
-    # recorded on POSIX replay. Scoped to <ROOT> paths — a blanket backslash
-    # rewrite would corrupt JSON escapes like '\n' elsewhere in the capture.
-    text = _ROOT_PATH.sub(lambda m: m.group(0).replace("\\\\", "/").replace("\\", "/"), text)
+    # Windows prints OS-native separators in paths (JSON mode escapes them as
+    # '\\'); normalise recognised path runs to '/' so captures recorded on
+    # POSIX replay. Scoped to known path shapes — a blanket backslash rewrite
+    # would corrupt JSON escapes like '\n' elsewhere in the capture.
+    text = _NATIVE_PATH.sub(lambda m: m.group(0).replace("\\\\", "/").replace("\\", "/"), text)
     text = _ISO_TS.sub("<TS>", text)
     text = _VER.sub("<VER>", text)
     text = _DATE.sub("<DATE>", text)

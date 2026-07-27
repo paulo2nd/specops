@@ -16,7 +16,7 @@ from tests.conftest import git
 def _run_preflight(root: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["specops", "preflight"],
-        cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        cwd=root, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
     )
 
 
@@ -70,7 +70,7 @@ class TestPreflightJsonOutcome:
     def _run_json(self, root: Path) -> subprocess.CompletedProcess:
         return subprocess.run(
             ["specops", "preflight", "--json"],
-            cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            cwd=root, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
         )
 
     def test_pass_emits_verdict_approved(self, fake_speckit_repo: Path) -> None:
@@ -107,7 +107,7 @@ class TestPreflightJsonOutcome:
         (fake_speckit_repo / "stray.txt").write_text("x\n")
         r = subprocess.run(
             ["specops", "preflight", "--json", "--soft"],
-            cwd=fake_speckit_repo, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            cwd=fake_speckit_repo, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
         )
         assert r.returncode == 0  # soft: does not abort the loop
         obj = json.loads(r.stdout)
@@ -188,7 +188,7 @@ class TestPreflightCiGate:
         subdir = fake_speckit_repo / "specs" / "001-demo"
         result = subprocess.run(
             ["specops", "preflight"],
-            cwd=subdir, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            cwd=subdir, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
         )
         assert result.returncode == 0
         assert "[gate] working-tree" in result.stdout
@@ -198,13 +198,13 @@ class TestPreflightCiGate:
         _all_pass_setup(fake_speckit_repo)
         ok = subprocess.run(
             ["specops", "preflight"], cwd=fake_speckit_repo,
-            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
+            capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL, timeout=120,
         )
         assert ok.returncode == 0
         (fake_speckit_repo / "stray.txt").write_text("x\n")
         fail = subprocess.run(
             ["specops", "preflight"], cwd=fake_speckit_repo,
-            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
+            capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL, timeout=120,
         )
         assert fail.returncode == 1
 
@@ -217,7 +217,7 @@ class TestPreflightCiGate:
 def _run_review(root: Path, *flags: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["specops", "review", *flags],
-        cwd=root, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        cwd=root, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
     )
 
 
@@ -259,7 +259,7 @@ class TestReviewAliasParity:
         _all_pass_setup(fake_speckit_repo)
         pre_proc = subprocess.run(
             ["specops", "preflight", "--json"], cwd=fake_speckit_repo,
-            capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
         )
         pre = json.loads(pre_proc.stdout)
         rev = json.loads(_run_review(fake_speckit_repo, "--json").stdout)
@@ -287,7 +287,7 @@ class TestReviewAliasHelp:
     def test_review_help_marks_deprecated(self, fake_speckit_repo: Path) -> None:
         r = subprocess.run(
             ["specops", "review", "--help"],
-            cwd=fake_speckit_repo, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            cwd=fake_speckit_repo, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
         )
         assert r.returncode == 0
         assert "DEPRECATED" in r.stdout.upper()
@@ -296,7 +296,7 @@ class TestReviewAliasHelp:
     def test_preflight_listed_as_command(self, fake_speckit_repo: Path) -> None:
         r = subprocess.run(
             ["specops", "--help"],
-            cwd=fake_speckit_repo, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+            cwd=fake_speckit_repo, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
         )
         assert r.returncode == 0
         assert "preflight" in r.stdout

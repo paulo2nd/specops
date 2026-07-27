@@ -36,7 +36,7 @@ class TestConsistencyJsonOutcome:
 
     def _run_json(self, repo: Path) -> subprocess.CompletedProcess:
         return subprocess.run(
-            ["specops", "consistency", "--json"], cwd=repo, capture_output=True, text=True
+            ["specops", "consistency", "--json"], cwd=repo, capture_output=True, encoding="utf-8"
         )
 
     def test_json_pass(self, tmp_path: Path) -> None:

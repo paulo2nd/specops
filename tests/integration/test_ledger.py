@@ -17,7 +17,9 @@ def _commit(repo: Path, msg: str = "work") -> str:
     (repo / f"{msg}.txt").write_text(msg)
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", msg], cwd=repo, check=True, capture_output=True)
-    result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True)
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, encoding="utf-8"
+    )
     return result.stdout.strip()
 
 
@@ -26,7 +28,7 @@ def _run(repo: Path, *args: str) -> subprocess.CompletedProcess:
         ["specops", *args],
         cwd=repo,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
     )
 
 
@@ -307,7 +309,7 @@ class TestRebaselineAndGateConsistency:
         feature_dir = repo / "specs" / "001-demo"
         (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
-                              capture_output=True, text=True).stdout.strip()
+                              capture_output=True, encoding="utf-8").stdout.strip()
         # v1 ledger on the wrong branch name → identity refuses, rebaseline fixes + migrates.
         (feature_dir / "status.yaml").write_text(yaml.dump({
             "feature": "001-demo", "branch": "old-name", "baseline": head,
@@ -338,7 +340,7 @@ class TestRebaselineAndGateConsistency:
         (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
         # v1 ledger on a branch that no longer matches
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
-                              capture_output=True, text=True).stdout.strip()
+                              capture_output=True, encoding="utf-8").stdout.strip()
         (feature_dir / "status.yaml").write_text(yaml.dump({
             "feature": "001-demo", "branch": "gone", "baseline": head,
             "created_at": "2026-07-05", "updated_at": "2026-07-05",
@@ -360,9 +362,9 @@ class TestRebaselineAndGateConsistency:
         feature_dir = repo / "specs" / "001-demo"
         (feature_dir / "tasks.md").write_text("- [ ] T001 task\n")
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
-                              capture_output=True, text=True).stdout.strip()
+                              capture_output=True, encoding="utf-8").stdout.strip()
         branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo,
-                               capture_output=True, text=True).stdout.strip()
+                               capture_output=True, encoding="utf-8").stdout.strip()
         # v1 ledger carrying a legacy defect: a DONE task with no evidence.
         (feature_dir / "status.yaml").write_text(yaml.dump({
             "feature": "001-demo", "branch": branch, "baseline": head,

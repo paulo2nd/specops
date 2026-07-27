@@ -11,7 +11,9 @@ def test_backupset_roundtrips_bytes_and_discards(tmp_path: Path) -> None:
     root = tmp_path
     host = root / "host.md"
     original = "line1\nline2\n"
-    host.write_text(original)
+    # newline="" so Windows doesn't translate to CRLF — the digest below is
+    # computed over these exact bytes.
+    host.write_text(original, newline="")
 
     backups = migration.BackupSet(root)
     backups.back_up(host)
