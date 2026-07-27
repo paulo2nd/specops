@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > schema, `status.yaml` ledger format, and injected directive blocks may change
 > in any minor release until `1.0.0`.
 
-## [Unreleased]
+## [0.6.0] - 2026-07-27
 
 ### Fixed
 
@@ -588,7 +588,12 @@ honestly named `preflight`, and a single read-only diagnostic explains project h
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/paulo2nd/specops/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/paulo2nd/specops/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/paulo2nd/specops/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/paulo2nd/specops/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/paulo2nd/specops/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/paulo2nd/specops/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/paulo2nd/specops/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/paulo2nd/specops/releases/tag/v0.1.0
