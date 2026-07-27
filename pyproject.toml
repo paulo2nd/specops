@@ -13,7 +13,13 @@ authors = [
     { name = "Paulo Segundo", email = "paulosegundo@gmail.com" }
 ]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
@@ -33,6 +39,11 @@ dev = [
     "pytest-xdist>=3.5",
     "types-PyYAML>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/paulo2nd/specops"
+Changelog = "https://github.com/paulo2nd/specops/blob/main/CHANGELOG.md"
+Issues = "https://github.com/paulo2nd/specops/issues"
 
 [project.scripts]
 specops = "specops.cli:app"
