@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Broad exception handlers no longer swallow real diagnostics (#26).** A
+  corrupted ledger encountered by `context impact` or `gate list` now surfaces
+  as the standard exit-2 parse diagnostic instead of silently degrading to
+  "no baseline"/an empty selection; the git-degrade paths in trace baseline
+  resolution, consistency's history check, and lane's diff collection now
+  suppress only the intended git failures, letting genuine bugs propagate.
+- **Lane promotion records the ledger path correctly under symlinked roots
+  (#27).** The containment check now uses `Path.is_relative_to` on resolved
+  paths instead of a string-prefix comparison that failed with symlinks and
+  matched partial prefixes (`/repo` vs `/repo2`).
 - **Every ledger write crashed on Windows (#37).** `ledger.atomic_write` fsynced
   the temp file through a read-only handle; Windows' `fsync` (`_commit`) rejects
   those with `EBADF`, so any command that writes the ledger, context map, lane

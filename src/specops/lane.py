@@ -214,10 +214,10 @@ def _diff_status(repo: Any, baseline: str, staged: bool) -> list[tuple[str, str]
     """Return rename-aware (status, path) pairs for baseline..HEAD, plus staged when asked."""
     pairs: list[tuple[str, str]] = []
     if baseline and gitops.commit_exists(repo, baseline):
-        with contextlib.suppress(Exception):  # git errors degrade to "no committed diff"
+        with contextlib.suppress(gitops.git.GitCommandError):  # degrade: no committed diff
             pairs.extend(_parse_name_status(repo.git.diff("--name-status", "-M", baseline, "HEAD")))
     if staged:
-        with contextlib.suppress(Exception):  # git errors degrade to "no staged diff"
+        with contextlib.suppress(gitops.git.GitCommandError):  # degrade: no staged diff
             pairs.extend(_parse_name_status(repo.git.diff("--cached", "--name-status", "-M")))
     return pairs
 
@@ -458,13 +458,16 @@ def cmd_promote(root: Path, *, reason: str) -> LaneResult:
         )
     imported = gitops.commits_in_range(repo, baseline, head)
     status_mod.synthesize_ledger_at_plan(feature_dir, repo, data)
+    root_resolved = root.resolve()
+    feature_resolved = feature_dir.resolve()
     data["state"] = "PROMOTED"
     data["promotion"] = {
         "at": ledger.now_utc(),
         "reason": reason,
-        "synthesized_ledger": str(ledger.ledger_path(feature_dir).relative_to(root.resolve())
-                                  if str(feature_dir).startswith(str(root.resolve()))
-                                  else ledger.ledger_path(feature_dir)),
+        "synthesized_ledger": str(
+            ledger.ledger_path(feature_resolved).relative_to(root_resolved)
+            if feature_resolved.is_relative_to(root_resolved)
+            else ledger.ledger_path(feature_dir)),
         "imported_commits": imported,
         "resumed_phase": "PLAN",
     }

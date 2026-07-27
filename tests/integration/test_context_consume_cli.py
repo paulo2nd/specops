@@ -122,6 +122,20 @@ def test_impact_no_baseline_exit2(context_map_repo: Path) -> None:
     assert r.exit_code == 2
 
 
+def test_impact_corrupt_ledger_surfaces_exit2(context_map_repo: Path) -> None:
+    # A corrupted ledger is a real diagnostic (#26), not a silent "no baseline".
+    write_map(context_map_repo, DEP_GRAPH_MAP)
+    feature_dir = context_map_repo / "specs" / "001-demo"
+    feature_dir.mkdir(parents=True)
+    (context_map_repo / ".specify" / "feature.json").write_text(
+        json.dumps({"feature_directory": "specs/001-demo"})
+    )
+    (feature_dir / "status.yaml").write_text(":\n  - [broken")
+    r = _run(context_map_repo, "impact")
+    assert r.exit_code == 2
+    assert "Cannot parse ledger" in r.stderr
+
+
 # ---------------------------------------------------------------------------
 # stale (SC-005, SC-007)
 # ---------------------------------------------------------------------------

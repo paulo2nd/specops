@@ -122,13 +122,15 @@ def resolve_baseline(root: Path, repo: gitops.git.Repo) -> str | None:
         ref = repo.git.symbolic_ref("--short", "refs/remotes/origin/HEAD")
         if ref:
             candidates.append(ref.strip())
-    except Exception:
-        pass
+    except gitops.git.GitCommandError:
+        pass  # origin/HEAD not advertised — fall through to the local names
     candidates += ["main", "master"]
     for default in candidates:
         try:
             base = repo.merge_base(default, repo.head.commit)
-        except Exception:
+        except (gitops.git.GitCommandError, ValueError):
+            # GitCommandError: candidate ref absent; ValueError: unborn HEAD /
+            # BadName. Anything else is a real bug and propagates.
             continue
         if base:
             return base[0].hexsha
