@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Prompt-file injection is now crash-safe (#25).** `initializer.inject_block`
+  and `remove_block` wrote host-owned prompt files with a plain `write_text`,
+  so a crash mid-write could truncate them. All three modules that write files
+  (`initializer`, `extension`, `ledger`) now share one durable temp-then-rename
+  implementation in the new `specops.fsutil`, replacing the two previous
+  independent copies; `ledger.atomic_write` remains the public name and
+  delegates to it.
 - **Broad exception handlers no longer swallow real diagnostics (#26).** A
   corrupted ledger encountered by `context impact` or `gate list` now surfaces
   as the standard exit-2 parse diagnostic instead of silently degrading to

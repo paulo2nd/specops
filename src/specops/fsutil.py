@@ -1,0 +1,43 @@
+"""Shared filesystem primitives.
+
+Single definition site (#25) for the durable temp-then-rename write that
+`ledger`, `extension`, and `initializer` previously implemented independently
+(or, in initializer's case, lacked entirely — a crash mid-`write_text` could
+truncate a host-owned prompt file).
+"""
+from __future__ import annotations
+
+import os
+import tempfile
+from pathlib import Path
+
+
+def atomic_write(path: Path, content: str) -> None:
+    """Write *content* (UTF-8) to *path* atomically and durably.
+
+    Unique temp file in the target directory (same filesystem, so the rename is
+    atomic) → write + flush + fsync through the same writable handle (Windows
+    rejects fsync on a read-only one, #37) → ``os.replace`` → best-effort fsync
+    of the containing directory (FR-022). An interrupted write leaves the
+    previous file (if any) intact and never promotes a partial temp file; the
+    temp file is removed on failure.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    try:
+        dir_fd = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass  # directory fsync is best-effort (not supported on all platforms)

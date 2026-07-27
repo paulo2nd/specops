@@ -5,7 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from specops import config, gitops, speckit
+from specops import config, fsutil, gitops, speckit
 from specops.errors import SpecopsError
 
 # ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ def inject_block(file_path: Path, block_id: str, block_content: str, version: in
     if block_id not in existing:
         # Append at EOF — never modify pre-existing bytes (SC-010)
         new_text = text.rstrip("\n") + "\n" + full_block
-        file_path.write_text(new_text, encoding="utf-8")
+        fsutil.atomic_write(file_path, new_text)
         return "created"
 
     # In-place replacement between markers
@@ -119,7 +119,7 @@ def inject_block(file_path: Path, block_id: str, block_content: str, version: in
         + [f"{end_marker}\n"]
         + lines[end_idx + 1:]
     )
-    file_path.write_text("".join(new_lines), encoding="utf-8")
+    fsutil.atomic_write(file_path, "".join(new_lines))
     return "updated"
 
 
@@ -145,7 +145,7 @@ def remove_block(file_path: Path, block_id: str) -> bool:
         start -= 1
 
     new_lines = lines[:start] + lines[end_idx + 1:]
-    file_path.write_text("".join(new_lines), encoding="utf-8")
+    fsutil.atomic_write(file_path, "".join(new_lines))
     return True
 
 
