@@ -25,23 +25,34 @@ Acquire loop (per contender):
 1. Try `os.open(lock, O_CREAT|O_EXCL|O_WRONLY)`; on success write + fsync the owner
    token (`pid:monotonic_ns`) → **held**.
 2. On `FileExistsError`: stat mtime.
-   - Not stale → sleep 50 ms, retry until deadline → timeout error (G2).
-   - Stale → **atomic reclaim**: `os.rename(lock, lock + ".reclaim.<pid>.<ns>")`.
-     - Rename succeeds → unlink the renamed file, loop to step 1 (compete normally).
-     - Rename raises `FileNotFoundError`/`OSError` (someone else won, or the holder
-       released) → loop (existing "lock vanished — retry" arm).
+   - Lock vanished between checks (`OSError`) → retry immediately.
+   - Stale → attempt the **reclaim mutex**: create `<lock>.reclaim` with
+     `O_CREAT|O_EXCL`.
+     - Won the sentinel → **re-check the main lock's staleness under the mutex**;
+       unlink it only if still stale (a fresh lock means a winner already recreated
+       it — never touched); release the sentinel token-checked; loop to step 1
+       (compete normally).
+     - Sentinel exists (a reclaim is in flight) → if the *sentinel* itself is stale
+       (a reclaimer crashed mid-reclaim), unlink it so a later pass retries; either
+       way fall through to the ordinary wait (deadline check + 50 ms sleep).
+   - Not stale → deadline check → sleep 50 ms, retry; on deadline, timeout error (G2).
 3. Release: close fd; unlink only if the file's content equals the owner token (G5).
 
-Why the rename closes the race: the old protocol's reclaim was
+Why the mutex closes the race: the old protocol's reclaim was
 *check-stale → unlink → recreate* — between B's staleness check and B's unlink, A may
-have already reclaimed and created a **fresh** lock, which B then deletes. Rename makes
-"take the stale file out of play" a single atomic step on one specific inode: exactly
-one rename of a given name can succeed; every loser observes the name gone and re-enters
-the normal create race.
+have already reclaimed and created a **fresh** lock, which B then deletes. No
+name-based single step can fix this (POSIX has no compare-and-unlink, and a rename
+grabs whatever inode currently holds the name — the plan's first design was falsified
+by this contract's own regression test, which observed 3 simultaneous holders under
+rename-based reclaim). Serializing removal through an exclusive sentinel and
+re-checking staleness **under** the mutex means the only process that may unlink the
+main lock has just verified it is still the abandoned one.
 
-Platform notes: `os.rename` to a non-existent destination is atomic on POSIX; on
-Windows it succeeds because the stale holder is dead (no open handle). The unique
-destination name (`pid` + `monotonic_ns`) can never collide between contenders.
+Residual scope: with G3's single-crash assumption (a stale lock's owner is dead),
+reclaim is exactly single-winner and a fresh lock is never deleted. Scenarios
+requiring a *second* crash (a reclaimer dying mid-reclaim) recover by sentinel age
+with the same bounded discipline, and the revision-CAS (G7) remains the durable
+backstop throughout.
 
 ## Regression test contract (FR-002 / SC-002)
 

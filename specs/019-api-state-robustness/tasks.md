@@ -25,9 +25,9 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 **Purpose**: branch bookkeeping, roadmap registration, baseline measurements
 
-- [ ] T001 Commit the `specs/019-api-state-robustness/` artifacts (spec, plan, research, data-model, contracts, quickstart, checklists) and the updated `.specify/feature.json` on branch `019-api-state-robustness` (branch already exists)
-- [ ] T002 Flip the Feature 019 row `PLANNED → ACTIVE` in `ROADMAP.md` (§Feature Overview table, line ~90) as a commit in this feature's PR
-- [ ] T003 Record baselines in the PR description: the quickstart §4 scan outputs on the untouched tree (expected: 9 `isinstance(loaded, HandoffResult)`, 2 `--name-status` parse loops, 1 `(human)` hit in `gitops.py`, 2 `"no review cycles recorded"` occurrences in `status.py`) (SC-003, SC-004)
+- [X] T001 Commit the `specs/019-api-state-robustness/` artifacts (spec, plan, research, data-model, contracts, quickstart, checklists) and the updated `.specify/feature.json` on branch `019-api-state-robustness` (branch already exists)
+- [X] T002 Flip the Feature 019 row `PLANNED → ACTIVE` in `ROADMAP.md` (§Feature Overview table, line ~90) as a commit in this feature's PR
+- [X] T003 Record baselines in the PR description: the quickstart §4 scan outputs on the untouched tree (expected: 9 `isinstance(loaded, HandoffResult)`, 2 `--name-status` parse loops, 1 `(human)` hit in `gitops.py`, 2 `"no review cycles recorded"` occurrences in `status.py`) (SC-003, SC-004)
 
 ---
 
@@ -37,7 +37,7 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 **⚠️ CRITICAL**: no refactor task starts before this passes
 
-- [ ] T004 Run the full gate on the untouched tree and confirm green: `conda run -n specops ruff check src tests && conda run -n specops mypy src && conda run -n specops python -m pytest` (golden replay in `tests/golden/` included via pytest); any pre-existing failure blocks the feature and must be triaged first (SC-001 baseline)
+- [X] T004 Run the full gate on the untouched tree and confirm green: `conda run -n specops ruff check src tests && conda run -n specops mypy src && conda run -n specops python -m pytest` (golden replay in `tests/golden/` included via pytest); any pre-existing failure blocks the feature and must be triaged first (SC-001 baseline)
 
 **Checkpoint**: baseline green — refactoring may begin
 
@@ -51,12 +51,12 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 
 ### Tests for User Story 1 (mandatory per Constitution task gate) ⚠️
 
-- [ ] T005 [US1] Create `tests/unit/test_ledger_lock.py` per `contracts/lock-protocol.md` §Regression test: (a) single-winner race — lock file pre-created with `os.utime` mtime older than `stale`, ≥4 barrier-synchronized threads enter `_LedgerLock.__enter__` (short `stale`, generous `timeout`), each acquirer asserts the concurrency counter reads 1 AND the lock file still holds its own token, looped ≥20 iterations; (b) fresh-lock contention — timeout raises `SpecopsError` with the exact "Ledger is locked by another process" message; (c) crash recovery — a reclaim winner's leaked lock is again reclaimable by age (G6). Falsification run: verify (a) FAILS against the current unlink+recreate reclaim before implementing T006, and record that in the task's commit message (FR-002, SC-002)
+- [X] T005 [US1] Create `tests/unit/test_ledger_lock.py` per `contracts/lock-protocol.md` §Regression test: (a) single-winner race — lock file pre-created with `os.utime` mtime older than `stale`, ≥4 barrier-synchronized threads enter `_LedgerLock.__enter__` (short `stale`, generous `timeout`), each acquirer asserts the concurrency counter reads 1 AND the lock file still holds its own token, looped ≥20 iterations; (b) fresh-lock contention — timeout raises `SpecopsError` with the exact "Ledger is locked by another process" message; (c) crash recovery — a reclaim winner's leaked lock is again reclaimable by age (G6). Falsification run: verify (a) FAILS against the current unlink+recreate reclaim before implementing T006, and record that in the task's commit message (FR-002, SC-002)
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Harden `_LedgerLock.__enter__` in `src/specops/ledger.py` (lines ~722-744): replace the `unlink+continue` stale arm with atomic-rename reclaim — `os.rename(lock, f"{lock}.reclaim.{pid}.{monotonic_ns}")`; winner unlinks the renamed file and loops to the normal `O_CREAT|O_EXCL` create; `FileNotFoundError`/`OSError` on rename → retry loop (existing "lock vanished" arm). Preserve token stamping, fsync, timeout deadline and message, 30 s default stale threshold, and the token-checked `__exit__` (research D1, contracts/lock-protocol.md) (FR-001)
-- [ ] T007 [US1] Close the story: T005 race test green across its amplification loop, full suite + golden replay zero diffs, timeout diagnostic byte-identical (SC-001, SC-002)
+- [X] T006 [US1] Harden `_LedgerLock.__enter__` in `src/specops/ledger.py`: replace the `unlink+continue` stale arm with the reclaim-mutex sentinel (`<lock>.reclaim` via `O_CREAT|O_EXCL`; staleness re-checked UNDER the mutex before unlinking the main lock; token-checked sentinel release; stale sentinel breakable by age). NOTE: the plan's original atomic-rename design was FALSIFIED by the T005 race test (rename grabs the name's current inode — it stole the winner's fresh lock, 3 simultaneous holders); research D1 and contracts/lock-protocol.md updated to the sentinel design. Preserve token stamping, fsync, timeout deadline and message, 30 s default stale threshold, and the token-checked `__exit__` (FR-001)
+- [X] T007 [US1] Close the story: T005 race test green across its amplification loop, full suite + golden replay zero diffs, timeout diagnostic byte-identical (SC-001, SC-002)
 
 **Checkpoint**: the ledger's locking is race-free — MVP delivered
 

@@ -732,16 +732,54 @@ class _LedgerLock:
             except FileExistsError:
                 try:
                     age = time.time() - os.path.getmtime(self.lock_path)
-                    if age > self.stale:
-                        os.unlink(self.lock_path)
-                        continue
                 except OSError:
                     continue  # lock vanished between checks — retry
+                if age > self.stale and self._reclaim_stale():
+                    continue  # stale lock removed — compete via the normal O_EXCL create
                 if time.monotonic() >= deadline:
                     raise SpecopsError(
                         f"Ledger is locked by another process: {self.lock_path.name}. Retry."
                     ) from None
                 time.sleep(0.05)
+
+    def _reclaim_stale(self) -> bool:
+        """Single-winner removal of a stale main lock (Feature 019, FR-001).
+
+        The old ``check-stale -> unlink -> recreate`` reclaim was a TOCTOU: two
+        waiters could both observe "stale", and the slower one then deleted the
+        *fresh* lock the faster one had just created — double-granting the
+        critical section. Name-based operations cannot pin the checked inode
+        (POSIX has no compare-and-unlink), so removal is serialized through a
+        reclaim-mutex sentinel (``<lock>.reclaim``, O_CREAT|O_EXCL): only the
+        sentinel holder may unlink the main lock, and it re-checks staleness
+        UNDER the mutex first, so a freshly recreated lock is never touched.
+        Returns True when this contender held the sentinel (the caller then
+        competes through the normal O_EXCL create); False when another reclaim
+        is in flight (the caller falls back to the ordinary wait loop). A
+        sentinel leaked by a reclaimer that crashed mid-reclaim goes stale by
+        age and is removed so later passes can retry.
+        """
+        sentinel = str(self.lock_path) + ".reclaim"
+        try:
+            fd = os.open(sentinel, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            with contextlib.suppress(OSError):
+                if time.time() - os.path.getmtime(sentinel) > self.stale:
+                    os.unlink(sentinel)  # leaked by a crashed reclaimer
+            return False
+        try:
+            os.write(fd, self._token)
+            with contextlib.suppress(OSError):
+                if time.time() - os.path.getmtime(self.lock_path) > self.stale:
+                    os.unlink(self.lock_path)
+            return True
+        finally:
+            os.close(fd)
+            # Token-checked, like __exit__: never delete a sentinel another
+            # process now owns (possible only after a stale-sentinel break).
+            with contextlib.suppress(OSError):
+                if Path(sentinel).read_bytes() == self._token:
+                    os.unlink(sentinel)
 
     def __exit__(self, *exc: object) -> None:
         if self._fd is not None:

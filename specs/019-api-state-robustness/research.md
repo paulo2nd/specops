@@ -19,17 +19,27 @@ both enter the read-modify-write section. The revision-CAS in `ledger.save` boun
 damage (one writer fails late with `StaleLedgerError`), but the lock's own guarantee is
 broken in exactly the scenario it exists for.
 
-**Decision**: harden the in-tree lock. Reclaim becomes a single atomic step: instead of
-`unlink`, the contender **renames** the stale lock to a unique per-contender name
-(`<lock>.reclaim.<pid>.<monotonic_ns>`). `os.rename` with an absent destination is atomic
-on POSIX and succeeds on Windows for a file no live process holds open (the stale holder
-is by definition dead). Exactly one contender's rename succeeds — the source vanishes for
-everyone else (`FileNotFoundError` → treated like "lock vanished, retry", the existing
-`OSError → continue` branch). The winner unlinks the renamed-away file and loops back to
-the normal `O_CREAT|O_EXCL` create (still racing fresh contenders fairly — that path was
-never broken). Everything else is preserved: owner-token stamping, token-checked release
-in `__exit__`, timeout diagnostics, the 30 s stale threshold, and the mtime-based
-staleness check (`time.time() - getmtime`).
+**Decision**: harden the in-tree lock by serializing stale reclaim through a
+**reclaim-mutex sentinel**. To remove a stale lock, a contender must first win
+`<lock>.reclaim` via `O_CREAT|O_EXCL` (single winner by construction); under that mutex
+it **re-checks** the main lock's staleness and only then unlinks it; the sentinel is
+released token-checked (like `__exit__`). Losers fall back to the ordinary wait loop
+(deadline + 50 ms sleep). A sentinel leaked by a reclaimer that crashed mid-reclaim goes
+stale by age and is removed so later passes retry. Everything else is preserved:
+owner-token stamping, token-checked release in `__exit__`, timeout diagnostics, the 30 s
+stale threshold, and the mtime-based staleness check.
+
+> **Design revision during implementation (falsified by the FR-002 test)**: the plan's
+> first design — atomic-rename reclaim to a unique per-contender name — closed the
+> unlink race but not the class of bug: `os.rename` operates on the *name*, so a slow
+> contender that had judged the old file stale could rename away the **fresh** lock the
+> winner had just created (same TOCTOU, one step later; the race test caught it as
+> 3 simultaneous holders with no token violation). POSIX offers no compare-and-unlink,
+> so no name-based single-step reclaim can pin the checked inode; the reclaim-mutex +
+> re-check-under-mutex design is the correct portable fix. With the single-crash
+> assumption of G3 (a stale lock's owner is dead), reclaim is exactly single-winner and
+> a fresh lock is never touched; multi-crash edge cases degrade no worse than today,
+> with the revision-CAS (G7) as the durable backstop.
 
 **Rationale**:
 - Fixes the single-winner property with ~10 lines, no new failure modes on the
