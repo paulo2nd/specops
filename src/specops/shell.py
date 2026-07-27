@@ -60,5 +60,14 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             return
+    else:
+        # Tree-kill equivalent: plain proc.kill() would terminate only the
+        # shell wrapper, and an orphaned grandchild holding the output pipe
+        # blocks communicate() past the timeout (#38).
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                capture_output=True, check=False,
+            )
     with contextlib.suppress(ProcessLookupError, OSError):
         proc.kill()

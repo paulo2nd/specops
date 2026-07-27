@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   those with `EBADF`, so any command that writes the ledger, context map, lane
   state, or a handoff revision failed. The write, flush, and fsync now go through
   a single writable handle. Found by the Windows CI leg introduced by #29.
+- **Client-command timeouts could hang on Windows (#38).** On timeout,
+  `shell._kill_tree` killed only the shell wrapper; a grandchild (e.g. the real
+  test process) survived holding the output pipe, blocking the deterministic
+  FR-010 timeout until it exited on its own. Windows now uses the tree-kill
+  equivalent (`taskkill /T /F`). Also found by the new Windows CI leg.
 
 ### Changed
 
