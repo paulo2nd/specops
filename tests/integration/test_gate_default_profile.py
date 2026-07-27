@@ -89,6 +89,20 @@ def test_cli_gate_list_no_config_exit_zero(context_map_repo: Path) -> None:
     assert any(row["name"] == "test" for row in payload["selection"])
 
 
+def test_cli_gate_list_corrupt_ledger_surfaces_exit2(context_map_repo: Path) -> None:
+    # A corrupted ledger is a real diagnostic (#26), not a silent empty selection.
+    _write_config(context_map_repo, test_command="pytest")
+    feature_dir = context_map_repo / "specs" / "001-demo"
+    feature_dir.mkdir(parents=True)
+    (context_map_repo / ".specify" / "feature.json").write_text(
+        json.dumps({"feature_directory": "specs/001-demo"})
+    )
+    (feature_dir / "status.yaml").write_text(":\n  - [broken")
+    result = _run(context_map_repo, "list")
+    assert result.exit_code == 2
+    assert "Cannot parse ledger" in result.stderr
+
+
 def test_cli_gate_validate_no_config_exit_zero(context_map_repo: Path) -> None:
     _write_config(context_map_repo, test_command="pytest")
     result = _run(context_map_repo, "validate", "--json")

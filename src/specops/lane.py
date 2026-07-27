@@ -214,10 +214,10 @@ def _diff_status(repo: Any, baseline: str, staged: bool) -> list[tuple[str, str]
     """Return rename-aware (status, path) pairs for baseline..HEAD, plus staged when asked."""
     pairs: list[tuple[str, str]] = []
     if baseline and gitops.commit_exists(repo, baseline):
-        with contextlib.suppress(Exception):  # git errors degrade to "no committed diff"
+        with contextlib.suppress(gitops.git.GitCommandError):  # degrade: no committed diff
             pairs.extend(_parse_name_status(repo.git.diff("--name-status", "-M", baseline, "HEAD")))
     if staged:
-        with contextlib.suppress(Exception):  # git errors degrade to "no staged diff"
+        with contextlib.suppress(gitops.git.GitCommandError):  # degrade: no staged diff
             pairs.extend(_parse_name_status(repo.git.diff("--cached", "--name-status", "-M")))
     return pairs
 

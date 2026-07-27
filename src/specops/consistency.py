@@ -101,8 +101,8 @@ def run(root: Path) -> tuple[list[str], list[str]]:
                     try:
                         repo.git.ls_files("--error-unmatch", raw_path)
                         in_history = True
-                    except Exception:
-                        pass
+                    except gitops.git.GitCommandError:
+                        pass  # not tracked — the expected negative
                 if not in_worktree and not in_history:
                     violations.append(
                         f"consistency: {plan_path.name}:{lineno} - "

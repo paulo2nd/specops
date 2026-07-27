@@ -700,8 +700,10 @@ def context_impact(
             return
         try:
             baseline = status.read_baseline(root)
-        except Exception:
-            baseline = ""
+        except LedgerParseError:
+            raise  # corrupted ledger is a real diagnostic, not "no baseline"
+        except SpecopsError:
+            baseline = ""  # no active feature / no ledger yet
         if not baseline or not gitops.commit_exists(repo, baseline):
             _emit(contextmap.CommandResult(
                 "impact", contextmap.S_USAGE_ERROR,
@@ -1000,8 +1002,10 @@ def _effective_diff_paths(root: Path) -> list[str]:
         return []
     try:
         baseline = status.read_baseline(root)
-    except Exception:
-        baseline = ""
+    except LedgerParseError:
+        raise  # corrupted ledger is a real diagnostic, not "no baseline"
+    except SpecopsError:
+        baseline = ""  # no active feature / no ledger yet
     if not baseline or not gitops.commit_exists(repo, baseline):
         return []
     return gitops.name_only_diff(repo, baseline, "HEAD")
