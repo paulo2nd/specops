@@ -1,0 +1,20 @@
+{
+  "contract_version": 1,
+  "producer": { "name": "acme-llm-reviewer", "version": "2.3.0" },
+  "reviewed_commit": "0123456789abcdef0123456789abcdef01234567",
+  "findings": [
+    {
+      "rule": "py/sql-injection",
+      "file": "src/specops/example.py",
+      "line": 42,
+      "action": "Parameterize the query instead of string-formatting user input.",
+      "severity": "high"
+    },
+    {
+      "rule": "L2",
+      "file": "src/specops/other.py",
+      "action": "Missing timeout on the outbound call.",
+      "producer": { "name": "codeql", "version": "2.16.0" }
+    }
+  ]
+}

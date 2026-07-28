@@ -2,7 +2,7 @@ $ specops reconcile --json
 --- exit_code ---
 2
 --- stdout ---
-{"command": "reconcile", "outcome": "error", "class": "infra-error", "diverged_dimension": "workflow-state", "remedy": "specops status rebaseline"}
+{"command": "reconcile", "outcome": "error", "class": "infra-error", "diverged_dimension": "workflow-state", "remedy": "specops status rebaseline", "output_version": 1}
 
 --- stderr ---
 

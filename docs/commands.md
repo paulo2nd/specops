@@ -4,6 +4,10 @@ The complete reference for every `specops` command, the `/specops-review`
 directive, and how they compose into the review workflow. For an overview,
 install instructions, and the quick start, see the [README](../README.md).
 
+> **Binding to a surface?** The exit codes and JSON contracts documented here are
+> frozen for 1.0 — see **[docs/stability.md](stability.md)** for the per-surface
+> stability policy and the additive-vs-breaking rules.
+
 ## Command reference
 
 ### `specops init [--non-interactive]`

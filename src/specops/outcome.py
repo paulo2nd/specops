@@ -21,6 +21,21 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+# --- Envelope version (Feature 021 — Contract Freeze) ----------------------
+# The base command-result envelope version. `render()` stamps it whenever a caller does
+# not supply one, so every `--json` output carries an `output_version` an adopter can
+# detect (FR-009). It is the version for the *thin* envelope (`command`/`outcome`/`class`)
+# emitted by the families that have no richer payload of their own (e.g. `consistency`,
+# `reconcile`, and error paths).
+#
+# It is NOT a global single value: command families with a richer JSON payload
+# (context/trace/handoff/gate/lane/doctor) carry their OWN independently-versioned
+# `output_version` via `_emit`, and FR-009/SC-010 retain those unchanged. Each such
+# version bumps on its own schedule (see docs/stability.md → Versioning). All are `1`
+# at 1.0. Distinct again from the persisted-format versions (gate-profile *file*
+# `output_version`, context-map `schema_version`, ledger `schema_version`).
+OUTPUT_VERSION = 1
+
 # --- Exit codes (mirror specops.errors) ------------------------------------
 EXIT_OK = 0
 EXIT_BLOCKED = 1  # blocking gate result / review REJECTED  (SpecopsError)
@@ -90,4 +105,9 @@ def render(command: str, cls: str, **extra: Any) -> str:
     for key, value in extra.items():
         if value is not None:
             obj[key] = value
+    # Feature 021: guarantee the envelope version is always present. Callers that
+    # already pass `output_version` (the `_emit` report families) keep it in place
+    # byte-for-byte; callers that do not (consistency/reconcile) get it appended —
+    # an additive, single-sourced key.
+    obj.setdefault("output_version", OUTPUT_VERSION)
     return json.dumps(obj)

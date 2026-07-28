@@ -37,8 +37,65 @@ def test_render_includes_only_non_none_extras() -> None:
         "class": "infra-error",
         "diverged_dimension": "baseline",
         "remedy": "specops status rebaseline",
+        "output_version": outcome.OUTPUT_VERSION,  # Feature 021: always present
     }
     assert "verdict" not in obj  # None extras are dropped
+
+
+# --- Feature 021 (Contract Freeze): frozen exit-code + envelope version -----
+
+def test_exit_codes_frozen() -> None:
+    """SC-009: the three-value exit contract is locked; a change to any code's value
+    or meaning fails here (and Principle VI must document all three)."""
+    assert outcome.EXIT_OK == 0
+    assert outcome.EXIT_BLOCKED == 1  # blocking gate result / review REJECTED
+    assert outcome.EXIT_ERROR == 2  # infrastructure / data / usage error
+    assert outcome.exit_for(outcome.PASS) == 0
+    assert outcome.exit_for(outcome.GATE_REJECTION) == 1
+    assert outcome.exit_for(outcome.INFRA_ERROR) == 2
+    # No command may emit a code outside {0, 1, 2}.
+    assert set(outcome._EXIT_FOR_CLASS.values()) == {0, 1, 2}
+
+
+def test_base_envelope_always_carries_output_version() -> None:
+    """SC-010/FR-009: every `--json` envelope carries a pinned output_version, even the
+    families (consistency/reconcile) that do not pass one explicitly."""
+    for cls in (outcome.PASS, outcome.GATE_REJECTION, outcome.INFRA_ERROR):
+        obj = json.loads(outcome.render("consistency", cls))
+        assert obj["output_version"] == outcome.OUTPUT_VERSION == 1
+
+
+def test_base_envelope_default_version_is_independent_of_families() -> None:
+    """FR-009/SC-010: the base envelope's default version is outcome.OUTPUT_VERSION and is
+    NOT derived from any command family's constant. Command families keep their own
+    independent output_version (retained unchanged); this asserts the base default does
+    not silently track a family value — a family bump must not move the base envelope."""
+    # The base envelope (a family with no richer payload, e.g. consistency) always stamps
+    # outcome.OUTPUT_VERSION, regardless of what any family constant happens to be.
+    obj = json.loads(outcome.render("consistency", outcome.PASS))
+    assert obj["output_version"] == outcome.OUTPUT_VERSION
+
+
+def test_per_family_output_versions_are_frozen_baselines() -> None:
+    """SC-002: each command family's independent output_version is frozen at its 1.0
+    baseline (all == 1). These are separate version axes, not a single global value —
+    a family may bump on its own schedule per the versioning policy."""
+    from specops import contextmap, doctor, gateprofiles, handoff, lane, trace
+
+    for mod in (trace, handoff, contextmap, doctor, lane, gateprofiles):
+        assert mod.OUTPUT_VERSION == 1, f"{mod.__name__}.OUTPUT_VERSION baseline is 1"
+
+
+def test_base_envelope_key_set_is_frozen() -> None:
+    """FR-004: the base envelope key set is exactly {command, outcome, class,
+    output_version}; a rename/removal of a base key fails here. Documented per-command
+    extension keys are still permitted (additive)."""
+    obj = json.loads(outcome.render("consistency", outcome.PASS))
+    assert set(obj) == {"command", "outcome", "class", "output_version"}
+    # Additive tolerance: a new documented per-command key does not break the envelope.
+    obj2 = json.loads(outcome.render("consistency", outcome.PASS, new_optional_key="x"))
+    assert {"command", "outcome", "class", "output_version"} <= set(obj2)
+    assert obj2["new_optional_key"] == "x"
 
 
 def test_render_review_verdict_and_gates() -> None:
