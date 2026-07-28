@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from specops import contextmap, findings, gitops, ledger, speckit, status
+from specops import contextmap, findings, gitops, ledger, records, speckit, status
 from specops.errors import SpecopsError
 
 # --- Versioned JSON contract (FR-014) --------------------------------------
@@ -682,7 +682,7 @@ def cmd_acknowledge(root: Path, path: str, *, task: str, reason: str) -> TraceRe
                            "different task/reason; "
                            "existing record left unchanged", {"path": path, "task": task})
 
-    record = {
+    record: records.AcknowledgementRecord = {
         "path": path, "task": task, "reason": reason,
         "map_digest": contextmap.map_digest(root), "at": ledger.now_utc(),
     }

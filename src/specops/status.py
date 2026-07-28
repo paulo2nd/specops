@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from typing import cast
 
 import git
 import yaml
 
-from specops import config, contextmap, gitops, ledger, shell, speckit
+from specops import config, contextmap, gitops, ledger, records, shell, speckit
 from specops import evidence as evidence_mod
 from specops.errors import SpecopsError
 from specops.ledger import now_utc
@@ -102,7 +103,7 @@ def compact_status(root: Path) -> dict:
     }
 
 
-def _sync_tasks(data: dict, tasks_text: str) -> None:
+def _sync_tasks(data: records.LedgerLike, tasks_text: str) -> None:
     """Sync ledger tasks[] from tasks.md content.
 
     New IDs → PENDING; vanished IDs → orphaned: true (preserved). (R5)
@@ -110,7 +111,7 @@ def _sync_tasks(data: dict, tasks_text: str) -> None:
     current_ids = speckit.extract_task_ids(tasks_text)
     existing = {t["id"]: t for t in data.get("tasks", [])}
 
-    synced = []
+    synced: list[records.TaskRecord] = []
     for tid in current_ids:
         if tid in existing:
             synced.append(existing[tid])
@@ -175,7 +176,9 @@ def _identity_mismatch(diverged: str) -> SpecopsError:
     )
 
 
-def load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str], git.Repo]:
+def load_for_write(
+    root: Path, feature_dir: Path
+) -> tuple[records.LedgerDocument, int, list[str], git.Repo]:
     """Load, classify, identity-check, and (if needed) migrate the ledger for a write.
 
     Returns (data, base_revision, base_violations, repo). Refuses too-new/unsupported
@@ -201,18 +204,21 @@ def load_for_write(root: Path, feature_dir: Path) -> tuple[dict, int, list[str],
         raise _identity_mismatch(diverged)
 
     base_revision = ledger.revision_of(on_disk)
-    data = copy.deepcopy(on_disk)
+    data: records.LedgerLike = copy.deepcopy(on_disk)
     if cls == ledger.MIGRATABLE:
         backup_rel = ledger.backup_ledger(root, feature_dir)
         data = ledger.migrate_to_current(data)
         data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
     ledger.ensure_workflow_block(data)  # back-fill additive Feature 007 block
     base_violations = ledger.validate_invariants(data)
-    return data, base_revision, base_violations, repo
+    # The one canonical cast point (Feature 019 US3): the document has been
+    # classified, identity-checked, and (if needed) migrated — structurally known.
+    return cast(records.LedgerDocument, data), base_revision, base_violations, repo
 
 
 def finalize(
-    feature_dir: Path, data: dict, base_revision: int, base_violations: list[str]
+    feature_dir: Path, data: records.LedgerLike, base_revision: int,
+    base_violations: list[str],
 ) -> None:
     """Commit the ledger with revision CAS, failing closed only on *new* invalid state.
 
@@ -412,8 +418,13 @@ def _validate_evidence_args(auto: bool, evidence: str | None) -> None:
         raise SpecopsError("Provide --auto or --evidence, not both.")
 
 
-def _require_in_progress(task_map: dict, task_id: str) -> dict:
-    """Completion preconditions: known task, IN_PROGRESS, with a started_commit."""
+def _require_in_progress(
+    task_map: dict[str, records.TaskRecord], task_id: str
+) -> tuple[records.TaskRecord, str]:
+    """Completion preconditions: known task, IN_PROGRESS, with a started_commit.
+
+    Returns (task, started_commit) — the narrowed non-None start anchor.
+    """
     if task_id not in task_map:
         raise SpecopsError(f"Task '{task_id}' not found in tasks.md.")
     task = task_map[task_id]
@@ -421,11 +432,12 @@ def _require_in_progress(task_map: dict, task_id: str) -> dict:
         raise SpecopsError(
             f"Task '{task_id}' is not IN_PROGRESS (status: {task['status']})."
         )
-    if not task.get("started_commit"):
+    started = task.get("started_commit")
+    if not started:
         raise SpecopsError(
             f"Task '{task_id}' has no started_commit; cannot harvest evidence."
         )
-    return task
+    return task, started
 
 
 def _auto_evidence(
@@ -473,7 +485,8 @@ def _manual_evidence(
 
 
 def _record_completion(
-    data: dict, root: Path, task: dict, task_id: str, started: str,
+    data: records.LedgerDocument, root: Path, task: records.TaskRecord,
+    task_id: str, started: str,
     changed_files: list[str], evidence_str: str, evidence_command: str,
     commits: list[str],
 ) -> None:
@@ -488,7 +501,8 @@ def _record_completion(
 
     task["evidence"] = evidence_str
     task["status"] = "DONE"
-    task["completed_at"] = now_utc()
+    completed_at = now_utc()
+    task["completed_at"] = completed_at
     data["recovery"]["active_task"] = None
 
     # Feature 012 (v6): record the structured evidence object + task reference,
@@ -498,7 +512,7 @@ def _record_completion(
     commit_range = f"{started}..{head}" if head != started else str(started)
     ev_record = evidence_mod.build_record(
         producer="auto", command=evidence_command, exit_code=0,
-        timestamp=task["completed_at"], commit_range=commit_range,
+        timestamp=completed_at, commit_range=commit_range,
         affected_paths=list(changed_files), summary=evidence_str,
         context_map_digest=contextmap.map_digest(root), subject=task_id,
     )
@@ -517,8 +531,7 @@ def cmd_complete_task(
 
     _sync_tasks(data, _read_tasks_md(feature_dir))
     task_map = {t["id"]: t for t in data.get("tasks", [])}
-    task = _require_in_progress(task_map, task_id)
-    started = task["started_commit"]
+    task, started = _require_in_progress(task_map, task_id)
 
     # Effective changed paths for this task (started_commit → HEAD), computed once
     # and reused for both --auto evidence and the Feature 009 context provenance.
@@ -643,7 +656,7 @@ def _validate_transition(current: str, target: str, normalized_result: str | Non
     )
 
 
-def _enter_review(data: dict, root: Path, repo: git.Repo) -> None:
+def _enter_review(data: records.LedgerDocument, root: Path, repo: git.Repo) -> None:
     """Entering REVIEW: activate the corrective placeholder, or open a new cycle.
 
     REVIEW -> IMPLEMENT(REJECTED) creates the next-round placeholder so the
@@ -673,7 +686,7 @@ def _enter_review(data: dict, root: Path, repo: git.Repo) -> None:
         })
 
 
-def _close_rejected_review(data: dict) -> None:
+def _close_rejected_review(data: records.LedgerDocument) -> None:
     """Close the round REJECTED and open the next round's placeholder."""
     cycles = data.get("review_cycles", [])
     if cycles:
@@ -687,7 +700,7 @@ def _close_rejected_review(data: dict) -> None:
     })
 
 
-def _require_approved_cycle(cycles: list) -> None:
+def _require_approved_cycle(cycles: list[records.ReviewCycleRecord]) -> None:
     """The single Feature 006 DONE cycle gate (Feature 019 US2, FR-004).
 
     Historically spelled verbatim in BOTH DONE branches of the transition
@@ -706,7 +719,9 @@ def _require_approved_cycle(cycles: list) -> None:
         )
 
 
-def _gate_done(data: dict, current: str, normalized_result: str | None) -> None:
+def _gate_done(
+    data: records.LedgerDocument, current: str, normalized_result: str | None
+) -> None:
     """The ordered DONE gates (Feature 011 findings gate, then Feature 006 cycle gate).
 
     Feature 011: block approval while any blocking finding is unverified
@@ -847,7 +862,7 @@ def cmd_rebaseline(root: Path) -> str:
         )
 
     base_rev = ledger.revision_of(on_disk)
-    data = copy.deepcopy(on_disk)
+    data: records.LedgerLike = copy.deepcopy(on_disk)
     if cls == ledger.MIGRATABLE:
         backup_rel = ledger.backup_ledger(root, feature_dir)
         data = ledger.migrate_to_current(data)

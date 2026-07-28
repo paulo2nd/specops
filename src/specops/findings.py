@@ -19,7 +19,10 @@ ledger schema change.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Any
+
+from specops.records import FindingRecord
 
 # The line number is optional so a line-less finding (`<file> - <action>`) round-trips
 # through render → import faithfully; `<file>:<line> - <action>` still matches.
@@ -31,7 +34,7 @@ def new_finding(
     expected_evidence: str | None = None, closure_criteria: str | None = None,
     imported: dict[str, Any] | None = None, producer: dict[str, Any] | None = None,
     reviewed_digest: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> FindingRecord:
     """Build the base finding record shared by every construction path (FR-008).
 
     The base dict is always the same 14 keys in the same order (matching the ledger's
@@ -40,7 +43,7 @@ def new_finding(
     default — callers never re-specify ``state``/``task``/``commits``/``evidence``/
     ``fixed_at``/``verified_at``.
     """
-    rec: dict[str, Any] = {
+    rec: FindingRecord = {
         "id": id, "severity": severity, "rule": rule, "file": file,
         "line": line, "action": action,
         "expected_evidence": expected_evidence, "closure_criteria": closure_criteria,
@@ -73,7 +76,7 @@ def parse_finding_line(line: str) -> dict[str, Any] | None:
     }
 
 
-def format_finding_line(finding: dict[str, Any]) -> str:
+def format_finding_line(finding: Mapping[str, Any]) -> str:
     """Render a finding's ``<file>[:<line>] - <action>`` line (ids live in the ledger,
     not the human line). Inverse of :func:`parse_finding_line` (round-trip, FR-009)."""
     loc = f"{finding['file']}:{finding['line']}" if finding.get("line") is not None \

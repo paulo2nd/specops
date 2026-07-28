@@ -24,6 +24,7 @@ from specops import (
     gateprofiles,
     gitops,
     ledger,
+    records,
     shell,
     speckit,
     status,
@@ -112,7 +113,7 @@ def _cli_version() -> str:
         return "0.0.0"
 
 
-def existing_evidence(root: Path) -> list[dict]:
+def existing_evidence(root: Path) -> list[records.EvidenceRecord]:
     """Read the active ledger's structured evidence list (read-only; [] when absent).
 
     Used only for the cache-lookup: `specops preflight` never writes the ledger (the
@@ -133,7 +134,9 @@ def existing_evidence(root: Path) -> list[dict]:
     return ev if isinstance(ev, list) else []
 
 
-def _cached_record(existing: list[dict], eid: str) -> dict | None:
+def _cached_record(
+    existing: list[records.EvidenceRecord], eid: str
+) -> records.EvidenceRecord | None:
     for rec in existing:
         if isinstance(rec, dict) and rec.get("id") == eid and rec.get("superseded_by") is None:
             return rec
@@ -157,7 +160,7 @@ def _blocking_result(
 
 def _run_profile_gate(
     sel: gateprofiles.SelectedGate, root: Path, changed: list[str],
-    commit_range: str, map_digest: str | None, existing: list[dict],
+    commit_range: str, map_digest: str | None, existing: list[records.EvidenceRecord],
 ) -> GateResult:
     """Evaluate one selected/skipped profile gate → GateResult with a disposition.
 

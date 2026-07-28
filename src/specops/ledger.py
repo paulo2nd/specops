@@ -16,12 +16,14 @@ import copy
 import datetime
 import os
 import time
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from specops import evidence as evidence_mod
-from specops import fsutil, gitops, speckit
+from specops import fsutil, gitops, records, speckit
 from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 # ---------------------------------------------------------------------------
@@ -35,7 +37,7 @@ OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
 
 # Feature 009 — the no-map context-provenance marker backfilled onto records
 # that predate the map-provenance schema (v3). See contextmap.provenance_for.
-NO_MAP_PROVENANCE = {"map": "none"}
+NO_MAP_PROVENANCE: records.ContextProvenance = {"map": "none"}
 _PROVENANCE_MAP_STATES = ("none", "invalid", "present")
 DEFAULT_WORKFLOW_LANE = "full"
 
@@ -127,7 +129,7 @@ def artifact_for_phase(phase: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def classify(data: dict) -> str:
+def classify(data: records.LedgerLike) -> str:
     """Return one of CURRENT | MIGRATABLE | TOO_NEW | UNSUPPORTED for *data*."""
     sv = data.get("schema_version")
     if sv is None:
@@ -178,7 +180,7 @@ def refusal_message(cls: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def attach_lane_provenance(data: dict, lane_data: dict) -> dict:
+def attach_lane_provenance(data: records.LedgerLike, lane_data: dict) -> records.LedgerLike:
     """Add additive lightweight-lane promotion provenance to a synthesized ledger.
 
     Feature 013: a promoted lane synthesizes a full ledger (this dict) that records it
@@ -199,7 +201,7 @@ def attach_lane_provenance(data: dict, lane_data: dict) -> dict:
     return data
 
 
-def migrate_to_current(data: dict) -> dict:
+def migrate_to_current(data: records.LedgerLike) -> records.LedgerLike:
     """Deterministically upgrade a migratable ledger to CURRENT_SCHEMA. Pure; no I/O.
 
     Preserves every phase, task, evidence entry, and review cycle with identical
@@ -247,7 +249,7 @@ def migrate_to_current(data: dict) -> dict:
     return out
 
 
-def backfill_context_provenance(data: dict) -> None:
+def backfill_context_provenance(data: records.LedgerLike) -> None:
     """Back-fill the explicit no-map provenance marker onto records lacking it.
 
     Feature 009 (v3): every task and review-cycle record carries a
@@ -257,13 +259,13 @@ def backfill_context_provenance(data: dict) -> None:
     """
     for task in data.get("tasks") or []:
         if isinstance(task, dict):
-            task.setdefault("context_provenance", dict(NO_MAP_PROVENANCE))
+            task.setdefault("context_provenance", NO_MAP_PROVENANCE.copy())
     for cycle in data.get("review_cycles") or []:
         if isinstance(cycle, dict):
-            cycle.setdefault("context_provenance", dict(NO_MAP_PROVENANCE))
+            cycle.setdefault("context_provenance", NO_MAP_PROVENANCE.copy())
 
 
-def _commit_range_for_task(task: dict) -> str:
+def _commit_range_for_task(task: records.TaskRecord | dict) -> str:
     """Best-effort commit range for a task's migrated evidence (baseline..HEAD-like)."""
     commits = [str(c) for c in (task.get("commits") or [])]
     if len(commits) > 1:
@@ -274,7 +276,7 @@ def _commit_range_for_task(task: dict) -> str:
     return str(started) if started else ""
 
 
-def backfill_evidence(data: dict) -> None:
+def backfill_evidence(data: records.LedgerLike) -> None:
     """Back-fill the top-level ``evidence`` list (Feature 012, v6). Idempotent.
 
     A ledger written before v6 has no ``evidence`` list; it gains an explicit empty
@@ -305,7 +307,7 @@ def backfill_evidence(data: dict) -> None:
         task["evidence_refs"] = refs
 
 
-def backfill_acknowledgements(data: dict) -> None:
+def backfill_acknowledgements(data: records.LedgerLike) -> None:
     """Back-fill the top-level ``acknowledgements`` list (Feature 010, v4). Idempotent.
 
     A ledger written before v4 has no acknowledgements; it gains an explicit empty
@@ -317,7 +319,7 @@ def backfill_acknowledgements(data: dict) -> None:
         data["acknowledgements"] = []
 
 
-def ensure_workflow_block(data: dict) -> None:
+def ensure_workflow_block(data: records.LedgerLike) -> None:
     """Back-fill the additive `workflow` block in place (Feature 007). Idempotent.
 
     The block (currently ``{skipped_steps: []}``) records the human run/skip
@@ -340,7 +342,7 @@ def ensure_workflow_block(data: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def validate_invariants(data: dict) -> list[str]:
+def validate_invariants(data: records.LedgerLike) -> list[str]:
     """Return a list of invariant-violation strings ([] when valid).
 
     A non-empty result MUST block a state change (fail closed). Orphaned tasks
@@ -411,7 +413,7 @@ FINDING_DEFECT_CONTRADICTORY = "contradictory-state"
 FINDING_DEFECT_DUPLICATE_ID = "duplicate-id"
 
 
-def finding_structural_defects(data: dict) -> list[tuple[str, str]]:
+def finding_structural_defects(data: records.LedgerLike) -> list[tuple[str, str]]:
     """Return ``(kind, message)`` for every *structural* finding defect.
 
     The shared source of truth for both the write-time invariant and the
@@ -479,12 +481,12 @@ def finding_structural_defects(data: dict) -> list[tuple[str, str]]:
     return out
 
 
-def _finding_violations(data: dict) -> list[str]:
+def _finding_violations(data: records.LedgerLike) -> list[str]:
     """Write-time invariant messages, derived from :func:`finding_structural_defects`."""
     return [msg for _kind, msg in finding_structural_defects(data)]
 
 
-def _acknowledgement_violations(data: dict) -> list[str]:
+def _acknowledgement_violations(data: records.LedgerLike) -> list[str]:
     """Validate the optional ``acknowledgements`` list (Feature 010, v4).
 
     Absent is allowed (a pre-v4 ledger). When present each record MUST be a
@@ -519,7 +521,7 @@ def _acknowledgement_violations(data: dict) -> list[str]:
     return out
 
 
-def _evidence_violations(data: dict) -> list[str]:
+def _evidence_violations(data: records.LedgerLike) -> list[str]:
     """Validate the optional v6 ``evidence`` list + its references (Feature 012).
 
     Absent is allowed (a pre-v6 or hand-built ledger). When present, each record MUST
@@ -562,7 +564,7 @@ def _evidence_violations(data: dict) -> list[str]:
     return out
 
 
-def _provenance_violations(record: dict, label: str) -> list[str]:
+def _provenance_violations(record: Mapping[str, Any], label: str) -> list[str]:
     """Validate a record's optional ``context_provenance`` shape (Feature 009).
 
     Absent is allowed (a pre-v3 record). When present it MUST be a mapping whose
@@ -587,7 +589,9 @@ def _provenance_violations(record: dict, label: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def validate_identity(root: Path, repo: gitops.git.Repo, data: dict) -> str | None:
+def validate_identity(
+    root: Path, repo: gitops.git.Repo, data: records.LedgerLike
+) -> str | None:
     """Return the first diverged identity dimension, or None when consistent.
 
     Checks feature, branch, then baseline (branch-point commit reachable as an
@@ -665,13 +669,13 @@ def load_raw(feature_dir: Path) -> dict:
     return data
 
 
-def revision_of(data: dict) -> int:
+def revision_of(data: records.LedgerLike) -> int:
     """Return the ledger revision (0 for a v1 ledger with no revision)."""
     rev = data.get("revision", 0)
     return rev if isinstance(rev, int) and not isinstance(rev, bool) else 0
 
 
-def _logical(data: dict) -> dict:
+def _logical(data: records.LedgerLike) -> records.LedgerLike:
     """Return a copy of *data* stripped of volatile fields for stable-diff comparison."""
     c = copy.deepcopy(data)
     c.pop("updated_at", None)
@@ -683,7 +687,7 @@ def _logical(data: dict) -> dict:
     return c
 
 
-def _dump(data: dict) -> str:
+def _dump(data: records.LedgerLike) -> str:
     return yaml.dump(data, default_flow_style=False, allow_unicode=True)
 
 
@@ -792,12 +796,12 @@ class _LedgerLock:
                 os.unlink(self.lock_path)
 
 
-def write_new(feature_dir: Path, data: dict) -> None:
+def write_new(feature_dir: Path, data: records.LedgerLike) -> None:
     """Atomically write a brand-new ledger (init-spec). No CAS (file must be absent)."""
     _atomic_write(ledger_path(feature_dir), _dump(data))
 
 
-def save(feature_dir: Path, data: dict, *, base_revision: int) -> None:
+def save(feature_dir: Path, data: records.LedgerLike, *, base_revision: int) -> None:
     """Concurrency-safe, atomic, stable write of an existing ledger.
 
     - Acquires a short-lived lock, re-reads the on-disk revision; if it differs

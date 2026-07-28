@@ -8,8 +8,10 @@ local-artifact digest. The id is a deterministic function of the cache key
 so identical production yields an identical id and any cache-key change yields a new id
 that **supersedes** (never mutates) the prior record (append-only history).
 
-Records are stored as plain dicts in the ledger (YAML). This module is dependency-free
-(stdlib only) so :mod:`specops.ledger` can import it without a cycle.
+Records are stored as plain dicts in the ledger (YAML); their static shape is
+:class:`specops.records.EvidenceRecord` (Feature 019 US3). This module imports only
+the stdlib and the import-free :mod:`specops.records`, so :mod:`specops.ledger` can
+import it without a cycle.
 """
 from __future__ import annotations
 
@@ -18,6 +20,8 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+
+from specops.records import EvidenceRecord
 
 __all__ = [
     "ID_PREFIX", "EVIDENCE_CLASSES", "validate_string", "cache_key", "derive_id",
@@ -99,14 +103,14 @@ def build_record(
     commit_range: str, affected_paths: list[str], summary: str,
     context_map_digest: str | None = None, artifact_digest: str | None = None,
     subject: str | None = None,
-) -> dict[str, Any]:
+) -> EvidenceRecord:
     """Build a structured evidence record dict with its cache-key-derived id (FR-006)."""
     key = cache_key(
         producer=producer, command=command, commit_range=commit_range,
         affected_paths=affected_paths, context_map_digest=context_map_digest,
         subject=subject,
     )
-    rec: dict[str, Any] = {
+    rec: EvidenceRecord = {
         "id": derive_id(key),
         "producer": producer,
         "command": command,
@@ -124,7 +128,7 @@ def build_record(
 
 def parse_legacy_string(
     evidence: str, *, timestamp: str, commit_range: str, subject: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[EvidenceRecord]:
     """Convert a legacy ``<CLASS>:<summary>[; …]`` string into structured record(s).
 
     Each grammar-conformant part becomes one record (``producer="auto"``,
@@ -133,7 +137,7 @@ def parse_legacy_string(
     (never dropped — FR-007), so migration is zero-loss.
     """
     parts = [p for p in evidence.split("; ") if p]
-    recs: list[dict[str, Any]] = []
+    recs: list[EvidenceRecord] = []
     conformant = parts and all(_PART_RE.match(p) for p in parts)
     slices = parts if conformant else [evidence]
     for i, summary in enumerate(slices):
@@ -147,7 +151,7 @@ def parse_legacy_string(
     return recs
 
 
-def canonical_sort(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def canonical_sort(records: list[EvidenceRecord]) -> list[EvidenceRecord]:
     """Return *records* in the FR-021 canonical order (producer, timestamp, commit
     range) so any evidence listing is reproducible independent of insertion order."""
     return sorted(records, key=lambda r: (
@@ -159,8 +163,8 @@ def canonical_sort(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def append_record(
-    evidence: list[dict[str, Any]], rec: dict[str, Any], *, supersede: bool = False,
-) -> dict[str, Any]:
+    evidence: list[EvidenceRecord], rec: EvidenceRecord, *, supersede: bool = False,
+) -> EvidenceRecord:
     """Append *rec* to *evidence*, or return the existing record on an id match.
 
     Idempotent: a record whose id already exists (identical cache key) is reused, not
