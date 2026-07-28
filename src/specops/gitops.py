@@ -41,9 +41,12 @@ def commits_in_range(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> l
 
 
 def is_ancestor(repo: git.Repo, sha: str) -> bool:
-    """Return True when *sha* is reachable from HEAD (i.e. an ancestor)."""
-    if sha == "(human)":
-        return True
+    """Return True when *sha* is reachable from HEAD (i.e. an ancestor).
+
+    A pure git ancestry predicate: ledger-domain sentinels (the human-work
+    commit marker) are filtered by callers via ``ledger.is_human_commit`` —
+    this generic layer knows nothing about them (Feature 019 US4, FR-009).
+    """
     try:
         repo.commit(sha)
         # merge_base returns list; non-empty means sha is ancestor of HEAD
@@ -98,22 +101,13 @@ def name_only_diff(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> lis
         return []
 
 
-def effective_diff_status(
-    repo: git.Repo, start_sha: str, end_sha: str = "HEAD"
-) -> list[tuple[str, str]]:
-    """Return `(status, path)` pairs between *start_sha* and *end_sha* (Feature 010, R1).
+def parse_name_status(raw: str) -> list[tuple[str, str]]:
+    """Parse ``git diff --name-status`` output into ``(status, path)`` pairs.
 
-    Single source of the SpecOps effective-diff invocation. Disables rename
-    detection (``--no-renames``) so a rename is **decomposed** into a removed old
-    path plus an added new path, each reported independently (no similarity
-    threshold). Mode-only changes are still listed; symlinks appear by their own
-    path entry and are not followed (``git diff`` never dereferences them).
-    ``status`` is Git's single-letter code (``A``/``M``/``D``/…).
+    The single parse loop (Feature 019 US4, FR-008): ``status`` is the first
+    letter of the code (``R100`` → ``R``), ``path`` the last tab field — the NEW
+    path for a rename line. Blank lines are skipped.
     """
-    try:
-        raw = repo.git.diff("--name-status", "--no-renames", start_sha, end_sha)
-    except GitCommandError:
-        return []
     out: list[tuple[str, str]] = []
     for line in raw.splitlines():
         if not line.strip():
@@ -121,6 +115,46 @@ def effective_diff_status(
         parts = line.split("\t")
         out.append((parts[0][:1], parts[-1]))
     return out
+
+
+def name_status_diff(
+    repo: git.Repo, start_sha: str | None, end_sha: str = "HEAD", *,
+    rename_aware: bool, cached: bool = False,
+) -> list[tuple[str, str]]:
+    """The single ``--name-status`` invocation, rename-awareness as a parameter
+    (Feature 019 US4, FR-008).
+
+    ``rename_aware=False`` → ``--no-renames``: a rename **decomposes** into a
+    removed old path plus an added new path (no similarity threshold).
+    ``rename_aware=True`` → ``-M``: a rename is a single ``R`` on the NEW path
+    (an ordinary file move is not mis-flagged destructive — lane safety).
+    ``cached=True`` diffs the index (staged changes; the commit range is
+    ignored). Raises ``GitCommandError`` — each caller owns its degradation
+    policy (``effective_diff_status`` returns ``[]``; lane suppresses).
+    """
+    flag = "-M" if rename_aware else "--no-renames"
+    if cached:
+        raw = repo.git.diff("--cached", "--name-status", flag)
+    else:
+        raw = repo.git.diff("--name-status", flag, start_sha, end_sha)
+    return parse_name_status(raw)
+
+
+def effective_diff_status(
+    repo: git.Repo, start_sha: str, end_sha: str = "HEAD"
+) -> list[tuple[str, str]]:
+    """Return `(status, path)` pairs between *start_sha* and *end_sha* (Feature 010, R1).
+
+    The rename-decomposed projection of :func:`name_status_diff` (same name,
+    signature, and ``[]``-on-error semantics as always). Mode-only changes are
+    still listed; symlinks appear by their own path entry and are not followed
+    (``git diff`` never dereferences them). ``status`` is Git's single-letter
+    code (``A``/``M``/``D``/…).
+    """
+    try:
+        return name_status_diff(repo, start_sha, end_sha, rename_aware=False)
+    except GitCommandError:
+        return []
 
 
 def effective_diff(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> list[str]:

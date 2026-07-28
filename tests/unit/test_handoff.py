@@ -53,6 +53,26 @@ def test_finding_add_blocking_requires_closure(handoff_repo) -> None:
     assert "handoff" not in read_ledger(_fd(root))["review_cycles"][-1]
 
 
+def test_command_name_single_source_no_body_drift(handoff_repo, tmp_path_factory) -> None:
+    """The command label on the decorator's not-a-repo refusal and on a body-level
+    error derive from the SAME source (the decorator argument), so the two paths can
+    never report different names for one command — the drift the duplicated literal
+    invited. cmd_close reaches a body error (no handoff to close) on a fresh repo."""
+    body_err = handoff.cmd_close(handoff_repo())
+    assert body_err.status == handoff.BAD_ARGS  # body path, not the decorator's refusal
+
+    # An isolated dir NOT nested under the fixture's git repo, so find_repo returns None.
+    non_repo = tmp_path_factory.mktemp("non_repo")
+    (non_repo / ".specify").mkdir()
+    (non_repo / ".specify" / "feature.json").write_text(
+        json.dumps({"feature_directory": "specs/001-demo"}))
+    (non_repo / "specs" / "001-demo").mkdir(parents=True)
+    refusal = handoff.cmd_close(non_repo)  # not a Git repo -> decorator conversion
+
+    assert refusal.status == handoff.NOT_A_REPO
+    assert refusal.command == body_err.command == "handoff close"
+
+
 def test_finding_add_invalid_severity(handoff_repo) -> None:
     root = handoff_repo()
     res = handoff.cmd_finding_add(root, severity="critical", rule="x", file="a.py",

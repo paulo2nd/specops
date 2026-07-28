@@ -17,13 +17,16 @@ language-specific parser is added — the handoff is deterministic ledger state.
 """
 from __future__ import annotations
 
+import contextvars
+import functools
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ParamSpec, cast
 
-from specops import contextmap, gitops, ingestion, ledger, outcome, speckit, status, trace
+from specops import contextmap, gitops, ingestion, ledger, outcome, records, speckit, status, trace
 from specops import evidence as evidence_mod
 from specops import findings as findings_mod
 from specops.errors import SpecopsError
@@ -98,6 +101,73 @@ class HandoffResult(outcome.CommandResult):
     _CLASS_MAP = _CLASS_FOR_STATUS
 
 
+@dataclass(frozen=True)
+class LoadedLedger:
+    """The typed result of loading the ledger for a handoff mutation (Feature 019 US3).
+
+    Replaces the former positional 5-tuple ⊕ ``HandoffResult`` union returned by
+    ``_load_write`` — success is this dataclass, refusal is the typed
+    :class:`HandoffLoadRefused` exception, so no caller probes the result's class.
+    """
+
+    feature_dir: Path
+    data: records.LedgerDocument
+    base_revision: int
+    base_violations: list[str]
+    repo: Any
+
+
+class HandoffLoadRefused(Exception):
+    """Typed load refusal (e.g. not a Git repository) carrying the outcome fields.
+
+    Converted to a :class:`HandoffResult` at exactly one point — the
+    :func:`_handoff_command` decorator — reproducing the historical re-wrap
+    (specific command name, generic ``handoff:`` human text) byte-identically.
+    """
+
+    def __init__(self, status: str, human: str) -> None:
+        super().__init__(human)
+        self.status = status
+        self.human = human
+
+
+_P = ParamSpec("_P")
+
+# The CLI name of the handoff command currently executing, set by
+# :func:`_handoff_command` around each call. It is the SINGLE spelling of a
+# command's name: the decorated body reads it via :func:`current_command`
+# instead of re-hardcoding the literal, so a rename touches only the decorator
+# argument (a body/decorator drift previously mislabeled the not-a-repo refusal).
+_CURRENT_COMMAND: contextvars.ContextVar[str] = contextvars.ContextVar("handoff_command")
+
+
+def current_command() -> str:
+    """The executing handoff command's CLI name (inside a ``@_handoff_command`` body)."""
+    return _CURRENT_COMMAND.get()
+
+
+def _handoff_command(
+    cmd: str,
+) -> Callable[[Callable[_P, HandoffResult]], Callable[_P, HandoffResult]]:
+    """Bind *cmd* as the command name for the wrapped body and convert a
+    :class:`HandoffLoadRefused` to a :class:`HandoffResult` at this single point."""
+
+    def deco(fn: Callable[_P, HandoffResult]) -> Callable[_P, HandoffResult]:
+        @functools.wraps(fn)
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> HandoffResult:
+            token = _CURRENT_COMMAND.set(cmd)
+            try:
+                return fn(*args, **kwargs)
+            except HandoffLoadRefused as refusal:
+                return HandoffResult(cmd, refusal.status, refusal.human)
+            finally:
+                _CURRENT_COMMAND.reset(token)
+
+        return wrapper
+
+    return deco
+
+
 # ---------------------------------------------------------------------------
 # Ledger accessors (pure)
 # ---------------------------------------------------------------------------
@@ -107,17 +177,20 @@ def _feature_dir(root: Path) -> Path | None:
     return speckit.resolve_feature_dir(root)
 
 
-def _cycles(data: dict) -> list[dict]:
-    return [c for c in data.get("review_cycles") or [] if isinstance(c, dict)]
+def _cycles(data: records.LedgerLike) -> list[records.ReviewCycleRecord]:
+    return cast(
+        "list[records.ReviewCycleRecord]",
+        [c for c in data.get("review_cycles") or [] if isinstance(c, dict)],
+    )
 
 
-def _current_cycle(data: dict) -> dict | None:
+def _current_cycle(data: records.LedgerLike) -> records.ReviewCycleRecord | None:
     """The current round = the latest review-cycle record (or None)."""
     cycles = _cycles(data)
     return cycles[-1] if cycles else None
 
 
-def _ensure_handoff(cycle: dict) -> dict:
+def _ensure_handoff(cycle: records.ReviewCycleRecord) -> records.HandoffRecord:
     handoff = cycle.get("handoff")
     if not isinstance(handoff, dict):
         handoff = cycle["handoff"] = {
@@ -129,7 +202,9 @@ def _ensure_handoff(cycle: dict) -> dict:
     return handoff
 
 
-def _iter_findings(data: dict) -> Iterator[tuple[dict, dict]]:
+def _iter_findings(
+    data: records.LedgerLike,
+) -> Iterator[tuple[records.ReviewCycleRecord, records.FindingRecord]]:
     """Yield (cycle, finding) for every structured finding across all cycles."""
     for cycle in _cycles(data):
         handoff = cycle.get("handoff")
@@ -139,19 +214,21 @@ def _iter_findings(data: dict) -> Iterator[tuple[dict, dict]]:
                     yield cycle, f
 
 
-def _find_by_id(data: dict, fid: str) -> tuple[dict, dict] | None:
+def _find_by_id(
+    data: records.LedgerLike, fid: str
+) -> tuple[records.ReviewCycleRecord, records.FindingRecord] | None:
     for cycle, f in _iter_findings(data):
         if f.get("id") == fid:
             return cycle, f
     return None
 
 
-def _next_id(cycle: dict) -> str:
+def _next_id(cycle: records.ReviewCycleRecord) -> str:
     handoff = _ensure_handoff(cycle)
     return f"R{cycle.get('round')}-F{len(handoff['findings']) + 1:02d}"
 
 
-def _sort_key(cycle: dict, f: dict) -> tuple:  # noqa: ANN401 (heterogeneous sort key)
+def _sort_key(cycle: records.ReviewCycleRecord, f: records.FindingRecord) -> tuple:  # noqa: ANN401 (heterogeneous sort key)
     line = f.get("line")
     return (
         cycle.get("round") or 0,
@@ -162,12 +239,14 @@ def _sort_key(cycle: dict, f: dict) -> tuple:  # noqa: ANN401 (heterogeneous sor
     )
 
 
-def canonical_finding(data: dict) -> list[tuple[dict, dict]]:
+def canonical_finding(
+    data: records.LedgerLike,
+) -> list[tuple[records.ReviewCycleRecord, records.FindingRecord]]:
     """Every (cycle, finding) in canonical order (round, severity, file, line, id)."""
     return sorted(_iter_findings(data), key=lambda cf: _sort_key(*cf))
 
 
-def blocking_approval_check(data: dict) -> list[str]:
+def blocking_approval_check(data: records.LedgerLike) -> list[str]:
     """Ids of every ``blocking`` finding across all cycles that is not resolved.
 
     Feature-global (all rounds). A blocking finding is resolved once it is
@@ -180,12 +259,12 @@ def blocking_approval_check(data: dict) -> list[str]:
     return _unresolved_blocking_ids(f for _cycle, f in canonical_finding(data))
 
 
-def _is_resolved(finding: dict) -> bool:
+def _is_resolved(finding: records.FindingRecord) -> bool:
     """A blocking finding no longer gates approval once VERIFIED or DISMISSED."""
     return finding.get("state") in ("VERIFIED", "DISMISSED")
 
 
-def _unresolved_blocking_ids(findings: Iterator[dict]) -> list[str]:
+def _unresolved_blocking_ids(findings: Iterator[records.FindingRecord]) -> list[str]:
     """Ids of the blocking, unresolved findings in *findings* (with a usable id)."""
     return [
         f["id"] for f in findings
@@ -199,26 +278,26 @@ def _unresolved_blocking_ids(findings: Iterator[dict]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _load_write(
-    root: Path,
-) -> HandoffResult | tuple[Path, dict, int, list[str], Any]:
-    """Shared write preamble: repo check + identity/CAS load. Returns
-    (feature_dir, data, base_rev, base_violations, repo) or a HandoffResult on
-    the not-a-repo usage error."""
+def _load_write(root: Path) -> LoadedLedger:
+    """Shared write preamble: repo check + identity/CAS load (Feature 019 US3).
+
+    Returns a :class:`LoadedLedger`; raises :class:`HandoffLoadRefused` on the
+    not-a-repo usage error (converted once by :func:`_handoff_command`)."""
     repo = gitops.find_repo(root)
     if repo is None:
-        return HandoffResult("handoff", NOT_A_REPO, "handoff: not a Git repository")
+        raise HandoffLoadRefused(NOT_A_REPO, "handoff: not a Git repository")
     feature_dir = status.get_feature_dir(root)
     data, base_rev, base_violations, _repo = status.load_for_write(root, feature_dir)
-    return feature_dir, data, base_rev, base_violations, repo
+    return LoadedLedger(feature_dir, data, base_rev, base_violations, repo)
 
 
+@_handoff_command("handoff finding add")
 def cmd_finding_add(
     root: Path, *, severity: str, rule: str, file: str, line: int | None,
     action: str, expected_evidence: str, closure: str,
 ) -> HandoffResult:
     """Record a structured finding in the current round's handoff (FR-001)."""
-    cmd = "handoff finding add"
+    cmd = current_command()
     severity = (severity or "").strip()
     if severity not in ledger.SEVERITIES:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: invalid severity '{severity}'")
@@ -233,9 +312,8 @@ def cmd_finding_add(
             f"{cmd}: a blocking finding requires --expected-evidence and --closure")
 
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, _repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
 
     cycle = _current_cycle(data)
     if cycle is None:
@@ -260,16 +338,16 @@ def cmd_finding_add(
     return HandoffResult(cmd, FINDING_RECORDED, f"{cmd}: recorded {fid} ({severity})", {"id": fid})
 
 
+@_handoff_command("handoff authorize")
 def cmd_authorize(root: Path, paths: list[str]) -> HandoffResult:
     """Set/extend the current round handoff's authorized corrective paths (FR-009)."""
-    cmd = "handoff authorize"
+    cmd = current_command()
     norm = [trace.norm_path(p) for p in paths if (p or "").strip()]
     if not norm:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: at least one --path is required")
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, _repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
     cycle = _current_cycle(data)
     if cycle is None:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: no open review cycle")
@@ -283,16 +361,17 @@ def cmd_authorize(root: Path, paths: list[str]) -> HandoffResult:
                          {"authorized_paths": list(handoff["authorized_paths"])})
 
 
+@_handoff_command("handoff finding fix")
 def cmd_finding_fix(
     root: Path, fid: str, *, task: str, commits: list[str],
     evidence: str | None, auto: bool,
 ) -> HandoffResult:
     """OPEN -> FIXED: link the resolving task, commit(s), and evidence (FR-005)."""
-    cmd = "handoff finding fix"
+    cmd = current_command()
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
+    repo = loaded.repo
 
     located = _find_by_id(data, fid)
     if located is None:
@@ -315,10 +394,11 @@ def cmd_finding_fix(
         # from other tasks that landed on the branch in between.
         if not commits:
             recorded = task_rec.get("commits")
+            started = task_rec.get("started_commit")
             if recorded:
                 commits = list(recorded)
-            elif task_rec.get("started_commit"):
-                commits = gitops.commits_in_range(repo, task_rec["started_commit"])
+            elif started:
+                commits = gitops.commits_in_range(repo, started)
         evidence = evidence or task_rec.get("evidence")
     if not commits:
         return HandoffResult(cmd, PRECONDITION_UNMET,
@@ -347,14 +427,14 @@ def cmd_finding_fix(
     return HandoffResult(cmd, FINDING_FIXED, f"{cmd}: {fid} -> FIXED (task {task})", {"id": fid})
 
 
+@_handoff_command("handoff finding verify")
 def cmd_finding_verify(root: Path, fid: str) -> HandoffResult:
     """FIXED -> VERIFIED: mechanical precondition (evidence present + links resolve),
     no auto-verify; the reviewer's call is the closure judgment (FR-006)."""
-    cmd = "handoff finding verify"
+    cmd = current_command()
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, _repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
 
     located = _find_by_id(data, fid)
     if located is None:
@@ -374,20 +454,20 @@ def cmd_finding_verify(root: Path, fid: str) -> HandoffResult:
     return HandoffResult(cmd, FINDING_VERIFIED, f"{cmd}: {fid} -> VERIFIED", {"id": fid})
 
 
+@_handoff_command("handoff finding dismiss")
 def cmd_finding_dismiss(root: Path, fid: str, *, reason: str) -> HandoffResult:
     """Withdraw a finding to the terminal DISMISSED state with an audited reason.
 
     Escape hatch for a false-positive or superseded-round finding: it stops
     gating approval without fabricating a fix (no task/commit/evidence link).
     An already-VERIFIED finding is not dismissable (it was genuinely resolved)."""
-    cmd = "handoff finding dismiss"
+    cmd = current_command()
     reason = (reason or "").strip()
     if not reason:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: --reason is required", {"id": fid})
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, _repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
 
     located = _find_by_id(data, fid)
     if located is None:
@@ -404,14 +484,14 @@ def cmd_finding_dismiss(root: Path, fid: str, *, reason: str) -> HandoffResult:
     return HandoffResult(cmd, FINDING_DISMISSED, f"{cmd}: {fid} -> DISMISSED", {"id": fid})
 
 
+@_handoff_command("handoff close")
 def cmd_close(root: Path) -> HandoffResult:
     """Close the current round's handoff once all its blocking findings are VERIFIED
     (idempotent re-close; else close-blocked). FR-023."""
-    cmd = "handoff close"
+    cmd = current_command()
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, _repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
 
     cycle = _current_cycle(data)
     handoff = cycle.get("handoff") if cycle else None
@@ -430,13 +510,13 @@ def cmd_close(root: Path) -> HandoffResult:
     return HandoffResult(cmd, HANDOFF_CLOSED, f"{cmd}: handoff closed")
 
 
+@_handoff_command("handoff import")
 def cmd_import(root: Path, round: int | None) -> HandoffResult:
     """Import legacy revision-X.md prose into structured advisory/OPEN findings (FR-014)."""
-    cmd = "handoff import"
+    cmd = current_command()
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, _repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
 
     cycle = None
     if round is None:
@@ -484,7 +564,7 @@ def cmd_import(root: Path, round: int | None) -> HandoffResult:
 # ---------------------------------------------------------------------------
 
 
-def _finding_identity(f: dict) -> tuple:
+def _finding_identity(f: records.FindingRecord) -> tuple:
     """Content identity of a stored finding, matching ingestion.content_identity."""
     producer = f.get("producer") or {}
     return (producer.get("name"), f.get("rule"), f.get("file"), f.get("line"), f.get("action"))
@@ -525,9 +605,9 @@ def _apply_import(root: Path, cmd: str, normalized: list[ingestion.NormFinding])
         return HandoffResult(cmd, FINDINGS_IMPORTED, f"{cmd}: empty document (no-op)",
                              {"imported": 0, "refreshed": 0, "ids": []})
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
+    repo = loaded.repo
 
     cycle = _current_cycle(data)
     if cycle is None:
@@ -548,7 +628,7 @@ def _apply_import(root: Path, cmd: str, normalized: list[ingestion.NormFinding])
             refreshed += 1
             continue
         fid = _next_id(cycle)
-        rec: dict[str, Any] = findings_mod.new_finding(
+        rec: records.FindingRecord = findings_mod.new_finding(
             id=fid, severity="advisory", rule=nf.rule, file=nf.file,
             line=nf.line, action=nf.action,
             imported={"contract_version": ingestion.INPUT_CONTRACT_VERSION,
@@ -585,16 +665,19 @@ def _import_document(root: Path, cmd: str, file: str, parser: Any) -> HandoffRes
     return _apply_import(root, cmd, normalized)
 
 
+@_handoff_command("handoff finding import-json")
 def cmd_finding_import_json(root: Path, *, file: str) -> HandoffResult:
     """Import external findings from a versioned JSON contract document (FR-001)."""
-    return _import_document(root, "handoff finding import-json", file, ingestion.parse_contract)
+    return _import_document(root, current_command(), file, ingestion.parse_contract)
 
 
+@_handoff_command("handoff finding import-sarif")
 def cmd_finding_import_sarif(root: Path, *, file: str) -> HandoffResult:
     """Import external findings from a SARIF 2.1.0 document (FR-011)."""
-    return _import_document(root, "handoff finding import-sarif", file, ingestion.parse_sarif)
+    return _import_document(root, current_command(), file, ingestion.parse_sarif)
 
 
+@_handoff_command("handoff finding promote")
 def cmd_finding_promote(
     root: Path, fid: str, *, closure: str, expected_evidence: str,
 ) -> HandoffResult:
@@ -604,15 +687,14 @@ def cmd_finding_promote(
     ``handoff validate`` never flags MISSING_CLOSURE and the finding is verifiable
     through the unchanged Feature 011 lifecycle). Withdrawal/demotion uses the
     existing ``handoff finding dismiss`` — this feature adds no new mechanism."""
-    cmd = "handoff finding promote"
+    cmd = current_command()
     closure, ee = (closure or "").strip(), (expected_evidence or "").strip()
     if not (closure and ee):
         return HandoffResult(cmd, BAD_ARGS,
                              f"{cmd}: --closure and --expected-evidence are required", {"id": fid})
     loaded = _load_write(root)
-    if isinstance(loaded, HandoffResult):
-        return HandoffResult(cmd, loaded.status, loaded.human)
-    feature_dir, data, base_rev, base_violations, _repo = loaded
+    feature_dir, data = loaded.feature_dir, loaded.data
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
 
     located = _find_by_id(data, fid)
     if located is None:
@@ -644,7 +726,7 @@ def cmd_finding_promote(
 # ---------------------------------------------------------------------------
 
 
-def _load_read(root: Path) -> dict:
+def _load_read(root: Path) -> records.LedgerLike:
     feature_dir = _feature_dir(root)
     if feature_dir is None:
         raise SpecopsError("Cannot resolve active feature directory.")
@@ -690,6 +772,8 @@ def cmd_validate(root: Path) -> HandoffResult:
             defects.append((DANGLING_REFERENCE, f"{fid}: references unknown task '{task}'"))
         if repo is not None:
             for sha in f.get("commits") or []:
+                if ledger.is_human_commit(sha):
+                    continue  # R11: outside-Git work is exempt (callers filter, FR-009)
                 if not gitops.is_ancestor(repo, sha):
                     defects.append((DANGLING_REFERENCE,
                                     f"{fid}: references unresolvable commit '{sha[:7]}' "
@@ -705,9 +789,10 @@ def cmd_validate(root: Path) -> HandoffResult:
 
 
 def _finding_view(
-    cycle: dict, f: dict, repo: Any = None, digest_cache: dict[str, str | None] | None = None,
+    cycle: records.ReviewCycleRecord, f: records.FindingRecord,
+    repo: Any = None, digest_cache: dict[str, str | None] | None = None,
 ) -> dict:
-    view = {
+    view: dict[str, Any] = {
         "id": f.get("id"), "round": cycle.get("round"), "severity": f.get("severity"),
         "rule": f.get("rule"), "file": f.get("file"), "line": f.get("line"),
         "state": f.get("state"), "action": f.get("action"),
@@ -781,7 +866,7 @@ def cmd_report(root: Path) -> HandoffResult:
 # ---------------------------------------------------------------------------
 
 
-def render_revision_text(data: dict, round: int) -> str:
+def render_revision_text(data: records.LedgerLike, round: int) -> str:
     """Deterministic revision-X.md content projected from a round's handoff.
 
     Line format is the 010-compatible ``<file>:<line> - <action>`` (ids live in

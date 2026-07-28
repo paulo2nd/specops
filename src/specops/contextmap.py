@@ -24,7 +24,7 @@ from typing import Any
 
 import yaml
 
-from specops import ledger, outcome, speckit
+from specops import ledger, outcome, records, speckit
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -909,7 +909,7 @@ def cmd_impact(root: Path, *, paths: list[str]) -> CommandResult:
                          f"impact: {len(affected)} affected context(s)", {"impact": impact})
 
 
-def provenance_for(root: Path, changed_paths: list[str]) -> dict[str, Any]:
+def provenance_for(root: Path, changed_paths: list[str]) -> records.ContextProvenance:
     """Compute the ledger context-provenance record for *changed_paths* (R6).
 
     `{map: none}` (absent), `{map: invalid}` (present but unresolvable), or

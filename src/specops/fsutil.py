@@ -8,8 +8,11 @@ truncate a host-owned prompt file).
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from pathlib import Path
+
+from specops.errors import SpecopsError
 
 
 def atomic_write(path: Path, content: str) -> None:
@@ -41,3 +44,41 @@ def atomic_write(path: Path, content: str) -> None:
             os.close(dir_fd)
     except OSError:
         pass  # directory fsync is best-effort (not supported on all platforms)
+
+
+_PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
+
+
+def render_template(text: str, mapping: dict[str, str]) -> str:
+    """Render a ``{{key}}`` scaffold template, asserting placeholder completeness
+    (Feature 019 US4, FR-010).
+
+    Every ``{{key}}`` token in the template is replaced by ``mapping[key]``; extra
+    mapping keys are ignored (additive templates never break older code). A
+    ``{{...}}`` token whose key is absent from the mapping is template drift and
+    raises :class:`SpecopsError` naming the unfilled placeholder(s) — a scaffold is
+    never written with a silent unresolved placeholder.
+
+    Substitution is a single left-to-right pass: a replacement *value* is inserted
+    literally and never re-scanned, so a value that itself contains ``{{...}}``
+    (e.g. a branch or feature name like ``fix/{{ts}}``) is neither re-substituted
+    nor mistaken for template drift. Drift is judged on the template's own
+    placeholders, not on the rendered output.
+    """
+    missing: set[str] = set()
+
+    def _fill(match: re.Match[str]) -> str:
+        token = match.group(0)
+        key = token[2:-2]  # strip the surrounding ``{{`` / ``}}``
+        if key in mapping:
+            return mapping[key]
+        missing.add(token)
+        return token
+
+    rendered = _PLACEHOLDER_RE.sub(_fill, text)
+    if missing:
+        raise SpecopsError(
+            "Template rendering left unfilled placeholder(s): "
+            + ", ".join(sorted(missing))
+        )
+    return rendered

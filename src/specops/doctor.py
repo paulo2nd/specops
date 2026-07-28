@@ -194,9 +194,7 @@ def _domain_environment(repo: Any, has_speckit: bool) -> DomainResult:
     return DomainResult(D_ENVIRONMENT, findings)
 
 
-def _domain_cli_extension(install_state: str | None, state_error: Exception | None) -> DomainResult:
-    if state_error is not None:
-        raise state_error  # surfaced as execution-error by _run (bad manifest)
+def _domain_cli_extension(install_state: str | None) -> DomainResult:
     findings: list[Finding] = []
     result = compat.check()
     if not result.satisfied:
@@ -242,9 +240,7 @@ def _domain_integration(root: Path, has_speckit: bool) -> DomainResult:
     )])
 
 
-def _domain_legacy(install_state: str | None, state_error: Exception | None) -> DomainResult:
-    if state_error is not None:
-        raise state_error  # surfaced as execution-error by _run (bad manifest)
+def _domain_legacy(install_state: str | None) -> DomainResult:
     if install_state in (migration.LEGACY, migration.NATIVE_AND_LEGACY):
         return DomainResult(D_LEGACY, [_finding(
             WARNING, "legacy",
@@ -443,21 +439,32 @@ def _domain_gate_availability(root: Path) -> DomainResult:
 # ---------------------------------------------------------------------------
 
 
+def _error_domain(domain: str, exc: Exception) -> DomainResult:
+    """Convert a failed check into *domain*'s execution-error finding (FR-015).
+
+    The single failure→finding conversion (Feature 019 US4, FR-012): used by
+    :func:`_run` for in-check failures AND by :func:`diagnose` for shared-read
+    failures — exceptions are converted where they are caught, never threaded
+    through domain-check argument lists.
+    """
+    if isinstance(exc, LedgerParseError):
+        return DomainResult(domain, [_finding(
+            EXECUTION_ERROR, "input", f"cannot evaluate: {exc.message}",
+            NA_REPAIR_UNREADABLE_INPUT, "Repair the unreadable input file.",
+        )])
+    return DomainResult(domain, [_finding(
+        EXECUTION_ERROR, "error", f"unexpected error: {exc}",
+        NA_REPAIR_UNREADABLE_INPUT, "Inspect the repository state for this domain.",
+    )])
+
+
 def _run(domain: str, fn: Callable[..., DomainResult], *args: Any) -> DomainResult:
     """Run a domain check, converting any unexpected failure into an execution-error
     finding so the diagnostic never crashes and never omits a domain (FR-015)."""
     try:
         return fn(*args)
-    except LedgerParseError as exc:
-        return DomainResult(domain, [_finding(
-            EXECUTION_ERROR, "input", f"cannot evaluate: {exc.message}",
-            NA_REPAIR_UNREADABLE_INPUT, "Repair the unreadable input file.",
-        )])
     except Exception as exc:  # noqa: BLE001 — fail-safe: a domain bug must not crash doctor
-        return DomainResult(domain, [_finding(
-            EXECUTION_ERROR, "error", f"unexpected error: {exc}",
-            NA_REPAIR_UNREADABLE_INPUT, "Inspect the repository state for this domain.",
-        )])
+        return _error_domain(domain, exc)
 
 
 def _load_ledger_data(
@@ -498,9 +505,11 @@ def diagnose(root: Path) -> list[DomainResult]:
         install_state, state_error = None, exc
     return [
         _run(D_ENVIRONMENT, _domain_environment, repo, has_speckit),
-        _run(D_CLI_EXTENSION, _domain_cli_extension, install_state, state_error),
+        (_run(D_CLI_EXTENSION, _domain_cli_extension, install_state)
+         if state_error is None else _error_domain(D_CLI_EXTENSION, state_error)),
         _run(D_INTEGRATION, _domain_integration, root, has_speckit),
-        _run(D_LEGACY, _domain_legacy, install_state, state_error),
+        (_run(D_LEGACY, _domain_legacy, install_state)
+         if state_error is None else _error_domain(D_LEGACY, state_error)),
         _run(D_CONFIG, _domain_config, root),
         _run(D_FEATURE_IDENTITY, _domain_feature_identity, root, repo, feature_dir, data),
         _run(D_LEDGER, _domain_ledger, feature_dir, data, ledger_error),

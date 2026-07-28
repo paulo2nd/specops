@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from specops import records
+
 __all__ = ["SARIF_VERSION", "project", "from_ledger"]
 
 SARIF_VERSION = "2.1.0"
@@ -18,7 +20,9 @@ _INFO_URI = "https://github.com/paulosegundo/specops"
 _LEVEL = {"blocking": "error", "advisory": "warning"}
 
 
-def project(findings: list[dict[str, Any]], *, tool_version: str = "0.0.0") -> dict[str, Any]:
+def project(
+    findings: list[records.FindingRecord], *, tool_version: str = "0.0.0"
+) -> dict[str, Any]:
     """Build a SARIF 2.1.0 document from *findings* (already in canonical order)."""
     rules: dict[str, dict[str, str]] = {}
     results: list[dict[str, Any]] = []
