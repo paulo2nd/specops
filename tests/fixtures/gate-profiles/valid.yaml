@@ -1,0 +1,28 @@
+# Valid gate-profile config fixture (Feature 021 frozen-shape test).
+# Exercises every frozen field: output_version, per-profile name/command/timeout/
+# required, and each `applies` predicate key.
+output_version: 1
+profiles:
+  - name: lint
+    command: ruff check .
+    timeout: 120
+    required: true
+    applies:
+      always: true
+  - name: test
+    command: pytest -q
+    timeout: 600
+    required: true
+    applies:
+      paths:
+        - "src/**"
+        - "tests/**"
+  - name: security
+    command: bandit -r src
+    required: false
+    applies:
+      contexts:
+        - core
+      risk:
+        level: high
+      gate_ref: security-gate

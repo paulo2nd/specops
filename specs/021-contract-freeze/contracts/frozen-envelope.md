@@ -28,13 +28,21 @@ def render(command, cls, **extra):
     }
     ...
 ```
-- `render()` always emits `output_version: 1`.
-- `_emit()` and the `preflight` path **stop** passing `output_version` explicitly (render owns
-  it). The per-module `OUTPUT_VERSION` constants for the **CLI envelope** (trace/handoff/
-  contextmap) are removed or made to reference `outcome.OUTPUT_VERSION`; a contract test
-  asserts single-sourcing (no divergent constant).
+- `render()` now guarantees `output_version` via `obj.setdefault("output_version", OUTPUT_VERSION)`:
+  callers that already pass it (the `_emit` report families, `preflight`, `doctor`) keep it in
+  place **byte-for-byte**; callers that do not (`consistency`, `reconcile`) get it appended.
+  This is why only those two families' `--json` captures change.
+- **Single-sourcing (realized as a divergence guard)**: `outcome.OUTPUT_VERSION` is the one
+  authoritative envelope-version value. The report modules keep their own `OUTPUT_VERSION`
+  constants (they import `outcome` *after* defining the constant, and `gateprofiles.OUTPUT_VERSION`
+  is dual-purpose — it also versions the on-disk profile file), so rather than physically
+  re-pointing them (risky, cosmetic), a contract test (`test_outcome_contract.py`) asserts each
+  equals `outcome.OUTPUT_VERSION`, failing on any future drift. Same guarantee, zero churn,
+  byte-identical output.
 - **Unchanged / separate**: `gateprofiles.OUTPUT_VERSION` (persisted **file** version) and
-  `contextmap` provenance `output_version` (ledger state) remain their own fields.
+  `contextmap` provenance `output_version` (ledger state) remain their own fields; the guard
+  test treats the gate-profile *file* version as a persisted-format version (Entity 4), which
+  currently equals the envelope version but is conceptually independent.
 
 ## Behavior delta (sanctioned, additive)
 

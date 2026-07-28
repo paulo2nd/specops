@@ -21,6 +21,15 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+# --- Envelope version (Feature 021 — Contract Freeze) ----------------------
+# The single source of truth for the base command-result envelope version. Every
+# `--json` output carries `output_version` so an adopter has one detectable version
+# signal (FR-009). Report families (context/trace/handoff/gate) historically pass their
+# own equal constant via `_emit`; a contract test forbids those from diverging from this
+# value (single source of truth). Distinct from the gate-profile *file* `output_version`
+# and the context-map/context-provenance schema versions, which version persisted formats.
+OUTPUT_VERSION = 1
+
 # --- Exit codes (mirror specops.errors) ------------------------------------
 EXIT_OK = 0
 EXIT_BLOCKED = 1  # blocking gate result / review REJECTED  (SpecopsError)
@@ -90,4 +99,9 @@ def render(command: str, cls: str, **extra: Any) -> str:
     for key, value in extra.items():
         if value is not None:
             obj[key] = value
+    # Feature 021: guarantee the envelope version is always present. Callers that
+    # already pass `output_version` (the `_emit` report families) keep it in place
+    # byte-for-byte; callers that do not (consistency/reconcile) get it appended —
+    # an additive, single-sourced key.
+    obj.setdefault("output_version", OUTPUT_VERSION)
     return json.dumps(obj)

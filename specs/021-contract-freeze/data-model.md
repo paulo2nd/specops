@@ -175,6 +175,30 @@ constitution Principle VI (currently names only `0`/`1`) is amended to document 
 
 ---
 
+## FR-003 observable-surface sweep result (T004, 2026-07-28)
+
+The sweep over the CLI/persisted surfaces found **two additional adopter-facing surfaces**
+beyond the roadmap's named seven. Per FR-003 both default to **FROZEN**; total frozen
+surfaces = **9**. No observable surface is left unclassified (SC-001).
+
+### Entity 8 — Context-map file (`.specify/specops/context-map.yaml`, schema **v1**)
+
+- **Definition site**: `contextmap.py` (`MAP_RELPATH:33`, `CURRENT_SCHEMA=1:36`, `classify:164`, `validate:477`).
+- **Version field**: `schema_version: int` (**frozen = 1**; `validate` rejects unsupported).
+- **Why frozen**: a user-authored persisted format adopters bind to (contexts, ownership,
+  read-sets, gates, dependencies). Same freeze rules as the ledger: required-field set frozen;
+  new optional fields additive; schema bump requires a migration + test.
+- **Frozen baseline** = `contextmap.CURRENT_SCHEMA==1`. Contract test: `test_frozen_contextmap.py`.
+
+### Entity 9 — SARIF output (`--sarif`, **2.1.0**)
+
+- **Definition site**: `sarif.py` (`SARIF_VERSION="2.1.0":17`, `project:23`, `from_ledger:59`).
+- **Version field**: `version` (**frozen = "2.1.0"**, the external SARIF standard).
+- **Why frozen**: an opt-in output format adopters consume in CI. Additive = new optional
+  SARIF properties permitted by the standard; breaking = a SARIF version change or a change to
+  the `{blocking→error, advisory→warning}` level mapping (`sarif.py:20`).
+- **Frozen baseline** = `sarif.SARIF_VERSION=="2.1.0"`. Contract test: `test_frozen_sarif.py`.
+
 ## Cross-cutting: version-field map (what "bump" means where)
 
 | Surface | Version field | Baseline | Bump mechanism |
