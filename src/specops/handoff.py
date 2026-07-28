@@ -17,6 +17,7 @@ language-specific parser is added — the handoff is deterministic ledger state.
 """
 from __future__ import annotations
 
+import contextvars
 import functools
 import json
 import sys
@@ -132,19 +133,35 @@ class HandoffLoadRefused(Exception):
 
 _P = ParamSpec("_P")
 
+# The CLI name of the handoff command currently executing, set by
+# :func:`_handoff_command` around each call. It is the SINGLE spelling of a
+# command's name: the decorated body reads it via :func:`current_command`
+# instead of re-hardcoding the literal, so a rename touches only the decorator
+# argument (a body/decorator drift previously mislabeled the not-a-repo refusal).
+_CURRENT_COMMAND: contextvars.ContextVar[str] = contextvars.ContextVar("handoff_command")
+
+
+def current_command() -> str:
+    """The executing handoff command's CLI name (inside a ``@_handoff_command`` body)."""
+    return _CURRENT_COMMAND.get()
+
 
 def _handoff_command(
     cmd: str,
 ) -> Callable[[Callable[_P, HandoffResult]], Callable[_P, HandoffResult]]:
-    """The single :class:`HandoffLoadRefused` → :class:`HandoffResult` conversion point."""
+    """Bind *cmd* as the command name for the wrapped body and convert a
+    :class:`HandoffLoadRefused` to a :class:`HandoffResult` at this single point."""
 
     def deco(fn: Callable[_P, HandoffResult]) -> Callable[_P, HandoffResult]:
         @functools.wraps(fn)
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> HandoffResult:
+            token = _CURRENT_COMMAND.set(cmd)
             try:
                 return fn(*args, **kwargs)
             except HandoffLoadRefused as refusal:
                 return HandoffResult(cmd, refusal.status, refusal.human)
+            finally:
+                _CURRENT_COMMAND.reset(token)
 
         return wrapper
 
@@ -280,7 +297,7 @@ def cmd_finding_add(
     action: str, expected_evidence: str, closure: str,
 ) -> HandoffResult:
     """Record a structured finding in the current round's handoff (FR-001)."""
-    cmd = "handoff finding add"
+    cmd = current_command()
     severity = (severity or "").strip()
     if severity not in ledger.SEVERITIES:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: invalid severity '{severity}'")
@@ -324,7 +341,7 @@ def cmd_finding_add(
 @_handoff_command("handoff authorize")
 def cmd_authorize(root: Path, paths: list[str]) -> HandoffResult:
     """Set/extend the current round handoff's authorized corrective paths (FR-009)."""
-    cmd = "handoff authorize"
+    cmd = current_command()
     norm = [trace.norm_path(p) for p in paths if (p or "").strip()]
     if not norm:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: at least one --path is required")
@@ -350,7 +367,7 @@ def cmd_finding_fix(
     evidence: str | None, auto: bool,
 ) -> HandoffResult:
     """OPEN -> FIXED: link the resolving task, commit(s), and evidence (FR-005)."""
-    cmd = "handoff finding fix"
+    cmd = current_command()
     loaded = _load_write(root)
     feature_dir, data = loaded.feature_dir, loaded.data
     base_rev, base_violations = loaded.base_revision, loaded.base_violations
@@ -414,7 +431,7 @@ def cmd_finding_fix(
 def cmd_finding_verify(root: Path, fid: str) -> HandoffResult:
     """FIXED -> VERIFIED: mechanical precondition (evidence present + links resolve),
     no auto-verify; the reviewer's call is the closure judgment (FR-006)."""
-    cmd = "handoff finding verify"
+    cmd = current_command()
     loaded = _load_write(root)
     feature_dir, data = loaded.feature_dir, loaded.data
     base_rev, base_violations = loaded.base_revision, loaded.base_violations
@@ -444,7 +461,7 @@ def cmd_finding_dismiss(root: Path, fid: str, *, reason: str) -> HandoffResult:
     Escape hatch for a false-positive or superseded-round finding: it stops
     gating approval without fabricating a fix (no task/commit/evidence link).
     An already-VERIFIED finding is not dismissable (it was genuinely resolved)."""
-    cmd = "handoff finding dismiss"
+    cmd = current_command()
     reason = (reason or "").strip()
     if not reason:
         return HandoffResult(cmd, BAD_ARGS, f"{cmd}: --reason is required", {"id": fid})
@@ -471,7 +488,7 @@ def cmd_finding_dismiss(root: Path, fid: str, *, reason: str) -> HandoffResult:
 def cmd_close(root: Path) -> HandoffResult:
     """Close the current round's handoff once all its blocking findings are VERIFIED
     (idempotent re-close; else close-blocked). FR-023."""
-    cmd = "handoff close"
+    cmd = current_command()
     loaded = _load_write(root)
     feature_dir, data = loaded.feature_dir, loaded.data
     base_rev, base_violations = loaded.base_revision, loaded.base_violations
@@ -496,7 +513,7 @@ def cmd_close(root: Path) -> HandoffResult:
 @_handoff_command("handoff import")
 def cmd_import(root: Path, round: int | None) -> HandoffResult:
     """Import legacy revision-X.md prose into structured advisory/OPEN findings (FR-014)."""
-    cmd = "handoff import"
+    cmd = current_command()
     loaded = _load_write(root)
     feature_dir, data = loaded.feature_dir, loaded.data
     base_rev, base_violations = loaded.base_revision, loaded.base_violations
@@ -651,13 +668,13 @@ def _import_document(root: Path, cmd: str, file: str, parser: Any) -> HandoffRes
 @_handoff_command("handoff finding import-json")
 def cmd_finding_import_json(root: Path, *, file: str) -> HandoffResult:
     """Import external findings from a versioned JSON contract document (FR-001)."""
-    return _import_document(root, "handoff finding import-json", file, ingestion.parse_contract)
+    return _import_document(root, current_command(), file, ingestion.parse_contract)
 
 
 @_handoff_command("handoff finding import-sarif")
 def cmd_finding_import_sarif(root: Path, *, file: str) -> HandoffResult:
     """Import external findings from a SARIF 2.1.0 document (FR-011)."""
-    return _import_document(root, "handoff finding import-sarif", file, ingestion.parse_sarif)
+    return _import_document(root, current_command(), file, ingestion.parse_sarif)
 
 
 @_handoff_command("handoff finding promote")
@@ -670,7 +687,7 @@ def cmd_finding_promote(
     ``handoff validate`` never flags MISSING_CLOSURE and the finding is verifiable
     through the unchanged Feature 011 lifecycle). Withdrawal/demotion uses the
     existing ``handoff finding dismiss`` — this feature adds no new mechanism."""
-    cmd = "handoff finding promote"
+    cmd = current_command()
     closure, ee = (closure or "").strip(), (expected_evidence or "").strip()
     if not (closure and ee):
         return HandoffResult(cmd, BAD_ARGS,
