@@ -115,6 +115,15 @@ directives degrade to no-ops.
 The full reference — flags, exit codes, JSON contracts, examples, and the
 review workflow — lives in **[docs/commands.md](docs/commands.md)**.
 
+### Stability & contract freeze
+
+Building automation on SpecOps? **[docs/stability.md](docs/stability.md)** is the contract
+freeze for 1.0: it classifies every adopter-facing surface — `specops.json`, `status.yaml`,
+`lane.yaml`, gate-profile files, the `--json` output envelope, exit codes, the findings-input
+contract, the context-map file, and SARIF output — as **frozen**, and states the
+additive-vs-breaking rule and the post-1.0 versioning/migration obligations for each. Every
+`--json` output carries an `output_version` so you can detect envelope changes.
+
 ## How SpecOps behaves: a paved road you can leave — on the record
 
 SpecOps is neither a rigid gate that blocks you nor a suggestion you can ignore.

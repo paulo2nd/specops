@@ -43,6 +43,11 @@ estruturais — `SC-\d+`, `T\d+`, sufixos de ação — então sua prosa em `spe
   de comandos.
 - **[docs/commands.md](docs/commands.md)** — referência completa de cada comando,
   códigos de saída, contratos JSON e o fluxo de review.
+- **[docs/stability.md](docs/stability.md)** — o *contract freeze* para a 1.0: classifica
+  cada superfície voltada ao adotante (`specops.json`, `status.yaml`, `lane.yaml`, arquivos
+  de gate-profile, o envelope JSON, códigos de saída, o contrato de findings, o context-map
+  e a saída SARIF) como **congelada**, com a regra aditiva-vs-quebra e as obrigações de
+  versionamento/migração pós-1.0. Todo `--json` carrega um `output_version`.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — setup de desenvolvimento, gates de
   qualidade e princípios do projeto.
 - **[CHANGELOG.md](CHANGELOG.md)** — histórico de versões.

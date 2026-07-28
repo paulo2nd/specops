@@ -7,9 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **Stability note**: SpecOps is at `0.x`. The CLI surface, `specops.json`
 > schema, `status.yaml` ledger format, and injected directive blocks may change
-> in any minor release until `1.0.0`.
+> in any minor release until `1.0.0`. The surfaces frozen for 1.0 and the
+> additive-vs-breaking rules for each are published in
+> **[docs/stability.md](docs/stability.md)** (effective from `1.0.0-rc`).
 
 ## [Unreleased]
+
+Feature 021 — Contract Freeze for 1.0. Declares and tests the stability of every
+adopter-facing surface ahead of `1.0.0-rc`, and documents the post-1.0 versioning
+and migration obligations.
+
+### Added
+
+- **Stability policy ([docs/stability.md](docs/stability.md))**: classifies all nine
+  frozen surfaces (`specops.json`, `status.yaml`, `lane.yaml`, gate-profile files, the
+  JSON output envelope, exit codes, the findings-input contract, the context-map file,
+  and SARIF output), with an additive-vs-breaking rule for each and the post-1.0
+  versioning/migration policy. An FR-003 sweep added the context-map file and SARIF
+  output to the originally-scoped seven surfaces.
+- **`output_version` on every `--json` envelope**: the base command-result envelope now
+  always carries `output_version` (value `1`), so every automation consumer has one
+  detectable version signal. This is additive — `consistency` and `reconcile` gain the
+  key; all other families are byte-identical.
+- **Contract tests** (`tests/unit/test_frozen_*.py`, `test_outcome_contract.py`) that lock
+  the frozen shapes and fail on any unversioned breaking change.
+
+### Changed
+
+- **Constitution Principle VI** amended (v1.9.2 → v1.9.3, PATCH) to document exit code `2`
+  (infrastructure/data/usage error) alongside `0`/`1` — aligning the governing principle
+  with the shipped, now-frozen three-value exit contract. No behavior change.
+
+---
 
 Feature 020 — GitPython Removal. Replaces GitPython with direct `git` plumbing
 behind the owned `gitops` seam. Behavior is byte-identical (verified against the
