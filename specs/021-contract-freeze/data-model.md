@@ -149,12 +149,24 @@ e.g. `warnings` (reconcile), `verdict`/`gates` (preflight), `paths`/`counts` (tr
 **without** forbidding documented extensions (FR-004/FR-007).
 
 **Frozen rules**: the four base keys, the `outcome` and `class` value enums, and their
-status→class→exit derivation are frozen. `output_version` increments only when the base
-envelope shape changes in a breaking way (per the versioning policy). Per-command extension
-keys are additive.
+status→class→exit derivation are frozen. Per-command extension keys are additive.
+
+**`output_version` is two independent axes, not one global value** (FR-009/SC-010):
+- The **base** `output_version` (= `outcome.OUTPUT_VERSION` = `1`) versions the thin envelope
+  and is the default `render()` stamps for families with no richer payload (`consistency`,
+  `reconcile`, error paths). It increments only when the base envelope shape changes.
+- Command families with a richer payload (context/trace/handoff/gate/lane/doctor) carry their
+  **own** `output_version` (each `1` at 1.0), **retained unchanged** by this feature; each
+  bumps independently per the versioning policy. `render()` emits a caller-supplied version
+  verbatim and never overrides it.
 
 *Not part of this envelope* (separate frozen persisted-format versions): gate-profile file
-`output_version` (Entity 4) and ledger `context_provenance.output_version` (Entity 2).
+`output_version` (Entity 4), context-map `schema_version` (Entity 8), and ledger
+`context_provenance.output_version` (Entity 2). **Known pre-1.0 coupling**:
+`gateprofiles.OUTPUT_VERSION` currently serves both the gate-profile *file* and the `gate`
+command output; `contextmap.OUTPUT_VERSION` both the context command output and the ledger
+provenance record — pre-existing conflations left intact by the freeze, to be split post-1.0
+if either side needs an independent bump.
 
 ---
 

@@ -22,12 +22,18 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 # --- Envelope version (Feature 021 — Contract Freeze) ----------------------
-# The single source of truth for the base command-result envelope version. Every
-# `--json` output carries `output_version` so an adopter has one detectable version
-# signal (FR-009). Report families (context/trace/handoff/gate) historically pass their
-# own equal constant via `_emit`; a contract test forbids those from diverging from this
-# value (single source of truth). Distinct from the gate-profile *file* `output_version`
-# and the context-map/context-provenance schema versions, which version persisted formats.
+# The base command-result envelope version. `render()` stamps it whenever a caller does
+# not supply one, so every `--json` output carries an `output_version` an adopter can
+# detect (FR-009). It is the version for the *thin* envelope (`command`/`outcome`/`class`)
+# emitted by the families that have no richer payload of their own (e.g. `consistency`,
+# `reconcile`, and error paths).
+#
+# It is NOT a global single value: command families with a richer JSON payload
+# (context/trace/handoff/gate/lane/doctor) carry their OWN independently-versioned
+# `output_version` via `_emit`, and FR-009/SC-010 retain those unchanged. Each such
+# version bumps on its own schedule (see docs/stability.md → Versioning). All are `1`
+# at 1.0. Distinct again from the persisted-format versions (gate-profile *file*
+# `output_version`, context-map `schema_version`, ledger `schema_version`).
 OUTPUT_VERSION = 1
 
 # --- Exit codes (mirror specops.errors) ------------------------------------

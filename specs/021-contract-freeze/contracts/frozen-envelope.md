@@ -32,17 +32,26 @@ def render(command, cls, **extra):
   callers that already pass it (the `_emit` report families, `preflight`, `doctor`) keep it in
   place **byte-for-byte**; callers that do not (`consistency`, `reconcile`) get it appended.
   This is why only those two families' `--json` captures change.
-- **Single-sourcing (realized as a divergence guard)**: `outcome.OUTPUT_VERSION` is the one
-  authoritative envelope-version value. The report modules keep their own `OUTPUT_VERSION`
-  constants (they import `outcome` *after* defining the constant, and `gateprofiles.OUTPUT_VERSION`
-  is dual-purpose — it also versions the on-disk profile file), so rather than physically
-  re-pointing them (risky, cosmetic), a contract test (`test_outcome_contract.py`) asserts each
-  equals `outcome.OUTPUT_VERSION`, failing on any future drift. Same guarantee, zero churn,
-  byte-identical output.
-- **Unchanged / separate**: `gateprofiles.OUTPUT_VERSION` (persisted **file** version) and
-  `contextmap` provenance `output_version` (ledger state) remain their own fields; the guard
-  test treats the gate-profile *file* version as a persisted-format version (Entity 4), which
-  currently equals the envelope version but is conceptually independent.
+- **Two independent version axes — not one global value.** `outcome.OUTPUT_VERSION` versions the
+  *thin* base envelope (`command`/`outcome`/`class`) and is the default `render()` stamps for
+  families that carry no richer payload (`consistency`, `reconcile`, error paths). Command
+  families with a richer JSON payload (context/trace/handoff/gate/lane/doctor) carry their **own**
+  `output_version` via `_emit`, and **FR-009/SC-010 retain those unchanged**. Each bumps on its
+  own schedule (versioning policy). All are `1` at 1.0. So `render()` never overrides a
+  caller-supplied version — a family's value is emitted verbatim; only the *absent* case is
+  defaulted. (An earlier draft asserted a single "source of truth" and a divergence guard that
+  forced the family constants to equal `outcome.OUTPUT_VERSION`; that contradicted SC-010's
+  retain-per-report requirement and was removed — the honest contract is per-command independence
+  with a guaranteed-present base default.)
+- **Persisted-format versions stay separate**: the context-map `schema_version`, the ledger
+  `schema_version`, and the gate-profile *file* `output_version` version persisted formats and
+  are frozen independently (Entities 2, 4, 8).
+- **Known pre-1.0 coupling (documented, not fixed here)**: `gateprofiles.OUTPUT_VERSION` is
+  dual-purpose — it versions both the gate-profile *file* (Entity 4) and the `gate` command's
+  `--json` output; `contextmap.OUTPUT_VERSION` versions both the context command output and the
+  ledger context-provenance sub-record. These conflations pre-date Feature 021 and are left
+  intact to keep the freeze behavior-preserving; if either persisted side needs an independent
+  bump post-1.0, split it into a distinct constant then (a MINOR, additive change).
 
 ## Behavior delta (sanctioned, additive)
 

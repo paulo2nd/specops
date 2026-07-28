@@ -36,16 +36,19 @@ def test_output_version_present_and_pinned() -> None:
     assert obj["output_version"] == outcome.OUTPUT_VERSION == 1
 
 
-def test_report_families_carry_output_version() -> None:
-    """The report families pass output_version via _emit; assert their emitted envelope
-    version equals the canonical value (byte-position unchanged, value single-sourced)."""
+def test_report_families_carry_their_own_output_version() -> None:
+    """FR-009/SC-010: report families pass their OWN output_version via _emit and it is
+    retained unchanged. These are independent version axes (all frozen at 1 for 1.0), not a
+    single global value; a caller-supplied version is emitted verbatim (not overridden by
+    the base default)."""
     from specops import contextmap, handoff, trace
 
     for mod in (trace, handoff, contextmap):
         obj = json.loads(
             outcome.render("x", outcome.PASS, status="pass", output_version=mod.OUTPUT_VERSION)
         )
-        assert obj["output_version"] == outcome.OUTPUT_VERSION
+        # The family's supplied version is what appears — render() does not override it.
+        assert obj["output_version"] == mod.OUTPUT_VERSION == 1
 
 
 def test_additive_extension_key_tolerated() -> None:

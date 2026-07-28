@@ -37,12 +37,19 @@ Every `specops … --json` output carries these four keys:
 - `command` — the invoked command name
 - `outcome` — one of `ok` · `blocked` · `error`
 - `class` — one of `pass` · `gate-rejection` · `infra-error`
-- `output_version` — the envelope version (**1**)
+- `output_version` — the version of *this command's* JSON output (**1** for all commands at 1.0)
 
 Commands may add **documented per-command** keys (e.g. `verdict`/`gates` on `preflight`,
 `warnings` on `reconcile`, `package` on `context resolve`). Those extensions are additive and
 do not change `output_version`. The per-command keys are documented in
 [`docs/commands.md`](./commands.md) and the per-feature contract docs under `specs/*/contracts/`.
+
+**About `output_version`.** Every `--json` output carries one so you can always detect the
+output version of the command you consume. It is **not** a single global value: the thin base
+envelope (commands like `reconcile`/`consistency`) uses a base default, while richer commands
+(`context`/`trace`/`handoff`/`gate`/`lane`/`doctor`) version their own output independently.
+All are `1` at 1.0, and each may bump on its own schedule under the versioning policy below —
+so key off the `output_version` of the specific command you read, not a repository-wide value.
 
 ### Exit codes
 
@@ -78,10 +85,13 @@ What a maintainer owes for each kind of change after 1.0:
 
 ### `output_version` semantics
 
-- **Identifies** the shape of the base command-result envelope.
-- **Increments** when a base key is removed/renamed, a base value enum changes, or the meaning
-  of an existing base key changes. It does **not** increment for a new documented per-command key.
-- **Initial value**: `1`, single-sourced in `outcome.OUTPUT_VERSION`; every `--json` output carries it.
+- **Identifies** the shape of a command's JSON output (the base envelope for thin commands; the
+  full payload for richer commands, each versioned independently).
+- **Increments** when that output's shape changes in a breaking way (a key removed/renamed, a
+  value enum changed, or an existing key's meaning changed). It does **not** increment for a new
+  documented per-command key (additive).
+- **Initial value**: `1` for every command at 1.0. The thin-envelope default lives in
+  `outcome.OUTPUT_VERSION`; richer commands carry their own and bump on their own schedule.
 
 ## Not frozen
 
