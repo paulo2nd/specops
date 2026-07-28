@@ -104,3 +104,19 @@ def test_render_template_drift_fails_loudly_naming_the_placeholder() -> None:
 def test_render_template_repeated_placeholders_all_fill() -> None:
     out = fsutil.render_template("{{ts}} and {{ts}}", {"ts": "T"})
     assert out == "T and T"
+
+
+def test_render_template_value_with_braces_is_literal_not_drift() -> None:
+    # A branch/feature name containing a {{...}} sequence is a legal value: it must
+    # be inserted literally, never flagged as unfilled residue (would crash a valid
+    # `init-spec`/`lane start`) nor re-substituted by a later key.
+    out = fsutil.render_template(
+        "branch: {{branch}}\nts: {{ts}}\n",
+        {"branch": "fix/{{ts}}", "ts": "2026"},
+    )
+    assert out == "branch: fix/{{ts}}\nts: 2026\n"
+
+
+def test_render_template_value_with_unknown_brace_token_is_not_flagged() -> None:
+    out = fsutil.render_template("name: {{name}}\n", {"name": "foo{{x}}"})
+    assert out == "name: foo{{x}}\n"

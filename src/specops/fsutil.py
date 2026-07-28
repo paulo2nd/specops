@@ -53,17 +53,32 @@ def render_template(text: str, mapping: dict[str, str]) -> str:
     """Render a ``{{key}}`` scaffold template, asserting placeholder completeness
     (Feature 019 US4, FR-010).
 
-    Every mapping key replaces its ``{{key}}`` tokens; extra mapping keys are
-    ignored (additive templates never break older code). Any ``{{...}}`` residue
-    left after substitution is template drift and raises :class:`SpecopsError`
-    naming the unfilled placeholder(s) — a scaffold is never written with silent
-    residue. (No current template legitimately emits literal ``{{``.)
+    Every ``{{key}}`` token in the template is replaced by ``mapping[key]``; extra
+    mapping keys are ignored (additive templates never break older code). A
+    ``{{...}}`` token whose key is absent from the mapping is template drift and
+    raises :class:`SpecopsError` naming the unfilled placeholder(s) — a scaffold is
+    never written with a silent unresolved placeholder.
+
+    Substitution is a single left-to-right pass: a replacement *value* is inserted
+    literally and never re-scanned, so a value that itself contains ``{{...}}``
+    (e.g. a branch or feature name like ``fix/{{ts}}``) is neither re-substituted
+    nor mistaken for template drift. Drift is judged on the template's own
+    placeholders, not on the rendered output.
     """
-    for key, value in mapping.items():
-        text = text.replace("{{" + key + "}}", value)
-    residue = sorted({m.group(0) for m in _PLACEHOLDER_RE.finditer(text)})
-    if residue:
+    missing: set[str] = set()
+
+    def _fill(match: re.Match[str]) -> str:
+        token = match.group(0)
+        key = token[2:-2]  # strip the surrounding ``{{`` / ``}}``
+        if key in mapping:
+            return mapping[key]
+        missing.add(token)
+        return token
+
+    rendered = _PLACEHOLDER_RE.sub(_fill, text)
+    if missing:
         raise SpecopsError(
-            "Template rendering left unfilled placeholder(s): " + ", ".join(residue)
+            "Template rendering left unfilled placeholder(s): "
+            + ", ".join(sorted(missing))
         )
-    return text
+    return rendered
