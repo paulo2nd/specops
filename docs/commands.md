@@ -235,6 +235,12 @@ availability. It mutates nothing, runs fully offline, and never executes `specif
 gate command — it *defers* to the native `specify check` / `specify workflow status` by
 pointing at them.
 
+The environment domain also reports **git availability**: SpecOps invokes the `git`
+executable directly (no bundled git library), so a missing or nonfunctional `git` on
+PATH is a `blocking` finding; when present, the finding is `ok` and shows the detected
+version. `specops init` performs the same check as its first step and fails closed with
+a clear diagnostic when `git` is unavailable.
+
 Each finding carries a severity (`ok` / `warning` / `blocking` / `execution-error`), a
 human message, and — when not `ok` — both a stable `next_action_code` and human text.
 The overall verdict is the most severe finding; the exit code follows the outcome

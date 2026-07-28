@@ -167,9 +167,9 @@ def _unmanaged_dirty(repo: Any, feature_name: str) -> list[str]:
     # `-uall` expands untracked directories to individual files, so a wholly-untracked
     # `specs/<feature>/` is not collapsed to `specs/` (which would miss the managed-path
     # prefix and be mis-counted as a dirty product path).
-    raw = repo.git.status("--porcelain", "-uall")
+    raw = gitops.porcelain_status(repo, untracked_all=True)
     out: list[str] = []
-    for line in raw.splitlines():
+    for line in raw:
         if not line.strip():
             continue
         path = line[3:].strip() if len(line) > 3 else line.strip()
@@ -205,10 +205,10 @@ def _diff_status(repo: Any, baseline: str, staged: bool) -> list[tuple[str, str]
     """
     pairs: list[tuple[str, str]] = []
     if baseline and gitops.commit_exists(repo, baseline):
-        with contextlib.suppress(gitops.git.GitCommandError):  # degrade: no committed diff
+        with contextlib.suppress(gitops.GitError):  # degrade: no committed diff
             pairs.extend(gitops.name_status_diff(repo, baseline, "HEAD", rename_aware=True))
     if staged:
-        with contextlib.suppress(gitops.git.GitCommandError):  # degrade: no staged diff
+        with contextlib.suppress(gitops.GitError):  # degrade: no staged diff
             pairs.extend(gitops.name_status_diff(repo, None, rename_aware=True, cached=True))
     return pairs
 

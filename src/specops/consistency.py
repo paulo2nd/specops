@@ -96,13 +96,7 @@ def run(root: Path) -> tuple[list[str], list[str]]:
                     )
             elif action == "remove":
                 in_worktree = candidate.exists()
-                in_history = False
-                if repo is not None:
-                    try:
-                        repo.git.ls_files("--error-unmatch", raw_path)
-                        in_history = True
-                    except gitops.git.GitCommandError:
-                        pass  # not tracked — the expected negative
+                in_history = repo is not None and gitops.is_tracked(repo, raw_path)
                 if not in_worktree and not in_history:
                     violations.append(
                         f"consistency: {plan_path.name}:{lineno} - "

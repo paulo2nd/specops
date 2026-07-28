@@ -5,7 +5,6 @@ import copy
 from pathlib import Path
 from typing import cast
 
-import git
 import yaml
 
 from specops import config, contextmap, fsutil, gitops, ledger, records, shell, speckit
@@ -178,7 +177,7 @@ def _identity_mismatch(diverged: str) -> SpecopsError:
 
 def load_for_write(
     root: Path, feature_dir: Path
-) -> tuple[records.LedgerDocument, int, list[str], git.Repo]:
+) -> tuple[records.LedgerDocument, int, list[str], gitops.Repository]:
     """Load, classify, identity-check, and (if needed) migrate the ledger for a write.
 
     Returns (data, base_revision, base_violations, repo). Refuses too-new/unsupported
@@ -286,7 +285,7 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
     return f"Ledger created: {rel}"
 
 
-def synthesize_ledger_at_plan(feature_dir: Path, repo: git.Repo, lane_data: dict) -> Path:
+def synthesize_ledger_at_plan(feature_dir: Path, repo: gitops.Repository, lane_data: dict) -> Path:
     """Synthesize a full ledger at the PLAN phase from a promoted lightweight lane.
 
     Feature 013 (FR-015): builds ``status.yaml`` from the standard template, positioned at
@@ -441,7 +440,7 @@ def _require_in_progress(
 
 
 def _auto_evidence(
-    root: Path, repo: git.Repo, task_id: str, started: str, changed_files: list[str]
+    root: Path, repo: gitops.Repository, task_id: str, started: str, changed_files: list[str]
 ) -> tuple[str, str, list[str]]:
     """--auto: run the client's test_command and harvest commits + diff (§III).
 
@@ -473,7 +472,7 @@ def _auto_evidence(
 
 
 def _manual_evidence(
-    evidence: str | None, repo: git.Repo, started: str
+    evidence: str | None, repo: gitops.Repository, started: str
 ) -> tuple[str, str, list[str]]:
     """--evidence: validate the grammar; commits are still harvested when present."""
     if not evidence or not evidence_mod.validate_string(evidence):
@@ -656,7 +655,7 @@ def _validate_transition(current: str, target: str, normalized_result: str | Non
     )
 
 
-def _enter_review(data: records.LedgerDocument, root: Path, repo: git.Repo) -> None:
+def _enter_review(data: records.LedgerDocument, root: Path, repo: gitops.Repository) -> None:
     """Entering REVIEW: activate the corrective placeholder, or open a new cycle.
 
     REVIEW -> IMPLEMENT(REJECTED) creates the next-round placeholder so the

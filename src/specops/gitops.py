@@ -1,104 +1,250 @@
-"""Git helpers using GitPython (R7)."""
+"""Git access layer — the single site that invokes ``git`` (Feature 020).
+
+Every git operation runs through ``git`` plumbing subprocesses; no third-party
+git library is imported. The output shape matches the previous GitPython
+implementation byte-for-byte: git's own output is passed through with the same
+default quoting (non-ASCII paths stay C-quoted, e.g. ``"caf\\303\\251.txt"``),
+and callers strip/splitlines exactly as before, so the trailing newline git emits
+(which GitPython stripped) makes no observable difference.
+
+Ledger-domain sentinels (the ``(human)`` commit marker) are filtered by callers,
+never here (Feature 019 US4, FR-009/FR-011).
+"""
 from __future__ import annotations
 
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
-import git
-from git.exc import GitCommandError, InvalidGitRepositoryError, NoSuchPathError
+from specops.errors import SpecopsError
+
+GIT_UNAVAILABLE_MSG = (
+    "git executable not found or not functional on PATH. "
+    "Install Git and ensure `git` is on your PATH."
+)
 
 
-def find_repo(path: Path = Path(".")) -> git.Repo | None:
-    """Return the Repo for *path*, or None if not inside a Git repository."""
+class GitError(SpecopsError):
+    """A ``git`` invocation failed (or git is unavailable). Exit code 1.
+
+    A ``SpecopsError`` so an uncaught instance is reported cleanly by the CLI
+    error boundary (exit 1) rather than as a traceback. Read helpers that today
+    degrade on git errors (returning ``[]``/``None``/``False``) keep doing so;
+    ``GitError`` is raised only where the previous code raised
+    ``git.exc.GitCommandError`` (callers own the degradation)."""
+
+
+@dataclass(frozen=True)
+class Repository:
+    """A resolved git repository — the SpecOps-owned handle replacing ``git.Repo``.
+
+    ``root`` is where git commands run (``git -C root``). ``working_tree_dir`` is
+    the working-tree root, or ``None`` for a bare repository (matching
+    GitPython's ``Repo.working_tree_dir`` so callers' bare-repo handling is
+    unchanged). For a normal repository the two are equal.
+    """
+
+    root: Path
+    working_tree_dir: Path | None
+
+
+# ---------------------------------------------------------------------------
+# Invocation (contracts/git-invocation.md)
+# ---------------------------------------------------------------------------
+
+
+def _spawn(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run a git argv, capturing text; never raises on non-zero exit.
+
+    Decodes as UTF-8 with ``surrogateescape`` (faithful to any non-decodable
+    bytes). A missing/nonfunctional git binary raises :class:`GitError` — the
+    single fail-closed precondition (FR-012). No shell, no interpolation. The one
+    place a git subprocess is spawned, so the env/decode/unavailability handling
+    has exactly one definition."""
     try:
-        return git.Repo(path, search_parent_directories=True)
-    except (InvalidGitRepositoryError, NoSuchPathError):
-        return None
+        return subprocess.run(
+            cmd, capture_output=True, encoding="utf-8", errors="surrogateescape",
+        )
+    except (FileNotFoundError, OSError) as exc:
+        raise GitError(GIT_UNAVAILABLE_MSG) from exc
+
+
+def _git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run ``git -C root <args>`` capturing text output; never raises on non-zero."""
+    return _spawn(["git", "-C", str(root), *args])
+
+
+def _run_ok(root: Path, args: list[str]) -> str:
+    """Run git; raise :class:`GitError` on non-zero exit. Return stdout verbatim."""
+    proc = _git(root, args)
+    if proc.returncode != 0:
+        raise GitError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
+    return proc.stdout
+
+
+def ensure_git_available() -> str:
+    """Verify a functional ``git`` on PATH; return its version string (FR-012).
+
+    "Present & functional": probe ``git --version``. Raises :class:`GitError`
+    with a clear diagnostic when git is absent or nonfunctional. No minimum
+    version is enforced — every plumbing invocation used predates git ~1.8. The
+    single shared precondition, consumed by ``specops init`` (first step) and
+    ``specops doctor``."""
+    proc = _spawn(["git", "--version"])
+    if proc.returncode != 0:
+        raise GitError(GIT_UNAVAILABLE_MSG)
+    return proc.stdout.strip()
+
+
+# ---------------------------------------------------------------------------
+# Repository resolution
+# ---------------------------------------------------------------------------
+
+
+def find_repo(path: Path = Path(".")) -> Repository | None:
+    """Return the :class:`Repository` for *path*, or None if not inside one.
+
+    Searches parent directories (git's own default), matching the previous
+    ``search_parent_directories=True``. The normal-worktree hot path is a single
+    ``git`` invocation. ``--show-toplevel`` fails for a bare repository *or* a
+    worktree-less ``GIT_DIR`` context (e.g. cwd inside ``.git``); both resolve to
+    the git dir with ``working_tree_dir=None`` — matching GitPython's
+    ``working_tree_dir`` there, so callers' bare-repo guards still fire instead of
+    silently running against the git directory."""
+    top = _git(path, ["rev-parse", "--show-toplevel"])
+    if top.returncode == 0 and top.stdout.strip():
+        wt = Path(top.stdout.strip())
+        return Repository(root=wt, working_tree_dir=wt)
+    gitdir = _git(path, ["rev-parse", "--git-dir"])
+    if gitdir.returncode != 0:
+        return None  # not a git repository at all
+    raw = gitdir.stdout.strip()
+    root = Path(raw) if Path(raw).is_absolute() else (Path(path) / raw).resolve()
+    return Repository(root=root, working_tree_dir=None)
 
 
 def is_git_repo(path: Path = Path(".")) -> bool:
     return find_repo(path) is not None
 
 
-def current_branch(repo: git.Repo) -> str:
-    try:
-        return repo.active_branch.name
-    except TypeError:
-        return repo.head.commit.hexsha[:7]
+# ---------------------------------------------------------------------------
+# Refs, commits, ancestry
+# ---------------------------------------------------------------------------
 
 
-def head_sha(repo: git.Repo) -> str:
-    return repo.head.commit.hexsha
+def current_branch(repo: Repository) -> str:
+    """The current branch name, or a 7-char short SHA when HEAD is detached."""
+    proc = _git(repo.root, ["symbolic-ref", "--quiet", "--short", "HEAD"])
+    if proc.returncode == 0 and proc.stdout.strip():
+        return proc.stdout.strip()
+    return head_sha(repo)[:7]
 
 
-def commits_in_range(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> list[str]:
-    """Return commit shas in *start_sha..end_sha* (exclusive start, inclusive end)."""
-    try:
-        repo.commit(start_sha)
-    except (GitCommandError, git.BadName, ValueError):
+def head_sha(repo: Repository) -> str:
+    return _run_ok(repo.root, ["rev-parse", "HEAD"]).strip()
+
+
+def commits_in_range(repo: Repository, start_sha: str, end_sha: str = "HEAD") -> list[str]:
+    """Return commit shas in *start_sha..end_sha* (exclusive start, inclusive end).
+
+    An unresolvable *start_sha* degrades to ``[]`` (as before); an unresolvable
+    *end_sha* raises :class:`GitError` — the previous GitPython path guarded only
+    the start and let a bad end propagate, so this preserves that contract."""
+    if not commit_exists(repo, start_sha):
         return []
-    commits = list(repo.iter_commits(rev=f"{start_sha}..{end_sha}"))
-    return [c.hexsha for c in commits]
+    return [
+        line for line in _run_ok(repo.root, ["rev-list", f"{start_sha}..{end_sha}"]).splitlines()
+        if line
+    ]
 
 
-def is_ancestor(repo: git.Repo, sha: str) -> bool:
+def is_ancestor(repo: Repository, sha: str) -> bool:
     """Return True when *sha* is reachable from HEAD (i.e. an ancestor).
 
     A pure git ancestry predicate: ledger-domain sentinels (the human-work
     commit marker) are filtered by callers via ``ledger.is_human_commit`` —
-    this generic layer knows nothing about them (Feature 019 US4, FR-009).
-    """
-    try:
-        repo.commit(sha)
-        # merge_base returns list; non-empty means sha is ancestor of HEAD
-        base = repo.merge_base(sha, repo.head.commit)
-        if not base:
-            return False
-        return base[0].hexsha == repo.commit(sha).hexsha
-    except (GitCommandError, git.BadName, ValueError):
-        return False
+    this generic layer knows nothing about them (Feature 019 US4, FR-009)."""
+    return _git(repo.root, ["merge-base", "--is-ancestor", sha, "HEAD"]).returncode == 0
 
 
-def commit_exists(repo: git.Repo, sha: str) -> bool:
+def merge_base(repo: Repository, ref: str, other: str = "HEAD") -> str | None:
+    """Return the best common ancestor sha of *ref* and *other*, or None.
+
+    None when either side is unresolvable (an absent candidate ref, an unborn
+    HEAD) or there is no common ancestor — the degradation the baseline
+    fallback in ``trace`` relies on."""
+    proc = _git(repo.root, ["merge-base", ref, other])
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
+def symbolic_ref(repo: Repository, name: str) -> str | None:
+    """Resolve a symbolic ref to its short target (e.g. ``origin/main``), or None."""
+    proc = _git(repo.root, ["symbolic-ref", "--quiet", "--short", name])
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
+def commit_exists(repo: Repository, sha: str) -> bool:
     """Return True when *sha* resolves to a commit in this clone."""
-    try:
-        repo.commit(sha)
-        return True
-    except (GitCommandError, git.BadName, ValueError):
-        return False
+    return _git(
+        repo.root, ["rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}"]
+    ).returncode == 0
 
 
-def blob_sha(repo: git.Repo, rev: str, path: str) -> str | None:
+def blob_sha(repo: Repository, rev: str, path: str) -> str | None:
     """Return the git blob SHA of *path* at *rev*, or None when it does not resolve.
 
     A deterministic, offline, per-path content digest (git's own object hash): two
     revisions with byte-identical content at *path* share a blob SHA, so a change to
     any other path leaves it unchanged (Feature 015 per-path staleness). Returns
     None when *rev* is unresolvable or *path* is absent (a removed/renamed path),
-    which the caller treats as stale.
-    """
-    try:
-        tree = repo.commit(rev).tree
-    except (GitCommandError, git.BadName, ValueError):
+    which the caller treats as stale."""
+    proc = _git(repo.root, ["rev-parse", "--verify", "--quiet", f"{rev}:{path}"])
+    if proc.returncode != 0:
         return None
-    try:
-        return tree[path].hexsha
-    except KeyError:
-        return None
+    return proc.stdout.strip() or None
 
 
-def dirty_files(repo: git.Repo) -> list[str]:
+# ---------------------------------------------------------------------------
+# Working tree: status, tracked files, diffs
+# ---------------------------------------------------------------------------
+
+
+def dirty_files(repo: Repository) -> list[str]:
     """Return `git status --porcelain` lines; empty list means a clean tree."""
-    out = repo.git.status("--porcelain")
+    out = _run_ok(repo.root, ["status", "--porcelain"])
     return [line for line in out.splitlines() if line.strip()]
 
 
-def name_only_diff(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> list[str]:
+def porcelain_status(repo: Repository, *, untracked_all: bool = False) -> list[str]:
+    """Return raw `git status --porcelain` lines (``-uall`` expands untracked dirs).
+
+    Blank-line filtering is left to the caller (the lane parses column offsets)."""
+    args = ["status", "--porcelain"]
+    if untracked_all:
+        args.append("-uall")
+    return _run_ok(repo.root, args).splitlines()
+
+
+def ls_files(repo: Repository) -> list[str]:
+    """Return the tracked files (`git ls-files`); empty list when none."""
+    return [f for f in _run_ok(repo.root, ["ls-files"]).splitlines() if f]
+
+
+def is_tracked(repo: Repository, path: str) -> bool:
+    """Return True when *path* is tracked in the index (`ls-files --error-unmatch`)."""
+    return _git(repo.root, ["ls-files", "--error-unmatch", path]).returncode == 0
+
+
+def name_only_diff(repo: Repository, start_sha: str, end_sha: str = "HEAD") -> list[str]:
     """Return deduplicated list of changed file paths between *start_sha* and *end_sha*."""
-    try:
-        diffs = repo.git.diff("--name-only", start_sha, end_sha)
-        return [f for f in diffs.splitlines() if f]
-    except GitCommandError:
+    proc = _git(repo.root, ["diff", "--name-only", start_sha, end_sha])
+    if proc.returncode != 0:
         return []
+    return [f for f in proc.stdout.splitlines() if f]
 
 
 def parse_name_status(raw: str) -> list[tuple[str, str]]:
@@ -118,7 +264,7 @@ def parse_name_status(raw: str) -> list[tuple[str, str]]:
 
 
 def name_status_diff(
-    repo: git.Repo, start_sha: str | None, end_sha: str = "HEAD", *,
+    repo: Repository, start_sha: str | None, end_sha: str = "HEAD", *,
     rename_aware: bool, cached: bool = False,
 ) -> list[tuple[str, str]]:
     """The single ``--name-status`` invocation, rename-awareness as a parameter
@@ -129,19 +275,23 @@ def name_status_diff(
     ``rename_aware=True`` → ``-M``: a rename is a single ``R`` on the NEW path
     (an ordinary file move is not mis-flagged destructive — lane safety).
     ``cached=True`` diffs the index (staged changes; the commit range is
-    ignored). Raises ``GitCommandError`` — each caller owns its degradation
-    policy (``effective_diff_status`` returns ``[]``; lane suppresses).
+    ignored). A ``None`` *start_sha* (non-cached) is omitted so git diffs
+    ``end_sha`` against the working tree — matching GitPython, which dropped the
+    ``None`` arg (never diffed against an empty ``""`` revision). Raises
+    :class:`GitError` — each caller owns its degradation policy
+    (``effective_diff_status`` returns ``[]``; lane suppresses).
     """
     flag = "-M" if rename_aware else "--no-renames"
     if cached:
-        raw = repo.git.diff("--cached", "--name-status", flag)
+        args = ["diff", "--cached", "--name-status", flag]
     else:
-        raw = repo.git.diff("--name-status", flag, start_sha, end_sha)
-    return parse_name_status(raw)
+        range_args = [a for a in (start_sha, end_sha) if a]
+        args = ["diff", "--name-status", flag, *range_args]
+    return parse_name_status(_run_ok(repo.root, args))
 
 
 def effective_diff_status(
-    repo: git.Repo, start_sha: str, end_sha: str = "HEAD"
+    repo: Repository, start_sha: str, end_sha: str = "HEAD"
 ) -> list[tuple[str, str]]:
     """Return `(status, path)` pairs between *start_sha* and *end_sha* (Feature 010, R1).
 
@@ -153,11 +303,11 @@ def effective_diff_status(
     """
     try:
         return name_status_diff(repo, start_sha, end_sha, rename_aware=False)
-    except GitCommandError:
+    except GitError:
         return []
 
 
-def effective_diff(repo: git.Repo, start_sha: str, end_sha: str = "HEAD") -> list[str]:
+def effective_diff(repo: Repository, start_sha: str, end_sha: str = "HEAD") -> list[str]:
     """Return the deterministic, codepoint-sorted effective-diff paths (name-only).
 
     A thin projection of :func:`effective_diff_status` so the diff invocation lives

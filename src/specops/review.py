@@ -15,8 +15,6 @@ import importlib.metadata
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import git
-
 from specops import (
     config,
     contextmap,
@@ -203,7 +201,7 @@ def _run_profile_gate(
     return _blocking_result(p, sel.reason, detail, "failed", eid, commit_range, changed)
 
 
-def profile_gates(root: Path, repo: git.Repo, baseline: str) -> list[GateResult]:
+def profile_gates(root: Path, repo: gitops.Repository, baseline: str) -> list[GateResult]:
     """The selected profile suite (replaces the fixed lint/test gates — FR-011).
 
     Deterministically selects gates from the effective diff + context impact, then runs
@@ -232,7 +230,7 @@ def profile_gates(root: Path, repo: git.Repo, baseline: str) -> list[GateResult]
     return results
 
 
-def _working_tree_gate(repo: git.Repo, dirty: list[str], baseline: str) -> GateResult:
+def _working_tree_gate(repo: gitops.Repository, dirty: list[str], baseline: str) -> GateResult:
     """Tree clean at invocation, with an effective diff against the baseline (R4)."""
     if dirty:
         return GateResult("working-tree", "FAIL", ["uncommitted changes:", *dirty])

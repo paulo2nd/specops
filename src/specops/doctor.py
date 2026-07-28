@@ -177,21 +177,39 @@ def _max_severity(domains: list[DomainResult]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _domain_environment(repo: Any, has_speckit: bool) -> DomainResult:
+def _domain_environment(
+    repo: Any, has_speckit: bool, git_version: str | None, git_error: Exception | None,
+) -> DomainResult:
     findings: list[Finding] = []
-    if repo is None:
+    # Git availability (FR-012), reported first — a missing/nonfunctional `git`
+    # is why nothing else works, and repo resolution itself now invokes git. An
+    # additive finding (the sole sanctioned doctor surface delta of Feature 020).
+    if git_error is not None:
         findings.append(_finding(
+            BLOCKING, "git-availability", gitops.GIT_UNAVAILABLE_MSG,
+            NA_INITIALIZE_REPOSITORY, "Install Git and ensure `git` is on your PATH.",
+        ))
+    else:
+        findings.append(_ok("git-availability", f"git available ({git_version})"))
+
+    problems: list[Finding] = []
+    # The repo check is only meaningful when git is available to answer it.
+    if git_error is None and repo is None:
+        problems.append(_finding(
             BLOCKING, "git", "not a Git repository", NA_INITIALIZE_REPOSITORY,
             "Run 'git init' (or 'specops init') in the repository root.",
         ))
     if not has_speckit:
-        findings.append(_finding(
+        problems.append(_finding(
             BLOCKING, "speckit", "not a Spec Kit repository (no .specify/templates)",
             NA_INSTALL_SPECOPS, "Initialize Spec Kit ('specify init') before using SpecOps.",
         ))
-    if not findings:
-        findings.append(_ok("env", "Git and Spec Kit repository present."))
-    return DomainResult(D_ENVIRONMENT, findings)
+    # The "present" summary is only truthful when git is available — otherwise the
+    # blocking git-availability finding above already states the environment is
+    # not usable, and emitting it would contradict that (git absent AND present).
+    if not problems and git_error is None:
+        problems.append(_ok("env", "Git and Spec Kit repository present."))
+    return DomainResult(D_ENVIRONMENT, findings + problems)
 
 
 def _domain_cli_extension(install_state: str | None) -> DomainResult:
@@ -494,7 +512,15 @@ def diagnose(root: Path) -> list[DomainResult]:
     shared read is captured (never raised) so a bad manifest/ledger surfaces as an
     execution-error inside the owning domain rather than crashing doctor (FR-015).
     """
-    repo = gitops.find_repo(root)
+    # Git availability first (FR-012): probe before find_repo, which now itself
+    # invokes git. A missing binary yields a blocking git-availability finding
+    # rather than crashing every git-dependent domain.
+    try:
+        git_version: str | None = gitops.ensure_git_available()
+        git_error: Exception | None = None
+    except gitops.GitError as exc:
+        git_version, git_error = None, exc
+    repo = gitops.find_repo(root) if git_error is None else None
     feature_dir = speckit.resolve_feature_dir(root)
     data, ledger_error = _load_ledger_data(feature_dir)
     has_speckit = speckit.has_speckit(root)
@@ -504,7 +530,7 @@ def diagnose(root: Path) -> list[DomainResult]:
     except Exception as exc:  # noqa: BLE001 — surfaced as execution-error by the owning domains
         install_state, state_error = None, exc
     return [
-        _run(D_ENVIRONMENT, _domain_environment, repo, has_speckit),
+        _run(D_ENVIRONMENT, _domain_environment, repo, has_speckit, git_version, git_error),
         (_run(D_CLI_EXTENSION, _domain_cli_extension, install_state)
          if state_error is None else _error_domain(D_CLI_EXTENSION, state_error)),
         _run(D_INTEGRATION, _domain_integration, root, has_speckit),

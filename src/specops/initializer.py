@@ -170,6 +170,7 @@ def run(root: Path, non_interactive: bool = False) -> None:
     Execute the full `specops init` flow.
 
     Steps per cli-contract.md:
+    0. Git availability check (fail closed if `git` is absent/nonfunctional)
     1. Git check (offer init if absent; --non-interactive declines)
     2. Speckit check
     3. Resolve prompt targets (manifest-driven, fail closed)
@@ -178,6 +179,12 @@ def run(root: Path, non_interactive: bool = False) -> None:
     6. Inject directive blocks into plan/implement prompts
     """
     import typer  # local import to keep initializer usable without Typer
+
+    # Step 0: Git availability (FR-012/FR-013) — validate a functional `git` on
+    # PATH before any git-dependent step, so a missing binary fails closed with a
+    # clear diagnostic instead of crashing at the `git init` subprocess below (and
+    # since repo resolution itself now invokes git).
+    gitops.ensure_git_available()
 
     # Step 1: Git check
     if not gitops.is_git_repo(root):

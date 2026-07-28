@@ -9,7 +9,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
-import git
 import typer
 
 from specops import gitops
@@ -136,7 +135,7 @@ def _handle_errors(fn: _F) -> _F:
     return wrapper  # type: ignore[return-value]
 
 
-def _require_git(root: Path = Path(".")) -> git.Repo:
+def _require_git(root: Path = Path(".")) -> gitops.Repository:
     """Fail with exit 1 within <1 s when not inside a Git repo (FR-002, SC-008).
 
     Returns the resolved Repo so callers that need it don't re-derive it.
@@ -729,7 +728,7 @@ def context_stale(
             "stale", contextmap.S_USAGE_ERROR, "context stale: not a Git repository"), json_out,
             output_version=contextmap.OUTPUT_VERSION)
         return
-    tracked = [f for f in repo.git.ls_files().splitlines() if f]
+    tracked = gitops.ls_files(repo)
     _emit(contextmap.cmd_stale(root, tracked), json_out, output_version=contextmap.OUTPUT_VERSION)
 
 
