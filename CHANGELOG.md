@@ -9,6 +9,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > schema, `status.yaml` ledger format, and injected directive blocks may change
 > in any minor release until `1.0.0`.
 
+## [Unreleased]
+
+Feature 019 — Hardening II: API & State Robustness. Internal hardening with
+**zero user-visible change**: byte-identical human/JSON output and exit codes
+(golden captures unchanged), no ledger schema bump (v7), no new CLI surface,
+no new runtime dependency.
+
+### Fixed
+
+- **Ledger-lock stale-reclaim race (TOCTOU)**: two contenders observing the
+  same stale `.lock` could both reclaim it (the slower one deleted the faster
+  one's *fresh* lock), double-granting the read-modify-write critical section.
+  Reclaim is now serialized through a `<lock>.reclaim` sentinel mutex with the
+  staleness re-checked under the mutex, so at most one contender wins and a
+  fresh lock is never touched; covered by an amplified concurrency regression
+  test that fails on the old implementation. The revision-CAS in `ledger.save`
+  remains the durable lost-update authority. (Defect fix; no behavior change on
+  any non-racing path — waiting and timeout diagnostics are unchanged.)
+
+### Internal (no behavior change)
+
+- `status`: the phase-transition and task-completion flows are decomposed into
+  named sub-steps, and the Feature 006 DONE cycle gate — previously spelled
+  verbatim twice — has exactly one implementation (`_require_approved_cycle`).
+- New `specops.records`: `TypedDict` schemas for every ledger record
+  (document, tasks, review cycles, handoffs, findings, evidence, provenance)
+  giving mypy key-level checking with zero serialization change.
+- `handoff`: the mutation loader returns a typed `LoadedLedger` and raises a
+  typed refusal converted at one point — the 9 `isinstance` result probes are
+  gone.
+- `gitops`: single `--name-status` parser/invocation (`parse_name_status`,
+  `name_status_diff(rename_aware=…)`); the lane's duplicate parser is deleted;
+  the `(human)` ledger sentinel moved out of the generic git layer to
+  `ledger.HUMAN_COMMIT` with explicit caller-side filters (every command that
+  exempted it still does).
+- `fsutil.render_template`: `{{...}}` scaffold rendering now asserts
+  placeholder completeness — template drift fails loudly instead of writing
+  silent residue (init-spec, lane start, lane-promotion synthesis).
+- `gateprofiles`: field knowledge (key set, types, presence, defect wording)
+  single-sourced in declarative tables consumed by both the lenient parser and
+  the validator.
+- `doctor`: shared-read failures convert to execution-error findings via one
+  `_error_domain` helper; exceptions are no longer threaded through domain
+  argument lists.
+
 ## [0.6.0] - 2026-07-27
 
 ### Fixed
