@@ -1,6 +1,23 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.9.1 → 1.9.2
+Rationale (1.9.2, 2026-07-28): PATCH amendment landed with Feature 020 (GitPython
+Removal), part of the 1.0 Readiness cycle. GitPython (in maintenance mode) is replaced
+by direct `git` plumbing invocations behind the owned `gitops` seam, removing three
+runtime dependencies (gitpython, gitdb, smmap). The Technical Constraints dependency
+list drops GitPython accordingly; git access still happens (evidence collection, diffs,
+ancestry), now via the `git` executable already required today rather than an importable
+library. PATCH bump: the dependency-list enumeration is updated and the rule itself
+("new runtime dependencies require justification") is unchanged — this is a removal, not
+an addition; no principle is removed, redefined, or added, and no delivered CLI behavior
+changes (byte-identical, verified against the Feature 018 golden-capture harness). The
+sole additive surface deltas are a `specops doctor` git-availability finding and a clean
+`specops init` fail-closed diagnostic when git is absent. No template or Principle IV
+directive changes. Verified by the feature's own tests, never against this repository
+(No Self-Application).
+
+Previous report (1.9.1):
 Version change: 1.9.0 → 1.9.1
 Rationale (1.9.1, 2026-07-25): PATCH amendment landed with the #24 fix PR (Wave 1
 of the 1.0 Readiness cycle), not a feature — defect fixes are never roadmap features.
@@ -476,11 +493,15 @@ if the underlying commands are mechanically composable.
 - **Packaging**: Python package published to PyPI as `speckit-specops`,
   installable via `pip` (including `pip install -e .` for development), exposing
   the `specops` entrypoint with functional `--help`.
-- **Dependencies**: limited to Typer (CLI), PyYAML (ledger), GitPython
-  (evidence collection), and `packaging` (PEP 440 version comparison in the
-  CLI-compatibility gate — pure Python, zero transitive deps, replaces a
-  hand-rolled parser that mis-ordered pre-releases, #24). New runtime
-  dependencies require justification in the plan's Complexity Tracking section.
+- **Dependencies**: limited to Typer (CLI), PyYAML (ledger), and `packaging`
+  (PEP 440 version comparison in the CLI-compatibility gate — pure Python, zero
+  transitive deps, replaces a hand-rolled parser that mis-ordered pre-releases,
+  #24). Git access (evidence collection, diffs, ancestry, status) uses the `git`
+  executable directly behind the owned `gitops` seam — Feature 020 removed the
+  GitPython dependency (with gitdb/smmap) because the library is in maintenance
+  mode; `git` on PATH was already an implicit precondition (GitPython required
+  it too). New runtime dependencies require justification in the plan's
+  Complexity Tracking section.
 - **Structure**: modules live under `src/specops/` (`cli.py`, `status.py`,
   `reconcile.py`, `consistency.py`) with scaffold assets in
   `src/specops/templates/` (`review.md`, `status.yaml`).
@@ -535,4 +556,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.9.1 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-25
+**Version**: 1.9.2 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-28

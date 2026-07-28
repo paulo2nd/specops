@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Feature 020 — GitPython Removal. Replaces GitPython with direct `git` plumbing
+behind the owned `gitops` seam. Behavior is byte-identical (verified against the
+Feature 018 golden-capture harness); no ledger schema bump and no new CLI
+command or option.
+
+### Removed
+
+- **Runtime dependencies `gitpython`, `gitdb`, `smmap`**: all git access now uses
+  the `git` executable directly. `git` on PATH was already an implicit
+  precondition (GitPython required it too), so no new system requirement is
+  introduced — the dependency footprint shrinks by three packages, one of which
+  (GitPython) is in maintenance mode.
+
+### Added
+
+- **`specops doctor` git-availability check**: the environment domain now reports
+  whether a functional `git` is on PATH — `blocking` when absent/nonfunctional,
+  `ok` (with the detected version) when present.
+- **`specops init` fails closed on missing git**: init validates git availability
+  as its first step and exits with a clear diagnostic (exit 1) instead of
+  crashing at the `git init` subprocess when `git` is absent.
+
+### Internal (no behavior change)
+
+- `gitops` is now the single git access layer (a `Repository` abstraction over
+  `git` plumbing); no other module imports a git library or names a third-party
+  repository type. The `git.*` mypy override is removed. The constitution's
+  dependency list is amended accordingly (v1.9.2).
+
 Feature 019 — Hardening II: API & State Robustness. Internal hardening with
 **zero user-visible change**: byte-identical human/JSON output and exit codes
 (golden captures unchanged), no ledger schema bump (v7), no new CLI surface,

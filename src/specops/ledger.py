@@ -601,7 +601,7 @@ def _provenance_violations(record: Mapping[str, Any], label: str) -> list[str]:
 
 
 def validate_identity(
-    root: Path, repo: gitops.git.Repo, data: records.LedgerLike
+    root: Path, repo: gitops.Repository, data: records.LedgerLike
 ) -> str | None:
     """Return the first diverged identity dimension, or None when consistent.
 

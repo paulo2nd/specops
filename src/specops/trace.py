@@ -101,7 +101,7 @@ def _feature_dir(root: Path) -> Path | None:
     return speckit.resolve_feature_dir(root)
 
 
-def resolve_baseline(root: Path, repo: gitops.git.Repo) -> str | None:
+def resolve_baseline(root: Path, repo: gitops.Repository) -> str | None:
     """Return the effective-diff baseline commit, or None when unresolvable (R1).
 
     The ledger-recorded baseline (Feature 006) is authoritative; when absent, fall
@@ -118,26 +118,20 @@ def resolve_baseline(root: Path, repo: gitops.git.Repo) -> str | None:
     # Try the remote's advertised default (origin/HEAD → e.g. develop/trunk)
     # first, then the common local names, so a non-main/master default resolves.
     candidates: list[str] = []
-    try:
-        ref = repo.git.symbolic_ref("--short", "refs/remotes/origin/HEAD")
-        if ref:
-            candidates.append(ref.strip())
-    except gitops.git.GitCommandError:
-        pass  # origin/HEAD not advertised — fall through to the local names
+    # origin/HEAD not advertised → None; fall through to the local names.
+    ref = gitops.symbolic_ref(repo, "refs/remotes/origin/HEAD")
+    if ref:
+        candidates.append(ref)
     candidates += ["main", "master"]
     for default in candidates:
-        try:
-            base = repo.merge_base(default, repo.head.commit)
-        except (gitops.git.GitCommandError, ValueError):
-            # GitCommandError: candidate ref absent; ValueError: unborn HEAD /
-            # BadName. Anything else is a real bug and propagates.
-            continue
+        # None when the candidate ref is absent or HEAD is unborn — skip it.
+        base = gitops.merge_base(repo, default, "HEAD")
         if base:
-            return base[0].hexsha
+            return base
     return None
 
 
-def _name_status(repo: gitops.git.Repo, baseline: str) -> list[tuple[str, str]]:
+def _name_status(repo: gitops.Repository, baseline: str) -> list[tuple[str, str]]:
     """Return [(change, path)] for baseline..HEAD, rename-decomposed (R1).
 
     Delegates to the single diff invocation in :func:`gitops.effective_diff_status`

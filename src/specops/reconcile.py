@@ -7,7 +7,7 @@ from specops import gitops, ledger, speckit
 from specops.errors import SpecopsError
 
 
-def load_state(root: Path) -> tuple[Path, dict, gitops.git.Repo]:
+def load_state(root: Path) -> tuple[Path, dict, gitops.Repository]:
     """Resolve the feature dir, read+parse the ledger, and find the repo — once.
 
     Shared by :func:`run`, :func:`divergence`, and the ``--json`` CLI path so a
@@ -31,7 +31,7 @@ def load_state(root: Path) -> tuple[Path, dict, gitops.git.Repo]:
 
 
 def history_checks(
-    root: Path, feature_dir: Path, data: dict, repo: gitops.git.Repo
+    root: Path, feature_dir: Path, data: dict, repo: gitops.Repository
 ) -> tuple[list[str], list[str]]:
     """Return (warnings, violations) from the commit-history / schema checks.
 
@@ -76,7 +76,7 @@ def history_checks(
 
 
 def divergence_of(
-    root: Path, feature_dir: Path, data: dict, repo: gitops.git.Repo
+    root: Path, feature_dir: Path, data: dict, repo: gitops.Repository
 ) -> str | None:
     """Return the first diverged dimension over pre-loaded state, or None.
 
