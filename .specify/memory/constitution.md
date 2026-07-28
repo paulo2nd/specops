@@ -1,6 +1,20 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.9.2 → 1.9.3
+Rationale (1.9.3, 2026-07-28): PATCH amendment landed with Feature 021 (Contract Freeze
+for 1.0), the final feature of the 1.0 Readiness cycle. Principle VI (Exit Codes as
+Gates) previously named only exit `0` (success) and `1` (blocking failure); the delivered
+CLI has emitted a third code — `2` for an infrastructure / data / usage error (e.g. a
+corrupt ledger, `LedgerParseError`) — since Feature 006/007. The freeze locks the
+three-value exit contract (`0`/`1`/`2`) with a contract test, so Principle VI is amended
+to document exit `2` and keep the governing principle aligned with the frozen contract.
+PATCH bump: this documents already-shipped behavior (a clarification); no principle is
+added, removed, or redefined, and Principle VI's intent — exit codes as composable gates —
+is unchanged. No template or Principle IV directive changes. Verified by the feature's own
+contract tests, never against this repository (No Self-Application).
+
+Previous report (1.9.2):
 Version change: 1.9.1 → 1.9.2
 Rationale (1.9.2, 2026-07-28): PATCH amendment landed with Feature 020 (GitPython
 Removal), part of the 1.0 Readiness cycle. GitPython (in maintenance mode) is replaced
@@ -481,12 +495,17 @@ any Speckit repository is a core requirement.
 ### VI. Exit Codes as Gates
 
 Every SpecOps validation command (`specops reconcile`, `specops
-consistency`) MUST return exit code 0 on success and 1 on blocking failure,
-with no interactive prompts, so that any command can serve as a gate inside
-injected prompts, CI pipelines, and agent workflows.
+consistency`) MUST return exit code 0 on success, 1 on a blocking gate result
+or review REJECTED, and 2 on an infrastructure / data / usage error (for
+example a corrupt or unparseable ledger), with no interactive prompts, so that
+any command can serve as a gate inside injected prompts, CI pipelines, and
+agent workflows. This closed three-value set (`0`/`1`/`2`) is a frozen adopter
+contract (Feature 021); no command emits a code outside it.
 
 **Rationale**: the injected prompts (Principle IV) can only enforce behavior
-if the underlying commands are mechanically composable.
+if the underlying commands are mechanically composable. The `1` vs `2` split
+lets a workflow distinguish a blocking gate outcome (drive the corrective loop)
+from an execution/data error (fix the environment) even though both are non-zero.
 
 ## Technical Constraints
 
@@ -556,4 +575,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.9.2 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-28
+**Version**: 1.9.3 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-28
