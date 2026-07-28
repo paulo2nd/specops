@@ -28,9 +28,9 @@ Single-project Python CLI: `src/specops/`, `tests/`, `docs/`, repo-root `README*
 
 **Purpose**: Skeletons and test fixtures the stories build on
 
-- [ ] T001 [P] Create the `docs/stability.md` skeleton (section headings per `specs/021-contract-freeze/contracts/stability-policy.md`) [SC-001]
-- [ ] T002 [P] Create gate-profile fixtures `tests/fixtures/gate-profiles/valid.yaml` and `.../minimal.yaml` for the frozen-shape test (none exist today) [SC-002]
-- [ ] T003 [P] Create findings-input fixture `tests/fixtures/findings-input/valid.json` (mirroring `specs/015-external-review-ingestion/contracts/findings-input.schema.json`) for the frozen-shape test [SC-002]
+- [X] T001 [P] Create the `docs/stability.md` skeleton (section headings per `specs/021-contract-freeze/contracts/stability-policy.md`) [SC-001]
+- [X] T002 [P] Create gate-profile fixtures `tests/fixtures/gate-profiles/valid.yaml` and `.../minimal.yaml` for the frozen-shape test (none exist today) [SC-002]
+- [X] T003 [P] Create findings-input fixture `tests/fixtures/findings-input/valid.json` (mirroring `specs/015-external-review-ingestion/contracts/findings-input.schema.json`) for the frozen-shape test [SC-002]
 
 ---
 
@@ -40,9 +40,9 @@ Single-project Python CLI: `src/specops/`, `tests/`, `docs/`, repo-root `README*
 
 **⚠️ CRITICAL**: No user-story work begins until this phase is complete.
 
-- [ ] T004 Conduct the FR-003 observable-surface sweep; record the authoritative result ("no additional observable surface beyond the seven" or the new surface + its class) as a note in `specs/021-contract-freeze/data-model.md` [SC-001]
-- [ ] T005 Add `OUTPUT_VERSION = 1` to `src/specops/outcome.py` and have `render()` always emit `"output_version"` (per `specs/021-contract-freeze/contracts/frozen-envelope.md`) [SC-010]
-- [ ] T006 Single-source the envelope version in `src/specops/cli.py` (`_emit()` and the `preflight`/standalone `render()` call sites stop passing `output_version`); point `src/specops/trace.py`, `src/specops/handoff.py`, `src/specops/contextmap.py` CLI-envelope constants at `outcome.OUTPUT_VERSION`; leave `gateprofiles.OUTPUT_VERSION` (file schema) and `contextmap` provenance `output_version` (ledger state) untouched (depends on T005) [SC-010]
+- [X] T004 Conduct the FR-003 observable-surface sweep; record the authoritative result ("no additional observable surface beyond the seven" or the new surface + its class) as a note in `specs/021-contract-freeze/data-model.md` [SC-001]
+- [X] T005 Add `OUTPUT_VERSION = 1` to `src/specops/outcome.py` and have `render()` always emit `"output_version"` (per `specs/021-contract-freeze/contracts/frozen-envelope.md`) [SC-010]
+- [X] T006 Single-source the envelope version in `src/specops/cli.py` (`_emit()` and the `preflight`/standalone `render()` call sites stop passing `output_version`); point `src/specops/trace.py`, `src/specops/handoff.py`, `src/specops/contextmap.py` CLI-envelope constants at `outcome.OUTPUT_VERSION`; leave `gateprofiles.OUTPUT_VERSION` (file schema) and `contextmap` provenance `output_version` (ledger state) untouched (depends on T005) [SC-010]
 
 **Checkpoint**: Envelope version single-sourced and emitted uniformly; surface list authoritative.
 
@@ -56,12 +56,12 @@ Single-project Python CLI: `src/specops/`, `tests/`, `docs/`, repo-root `README*
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T007 [US1] Write `tests/unit/test_stability_doc.py` asserting `docs/stability.md` names all seven surfaces, classifies each **FROZEN**, and states an additive AND a breaking rule for each [SC-001]
+- [X] T007 [US1] Write `tests/unit/test_stability_doc.py` asserting `docs/stability.md` names all seven surfaces, classifies each **FROZEN**, and states an additive AND a breaking rule for each [SC-001]
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Author the frozen-surface table + per-surface additive/breaking rules + recorded FR-003 sweep result in `docs/stability.md`, referencing `specs/021-contract-freeze/data-model.md` and the prior contract docs (specs/012, /015, /018) rather than duplicating field lists [SC-001]
-- [ ] T009 [P] [US1] Cross-link `docs/stability.md` from `docs/commands.md` [SC-001] [SC-006]
+- [X] T008 [US1] Author the frozen-surface table + per-surface additive/breaking rules + recorded FR-003 sweep result in `docs/stability.md`, referencing `specs/021-contract-freeze/data-model.md` and the prior contract docs (specs/012, /015, /018) rather than duplicating field lists [SC-001]
+- [X] T009 [P] [US1] Cross-link `docs/stability.md` from `docs/commands.md` [SC-001] [SC-006]
 
 **Checkpoint**: The policy is publishable and testable on its own (MVP).
 
@@ -75,18 +75,18 @@ Single-project Python CLI: `src/specops/`, `tests/`, `docs/`, repo-root `README*
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T010 [P] [US2] `tests/unit/test_frozen_config.py` — lock the `specops.json` frozen key set + preserve-unknown behavior; assert no version field is introduced (`src/specops/config.py`) [SC-002]
-- [ ] T011 [P] [US2] `tests/unit/test_frozen_ledger.py` — lock the `status.yaml` v7 required-field set of each record and pin `ledger.CURRENT_SCHEMA==7` (baseline = `records.LedgerDocument`, NOT the template literal) [SC-002]
-- [ ] T012 [P] [US2] `tests/unit/test_frozen_lane.py` — lock `lane.yaml` v1 top-level keys, the `state` enum, and the null-until-transition invariant (`src/specops/lane.py`) [SC-002]
-- [ ] T013 [P] [US2] `tests/unit/test_frozen_gateprofiles.py` — lock the gate-profile file schema (profile fields, `applies` predicate keys) and `output_version==1`, using the T002 fixtures (`src/specops/gateprofiles.py`) [SC-002]
-- [ ] T014 [P] [US2] `tests/unit/test_frozen_ingestion.py` — lock the findings-input `contract_version==1`, top-level + per-finding required fields, and always-advisory-on-import semantics, using the T003 fixture (`src/specops/ingestion.py`) [SC-002]
-- [ ] T015 [P] [US2] `tests/unit/test_frozen_envelope.py` — lock the base envelope key set `{command, outcome, class, output_version}` + value enums, assert `output_version==1` across every `--json` family, and assert a new optional/per-command key still passes (additive tolerance) [SC-002] [SC-004] [SC-010]
-- [ ] T016 [US2] Extend `tests/unit/test_outcome_contract.py` — lock the three-value exit-code contract (`0`/`1`/`2` meanings) and assert the envelope version is single-sourced (no divergent module constant) [SC-002] [SC-010]
+- [X] T010 [P] [US2] `tests/unit/test_frozen_config.py` — lock the `specops.json` frozen key set + preserve-unknown behavior; assert no version field is introduced (`src/specops/config.py`) [SC-002]
+- [X] T011 [P] [US2] `tests/unit/test_frozen_ledger.py` — lock the `status.yaml` v7 required-field set of each record and pin `ledger.CURRENT_SCHEMA==7` (baseline = `records.LedgerDocument`, NOT the template literal) [SC-002]
+- [X] T012 [P] [US2] `tests/unit/test_frozen_lane.py` — lock `lane.yaml` v1 top-level keys, the `state` enum, and the null-until-transition invariant (`src/specops/lane.py`) [SC-002]
+- [X] T013 [P] [US2] `tests/unit/test_frozen_gateprofiles.py` — lock the gate-profile file schema (profile fields, `applies` predicate keys) and `output_version==1`, using the T002 fixtures (`src/specops/gateprofiles.py`) [SC-002]
+- [X] T014 [P] [US2] `tests/unit/test_frozen_ingestion.py` — lock the findings-input `contract_version==1`, top-level + per-finding required fields, and always-advisory-on-import semantics, using the T003 fixture (`src/specops/ingestion.py`) [SC-002]
+- [X] T015 [P] [US2] `tests/unit/test_frozen_envelope.py` — lock the base envelope key set `{command, outcome, class, output_version}` + value enums, assert `output_version==1` across every `--json` family, and assert a new optional/per-command key still passes (additive tolerance) [SC-002] [SC-004] [SC-010]
+- [X] T016 [US2] Extend `tests/unit/test_outcome_contract.py` — lock the three-value exit-code contract (`0`/`1`/`2` meanings) and assert the envelope version is single-sourced (no divergent module constant) [SC-002] [SC-010]
 
 ### Implementation / governance for User Story 2
 
-- [ ] T017 [US2] Amend `.specify/memory/constitution.md` Principle VI to document exit `2` (infra/data/usage), bump version 1.9.2→1.9.3 (PATCH, approved), and update the Sync Impact Report — in the **same commit** as T016 (`src/specops`/tests unchanged elsewhere) [SC-009]
-- [ ] T018 [US2] Re-record golden captures for the `consistency`/`reconcile`/`preflight` families (`conda run -n specops pytest tests/golden/ --golden-record`) and confirm the diff is **only** the additive `output_version` key; human captures byte-identical [SC-004] [SC-010]
+- [X] T017 [US2] Amend `.specify/memory/constitution.md` Principle VI to document exit `2` (infra/data/usage), bump version 1.9.2→1.9.3 (PATCH, approved), and update the Sync Impact Report — in the **same commit** as T016 (`src/specops`/tests unchanged elsewhere) [SC-009]
+- [X] T018 [US2] Re-record golden captures for the `consistency`/`reconcile`/`preflight` families (`conda run -n specops pytest tests/golden/ --golden-record`) and confirm the diff is **only** the additive `output_version` key; human captures byte-identical [SC-004] [SC-010]
 
 **Checkpoint**: Every frozen surface is mechanically locked; principle and exit-code contract agree.
 
@@ -100,11 +100,11 @@ Single-project Python CLI: `src/specops/`, `tests/`, `docs/`, repo-root `README*
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T019 [US3] Extend `tests/unit/test_stability_doc.py` to assert the Versioning & Migration section covers every persisted format's bump+migration obligation, the envelope `output_version` semantics, and the Feature 017 rename alias/deprecation discipline [SC-005]
+- [X] T019 [US3] Extend `tests/unit/test_stability_doc.py` to assert the Versioning & Migration section covers every persisted format's bump+migration obligation, the envelope `output_version` semantics, and the Feature 017 rename alias/deprecation discipline [SC-005]
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Author the Versioning & Migration Policy section of `docs/stability.md` per `specs/021-contract-freeze/contracts/versioning-policy.md` (points at `ledger.migrate_to_current` + `test_ledger_v7_migration.py` as the reused mechanism) [SC-005]
+- [X] T020 [US3] Author the Versioning & Migration Policy section of `docs/stability.md` per `specs/021-contract-freeze/contracts/versioning-policy.md` (points at `ledger.migrate_to_current` + `test_ledger_v7_migration.py` as the reused mechanism) [SC-005]
 
 **Checkpoint**: Safe-evolution rules are published and testable.
 
@@ -118,14 +118,14 @@ Single-project Python CLI: `src/specops/`, `tests/`, `docs/`, repo-root `README*
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T021 [US4] `tests/unit/test_release_docs.py` — assert `CHANGELOG.md` links `docs/stability.md`, and both `README.md` and `README.pt-br.md` reference the freeze; assert no committed test evaluates the "real-usage criterion" (rc is not forced) [SC-006] [SC-008]
+- [X] T021 [US4] `tests/unit/test_release_docs.py` — assert `CHANGELOG.md` links `docs/stability.md`, and both `README.md` and `README.pt-br.md` reference the freeze; assert no committed test evaluates the "real-usage criterion" (rc is not forced) [SC-006] [SC-008]
 
 ### Implementation for User Story 4
 
-- [ ] T022 [US4] Add a `CHANGELOG.md` `[Unreleased]` entry recording the contract freeze (frozen surfaces + the additive envelope `output_version`) and linking `docs/stability.md` [SC-006]
-- [ ] T023 [P] [US4] Add an EN "Stability & Contract Freeze" section to `README.md` linking `docs/stability.md` [SC-006]
-- [ ] T024 [P] [US4] Add a PT pointer/summary to `README.pt-br.md` linking `docs/stability.md` (behaviorally equivalent to the EN section; equivalence is manual per research D5) [SC-006]
-- [ ] T025 [US4] State in `docs/stability.md` that the 1.0.0-rc is gated on the release owner's real-usage criterion — referenced, not evaluated by this feature [SC-008]
+- [X] T022 [US4] Add a `CHANGELOG.md` `[Unreleased]` entry recording the contract freeze (frozen surfaces + the additive envelope `output_version`) and linking `docs/stability.md` [SC-006]
+- [X] T023 [P] [US4] Add an EN "Stability & Contract Freeze" section to `README.md` linking `docs/stability.md` [SC-006]
+- [X] T024 [P] [US4] Add a PT pointer/summary to `README.pt-br.md` linking `docs/stability.md` (behaviorally equivalent to the EN section; equivalence is manual per research D5) [SC-006]
+- [X] T025 [US4] State in `docs/stability.md` that the 1.0.0-rc is gated on the release owner's real-usage criterion — referenced, not evaluated by this feature [SC-008]
 
 **Checkpoint**: Freeze is discoverable in the changelog and both languages; rc left to the release owner.
 
@@ -133,10 +133,10 @@ Single-project Python CLI: `src/specops/`, `tests/`, `docs/`, repo-root `README*
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T026 Run `specs/021-contract-freeze/quickstart.md` steps 1–6, including the breaking-change injection (step 2) that demonstrates SC-003 [SC-002] [SC-003] [SC-004]
-- [ ] T027 [P] Assert no schema bump occurred (ledger stays v7, lane v1, findings-input `contract_version` 1, gate-profile `output_version` 1) — a guard check in `tests/unit/test_frozen_ledger.py`/companions [SC-007]
-- [ ] T028 Run full gates: `conda run -n specops ruff check . && conda run -n specops mypy && conda run -n specops pytest -q` — green at repo thresholds [SC-007]
-- [ ] T029 Flip `ROADMAP.md` row 021 `ACTIVE → MERGED` as the completion change, inside this feature's own PR (roadmap protocol step 6) [SC-007]
+- [X] T026 Run `specs/021-contract-freeze/quickstart.md` steps 1–6, including the breaking-change injection (step 2) that demonstrates SC-003 [SC-002] [SC-003] [SC-004]
+- [X] T027 [P] Assert no schema bump occurred (ledger stays v7, lane v1, findings-input `contract_version` 1, gate-profile `output_version` 1) — a guard check in `tests/unit/test_frozen_ledger.py`/companions [SC-007]
+- [X] T028 Run full gates: `conda run -n specops ruff check . && conda run -n specops mypy && conda run -n specops pytest -q` — green at repo thresholds [SC-007]
+- [X] T029 Flip `ROADMAP.md` row 021 `ACTIVE → MERGED` as the completion change, inside this feature's own PR (roadmap protocol step 6) [SC-007]
 
 ---
 
