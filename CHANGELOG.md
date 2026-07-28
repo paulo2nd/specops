@@ -24,9 +24,19 @@ no new runtime dependency.
   Reclaim is now serialized through a `<lock>.reclaim` sentinel mutex with the
   staleness re-checked under the mutex, so at most one contender wins and a
   fresh lock is never touched; covered by an amplified concurrency regression
-  test that fails on the old implementation. The revision-CAS in `ledger.save`
-  remains the durable lost-update authority. (Defect fix; no behavior change on
-  any non-racing path — waiting and timeout diagnostics are unchanged.)
+  test that fails on the old implementation. A `.reclaim` sentinel leaked by a
+  reclaimer that crashed mid-reclaim is aged out on a bound kept **under**
+  `timeout` (not the main lock's 30 s `stale`), so a genuinely stale lock is
+  still reclaimed within the acquire deadline instead of spuriously timing out.
+  The revision-CAS in `ledger.save` remains the durable lost-update authority.
+  (Defect fix; no behavior change on any non-racing path — waiting and timeout
+  diagnostics are unchanged.)
+- **Scaffold templating on names containing `{{…}}`**: `render_template` now
+  substitutes in a single pass that inserts each value literally (never
+  re-scanning it), so a branch or feature name that itself contains a `{{…}}`
+  sequence is written verbatim instead of being re-substituted or misflagged as
+  unfilled template drift (which crashed `init-spec` / `lane start` on an
+  otherwise valid name). Drift is judged on the template's own placeholders.
 
 ### Internal (no behavior change)
 
@@ -38,7 +48,10 @@ no new runtime dependency.
   giving mypy key-level checking with zero serialization change.
 - `handoff`: the mutation loader returns a typed `LoadedLedger` and raises a
   typed refusal converted at one point — the 9 `isinstance` result probes are
-  gone.
+  gone. Each command's CLI name has a single spelling (the `@_handoff_command`
+  argument, read back in the body via a `ContextVar`), so the decorator's
+  not-a-repo refusal and the body's other errors can never drift to different
+  labels for the same command.
 - `gitops`: single `--name-status` parser/invocation (`parse_name_status`,
   `name_status_diff(rename_aware=…)`); the lane's duplicate parser is deleted;
   the `(human)` ledger sentinel moved out of the generic git layer to
