@@ -255,6 +255,17 @@ def test_find_repo_from_subdirectory_resolves_root(tmp_git_repo: Path) -> None:
     assert repo.working_tree_dir == gitops.find_repo(tmp_git_repo).working_tree_dir
 
 
+def test_find_repo_in_worktreeless_gitdir_has_no_working_tree(tmp_git_repo: Path) -> None:
+    # cwd inside `.git` is a worktree-less GIT_DIR context: `--show-toplevel`
+    # fails there. find_repo must return working_tree_dir=None (GitPython parity)
+    # so the bare/worktree guard fires — never Repository(root='.') running the
+    # command against the git directory (code-review finding).
+    repo = gitops.find_repo(tmp_git_repo / ".git")
+    assert repo is not None
+    assert repo.working_tree_dir is None
+    assert repo.root != Path(".")
+
+
 def test_find_repo_bare_repo_has_no_working_tree(tmp_path: Path) -> None:
     from tests.conftest import git
 

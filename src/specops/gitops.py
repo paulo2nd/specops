@@ -53,19 +53,25 @@ class Repository:
 # ---------------------------------------------------------------------------
 
 
-def _git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run ``git -C root <args>`` capturing text output; never raises on non-zero.
+def _spawn(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run a git argv, capturing text; never raises on non-zero exit.
 
     Decodes as UTF-8 with ``surrogateescape`` (faithful to any non-decodable
     bytes). A missing/nonfunctional git binary raises :class:`GitError` — the
-    fail-closed precondition (FR-012). No shell, no interpolation."""
+    single fail-closed precondition (FR-012). No shell, no interpolation. The one
+    place a git subprocess is spawned, so the env/decode/unavailability handling
+    has exactly one definition."""
     try:
         return subprocess.run(
-            ["git", "-C", str(root), *args],
-            capture_output=True, encoding="utf-8", errors="surrogateescape",
+            cmd, capture_output=True, encoding="utf-8", errors="surrogateescape",
         )
     except (FileNotFoundError, OSError) as exc:
         raise GitError(GIT_UNAVAILABLE_MSG) from exc
+
+
+def _git(root: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run ``git -C root <args>`` capturing text output; never raises on non-zero."""
+    return _spawn(["git", "-C", str(root), *args])
 
 
 def _run_ok(root: Path, args: list[str]) -> str:
@@ -84,13 +90,7 @@ def ensure_git_available() -> str:
     version is enforced — every plumbing invocation used predates git ~1.8. The
     single shared precondition, consumed by ``specops init`` (first step) and
     ``specops doctor``."""
-    try:
-        proc = subprocess.run(
-            ["git", "--version"],
-            capture_output=True, encoding="utf-8", errors="surrogateescape",
-        )
-    except (FileNotFoundError, OSError) as exc:
-        raise GitError(GIT_UNAVAILABLE_MSG) from exc
+    proc = _spawn(["git", "--version"])
     if proc.returncode != 0:
         raise GitError(GIT_UNAVAILABLE_MSG)
     return proc.stdout.strip()
@@ -105,19 +105,22 @@ def find_repo(path: Path = Path(".")) -> Repository | None:
     """Return the :class:`Repository` for *path*, or None if not inside one.
 
     Searches parent directories (git's own default), matching the previous
-    ``search_parent_directories=True``. A bare repository resolves with
-    ``working_tree_dir=None``."""
+    ``search_parent_directories=True``. The normal-worktree hot path is a single
+    ``git`` invocation. ``--show-toplevel`` fails for a bare repository *or* a
+    worktree-less ``GIT_DIR`` context (e.g. cwd inside ``.git``); both resolve to
+    the git dir with ``working_tree_dir=None`` — matching GitPython's
+    ``working_tree_dir`` there, so callers' bare-repo guards still fire instead of
+    silently running against the git directory."""
+    top = _git(path, ["rev-parse", "--show-toplevel"])
+    if top.returncode == 0 and top.stdout.strip():
+        wt = Path(top.stdout.strip())
+        return Repository(root=wt, working_tree_dir=wt)
     gitdir = _git(path, ["rev-parse", "--git-dir"])
     if gitdir.returncode != 0:
-        return None
-    is_bare = _git(path, ["rev-parse", "--is-bare-repository"]).stdout.strip() == "true"
-    if is_bare:
-        raw = gitdir.stdout.strip()
-        root = Path(raw) if Path(raw).is_absolute() else (Path(path) / raw).resolve()
-        return Repository(root=root, working_tree_dir=None)
-    top = _git(path, ["rev-parse", "--show-toplevel"]).stdout.strip()
-    wt = Path(top)
-    return Repository(root=wt, working_tree_dir=wt)
+        return None  # not a git repository at all
+    raw = gitdir.stdout.strip()
+    root = Path(raw) if Path(raw).is_absolute() else (Path(path) / raw).resolve()
+    return Repository(root=root, working_tree_dir=None)
 
 
 def is_git_repo(path: Path = Path(".")) -> bool:
@@ -142,13 +145,17 @@ def head_sha(repo: Repository) -> str:
 
 
 def commits_in_range(repo: Repository, start_sha: str, end_sha: str = "HEAD") -> list[str]:
-    """Return commit shas in *start_sha..end_sha* (exclusive start, inclusive end)."""
+    """Return commit shas in *start_sha..end_sha* (exclusive start, inclusive end).
+
+    An unresolvable *start_sha* degrades to ``[]`` (as before); an unresolvable
+    *end_sha* raises :class:`GitError` — the previous GitPython path guarded only
+    the start and let a bad end propagate, so this preserves that contract."""
     if not commit_exists(repo, start_sha):
         return []
-    proc = _git(repo.root, ["rev-list", f"{start_sha}..{end_sha}"])
-    if proc.returncode != 0:
-        return []
-    return [line for line in proc.stdout.splitlines() if line]
+    return [
+        line for line in _run_ok(repo.root, ["rev-list", f"{start_sha}..{end_sha}"]).splitlines()
+        if line
+    ]
 
 
 def is_ancestor(repo: Repository, sha: str) -> bool:
@@ -268,18 +275,19 @@ def name_status_diff(
     ``rename_aware=True`` → ``-M``: a rename is a single ``R`` on the NEW path
     (an ordinary file move is not mis-flagged destructive — lane safety).
     ``cached=True`` diffs the index (staged changes; the commit range is
-    ignored). Raises :class:`GitError` — each caller owns its degradation
-    policy (``effective_diff_status`` returns ``[]``; lane suppresses).
+    ignored). A ``None`` *start_sha* (non-cached) is omitted so git diffs
+    ``end_sha`` against the working tree — matching GitPython, which dropped the
+    ``None`` arg (never diffed against an empty ``""`` revision). Raises
+    :class:`GitError` — each caller owns its degradation policy
+    (``effective_diff_status`` returns ``[]``; lane suppresses).
     """
     flag = "-M" if rename_aware else "--no-renames"
     if cached:
         args = ["diff", "--cached", "--name-status", flag]
     else:
-        args = ["diff", "--name-status", flag, start_sha or "", end_sha]
-    proc = _git(repo.root, args)
-    if proc.returncode != 0:
-        raise GitError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
-    return parse_name_status(proc.stdout)
+        range_args = [a for a in (start_sha, end_sha) if a]
+        args = ["diff", "--name-status", flag, *range_args]
+    return parse_name_status(_run_ok(repo.root, args))
 
 
 def effective_diff_status(

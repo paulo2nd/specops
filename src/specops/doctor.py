@@ -204,7 +204,10 @@ def _domain_environment(
             BLOCKING, "speckit", "not a Spec Kit repository (no .specify/templates)",
             NA_INSTALL_SPECOPS, "Initialize Spec Kit ('specify init') before using SpecOps.",
         ))
-    if not problems:
+    # The "present" summary is only truthful when git is available — otherwise the
+    # blocking git-availability finding above already states the environment is
+    # not usable, and emitting it would contradict that (git absent AND present).
+    if not problems and git_error is None:
         problems.append(_ok("env", "Git and Spec Kit repository present."))
     return DomainResult(D_ENVIRONMENT, findings + problems)
 

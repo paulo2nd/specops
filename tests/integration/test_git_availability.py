@@ -69,6 +69,18 @@ def test_doctor_reports_git_missing_as_blocking(monkeypatch, tmp_git_repo: Path)
     assert finding.severity == doctor.BLOCKING
 
 
+def test_doctor_git_missing_does_not_also_report_present(monkeypatch, tmp_git_repo: Path) -> None:
+    # Speckit present + git absent must NOT emit the green "present" summary
+    # alongside the blocking git-availability finding (self-contradiction,
+    # code-review finding). The environment domain reports only the blocking one.
+    (tmp_git_repo / ".specify" / "templates").mkdir(parents=True)
+    _make_git_unavailable(monkeypatch)
+    env = next(d for d in doctor.diagnose(tmp_git_repo) if d.domain == doctor.D_ENVIRONMENT)
+    messages = [f.message for f in env.findings]
+    assert "Git and Spec Kit repository present." not in messages
+    assert any(f.id == "git-availability" and f.severity == doctor.BLOCKING for f in env.findings)
+
+
 def test_doctor_does_not_crash_when_git_missing(monkeypatch, tmp_git_repo: Path) -> None:
     _make_git_unavailable(monkeypatch)
     # find_repo is skipped when git is unavailable; diagnose still returns every domain.
