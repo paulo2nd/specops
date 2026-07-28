@@ -729,6 +729,16 @@ class _LedgerLock:
         self.lock_path = Path(str(path) + ".lock")
         self.timeout = timeout
         self.stale = stale
+        # A reclaim holds the ``.reclaim`` sentinel only across a sub-millisecond
+        # critical section, so a sentinel older than this was leaked by a reclaimer
+        # that crashed mid-reclaim. It is kept well UNDER ``timeout`` (never the
+        # main lock's ``stale``): reusing ``stale`` (30 s) here meant a leaked young
+        # sentinel wedged every waiter until it aged out, long past the 5 s acquire
+        # deadline — a stale main lock then failed to reclaim within ``timeout``,
+        # spuriously raising "Ledger is locked by another process". The under-mutex
+        # main-lock staleness re-check (not this bound) remains the guard that a
+        # fresh lock is never deleted, so an aggressive bound stays correct.
+        self._sentinel_stale = min(self.stale, self.timeout / 5)
         self._fd: int | None = None
         # Unique owner token stamped into the lock file so __exit__ never deletes
         # a lock another process created after reclaiming ours as stale.
@@ -772,14 +782,15 @@ class _LedgerLock:
         competes through the normal O_EXCL create); False when another reclaim
         is in flight (the caller falls back to the ordinary wait loop). A
         sentinel leaked by a reclaimer that crashed mid-reclaim goes stale by
-        age and is removed so later passes can retry.
+        age (``_sentinel_stale``, kept under ``timeout``) and is removed so a
+        later pass within the same acquire deadline can retry.
         """
         sentinel = str(self.lock_path) + ".reclaim"
         try:
             fd = os.open(sentinel, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
             with contextlib.suppress(OSError):
-                if time.time() - os.path.getmtime(sentinel) > self.stale:
+                if time.time() - os.path.getmtime(sentinel) > self._sentinel_stale:
                     os.unlink(sentinel)  # leaked by a crashed reclaimer
             return False
         try:

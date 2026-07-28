@@ -156,3 +156,25 @@ def test_reclaim_winner_crash_is_recoverable(tmp_path: Path) -> None:
     with ledger._LedgerLock(target, timeout=1.0, stale=30.0) as second:
         assert second.lock_path.read_bytes() == second._token
     assert not second.lock_path.exists()
+
+
+def test_leaked_sentinel_does_not_wedge_reclaim_past_timeout(tmp_path: Path) -> None:
+    """G4/G6: a `.reclaim` sentinel leaked by a crashed reclaimer must clear within
+    the acquire deadline so a genuinely stale main lock is still reclaimed.
+
+    Regresses the bug where the sentinel reused the main lock's `stale` (30 s) as
+    its own leaked-age bound: with `timeout` (here 2 s) < 30 s, a young leaked
+    sentinel blocked every waiter until it aged out — so a stale main lock failed
+    to reclaim within `timeout` and raised "Ledger is locked by another process".
+    """
+    target = tmp_path / "status.yaml"
+    _stale_lock(target)
+    # Simulate a reclaimer that died AFTER creating the sentinel but BEFORE
+    # unlinking the stale main lock: a fresh (age ~= 0) leaked sentinel.
+    sentinel = Path(str(target) + ".lock.reclaim")
+    sentinel.write_bytes(b"crashed-reclaimer-token")
+
+    with ledger._LedgerLock(target, timeout=2.0, stale=30.0) as lk:
+        assert lk.lock_path.read_bytes() == lk._token
+    assert not lk.lock_path.exists()
+    assert not sentinel.exists()  # leaked sentinel cleared, not left behind
