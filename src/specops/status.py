@@ -399,84 +399,88 @@ def cmd_start_task(root: Path, task_id: str) -> str:
     return f"Task '{task_id}' started."
 
 
-def cmd_complete_task(
-    root: Path, task_id: str, *, auto: bool, evidence: str | None
-) -> str:
-    """Mark task_id DONE with evidence (cli-contract: complete-task)."""
+# ---------------------------------------------------------------------------
+# Task-completion sub-steps (Feature 019 US2, research D3)
+# ---------------------------------------------------------------------------
+
+
+def _validate_evidence_args(auto: bool, evidence: str | None) -> None:
+    """Exactly one evidence source: --auto XOR --evidence (checked pre-read)."""
     if not auto and not evidence:
         raise SpecopsError("Exactly one evidence source required: --auto or --evidence.")
     if auto and evidence:
         raise SpecopsError("Provide --auto or --evidence, not both.")
 
-    feature_dir = get_feature_dir(root)
-    data, base_rev, base_violations, repo = load_for_write(root, feature_dir)
 
-    tasks_text = _read_tasks_md(feature_dir)
-    _sync_tasks(data, tasks_text)
-
-    tasks = data.get("tasks", [])
-    task_map = {t["id"]: t for t in tasks}
-
+def _require_in_progress(task_map: dict, task_id: str) -> dict:
+    """Completion preconditions: known task, IN_PROGRESS, with a started_commit."""
     if task_id not in task_map:
         raise SpecopsError(f"Task '{task_id}' not found in tasks.md.")
-
     task = task_map[task_id]
     if task["status"] != "IN_PROGRESS":
         raise SpecopsError(
             f"Task '{task_id}' is not IN_PROGRESS (status: {task['status']})."
         )
-
-    started = task.get("started_commit")
-    if not started:
+    if not task.get("started_commit"):
         raise SpecopsError(
             f"Task '{task_id}' has no started_commit; cannot harvest evidence."
         )
+    return task
 
-    # Effective changed paths for this task (started_commit → HEAD), computed once
-    # and reused for both --auto evidence and the Feature 009 context provenance.
-    changed_files = gitops.name_only_diff(repo, started)
 
-    if auto:
-        cfg = _load_config(root)
-        test_cmd = cfg.get("test_command", "")
-        if not test_cmd:
-            raise SpecopsError("test_command not set in specops.json; cannot use --auto.")
+def _auto_evidence(
+    root: Path, repo: git.Repo, task_id: str, started: str, changed_files: list[str]
+) -> tuple[str, str, list[str]]:
+    """--auto: run the client's test_command and harvest commits + diff (§III).
 
-        result = shell.run_client_command(test_cmd, root)
-        if result.returncode != 0:
-            raise SpecopsError(
-                f"test_command failed (exit {result.returncode}). "
-                f"Task '{task_id}' stays IN_PROGRESS."
-            )
+    Returns (evidence string, evidence command, commits).
+    """
+    cfg = _load_config(root)
+    test_cmd = cfg.get("test_command", "")
+    if not test_cmd:
+        raise SpecopsError("test_command not set in specops.json; cannot use --auto.")
 
-        commits = gitops.commits_in_range(repo, started)
-        if not commits:
-            raise SpecopsError(
-                f"No commits since task start ({started[:7]}). Commit your work first."
-            )
+    result = shell.run_client_command(test_cmd, root)
+    if result.returncode != 0:
+        raise SpecopsError(
+            f"test_command failed (exit {result.returncode}). "
+            f"Task '{task_id}' stays IN_PROGRESS."
+        )
 
-        files = changed_files
-        test_summary = result.stdout.strip().splitlines()
-        test_line = test_summary[-1] if test_summary else "exit 0 (output not parseable)"
-        code_diff = f"{len(files)} files across {len(commits)} commit(s): {', '.join(files[:5])}"
+    commits = gitops.commits_in_range(repo, started)
+    if not commits:
+        raise SpecopsError(
+            f"No commits since task start ({started[:7]}). Commit your work first."
+        )
 
-        evidence_str = f"TEST_REPORT:{test_line}; CODE_DIFF:{code_diff}"
-        evidence_command = test_cmd
-        task["commits"] = commits
-        if commits:
-            data["recovery"]["last_commit"] = commits[0]
-    else:
-        if not evidence or not evidence_mod.validate_string(evidence):
-            raise SpecopsError(
-                f"Invalid evidence format. Expected '<CLASS>:<summary>[; ...]' "
-                f"with class in {sorted(evidence_mod.EVIDENCE_CLASSES)}."
-            )
-        evidence_str = evidence
-        evidence_command = "(evidence)"
-        commits = gitops.commits_in_range(repo, started)
-        task["commits"] = commits
-        if commits:
-            data["recovery"]["last_commit"] = commits[0]
+    files = changed_files
+    test_summary = result.stdout.strip().splitlines()
+    test_line = test_summary[-1] if test_summary else "exit 0 (output not parseable)"
+    code_diff = f"{len(files)} files across {len(commits)} commit(s): {', '.join(files[:5])}"
+    return f"TEST_REPORT:{test_line}; CODE_DIFF:{code_diff}", test_cmd, commits
+
+
+def _manual_evidence(
+    evidence: str | None, repo: git.Repo, started: str
+) -> tuple[str, str, list[str]]:
+    """--evidence: validate the grammar; commits are still harvested when present."""
+    if not evidence or not evidence_mod.validate_string(evidence):
+        raise SpecopsError(
+            f"Invalid evidence format. Expected '<CLASS>:<summary>[; ...]' "
+            f"with class in {sorted(evidence_mod.EVIDENCE_CLASSES)}."
+        )
+    return evidence, "(evidence)", gitops.commits_in_range(repo, started)
+
+
+def _record_completion(
+    data: dict, root: Path, task: dict, task_id: str, started: str,
+    changed_files: list[str], evidence_str: str, evidence_command: str,
+    commits: list[str],
+) -> None:
+    """Mutate the ledger: task DONE + provenance + the v6 structured evidence record."""
+    task["commits"] = commits
+    if commits:
+        data["recovery"]["last_commit"] = commits[0]
 
     # Feature 009: snapshot context provenance (resolved context ids + map digest,
     # or an explicit no-map/invalid marker) for the task's effective changed paths.
@@ -501,6 +505,36 @@ def cmd_complete_task(
     stored = evidence_mod.append_record(data.setdefault("evidence", []), ev_record)
     task["evidence_refs"] = [stored["id"]]
 
+
+def cmd_complete_task(
+    root: Path, task_id: str, *, auto: bool, evidence: str | None
+) -> str:
+    """Mark task_id DONE with evidence (cli-contract: complete-task)."""
+    _validate_evidence_args(auto, evidence)
+
+    feature_dir = get_feature_dir(root)
+    data, base_rev, base_violations, repo = load_for_write(root, feature_dir)
+
+    _sync_tasks(data, _read_tasks_md(feature_dir))
+    task_map = {t["id"]: t for t in data.get("tasks", [])}
+    task = _require_in_progress(task_map, task_id)
+    started = task["started_commit"]
+
+    # Effective changed paths for this task (started_commit → HEAD), computed once
+    # and reused for both --auto evidence and the Feature 009 context provenance.
+    changed_files = gitops.name_only_diff(repo, started)
+
+    if auto:
+        evidence_str, evidence_command, commits = _auto_evidence(
+            root, repo, task_id, started, changed_files
+        )
+    else:
+        evidence_str, evidence_command, commits = _manual_evidence(evidence, repo, started)
+
+    _record_completion(
+        data, root, task, task_id, started, changed_files,
+        evidence_str, evidence_command, commits,
+    )
     finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' completed. Evidence: {evidence_str}"
 
@@ -568,6 +602,142 @@ def _load_config(root: Path) -> dict:
         return {}
 
 
+# ---------------------------------------------------------------------------
+# Phase-transition sub-steps (Feature 019 US2, research D3)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_result(result: str | None) -> str | None:
+    """R2: validate the result vocabulary BEFORE any ledger read/write."""
+    if result is None:
+        return None
+    upper = result.upper()
+    if upper not in ("APPROVED", "REJECTED"):
+        raise SpecopsError(
+            f"Invalid result '{result}'. Expected APPROVED or REJECTED."
+        )
+    return upper
+
+
+def _validate_transition(current: str, target: str, normalized_result: str | None) -> None:
+    """Enforce the phase sequence, incl. the corrective REVIEW→IMPLEMENT exception."""
+    current_idx = PHASES.index(current) if current in PHASES else -1
+    target_idx = PHASES.index(target)
+
+    # Normal forward transition
+    if target_idx == current_idx + 1:
+        return
+    # Special exception: REVIEW → IMPLEMENT with result=REJECTED
+    if current == "REVIEW" and target == "IMPLEMENT":
+        if normalized_result == "REJECTED":
+            return
+        raise SpecopsError(
+            "REVIEW → IMPLEMENT requires '-r REJECTED'. "
+            "Supply the result to record a corrective round."
+        )
+    next_phase = (
+        PHASES[current_idx + 1] if current_idx + 1 < len(PHASES) else "DONE (already at end)"
+    )
+    raise SpecopsError(
+        f"Invalid transition: {current} → {target}. Expected next phase: {next_phase}."
+    )
+
+
+def _enter_review(data: dict, root: Path, repo: git.Repo) -> None:
+    """Entering REVIEW: activate the corrective placeholder, or open a new cycle.
+
+    REVIEW -> IMPLEMENT(REJECTED) creates the next-round placeholder so the
+    corrective work has a stable round to reference. Re-entering REVIEW must
+    activate that placeholder instead of appending a second open round.
+    """
+    cycles = data.setdefault("review_cycles", [])
+    # Feature 009: provenance for the cycle's effective diff (baseline → HEAD).
+    cycle_prov = contextmap.provenance_for(
+        root, gitops.name_only_diff(repo, str(data.get("baseline") or ""), "HEAD")
+    )
+    pending = cycles[-1] if cycles else None
+    if (
+        pending
+        and pending.get("result") is None
+        and pending.get("started_at") is None
+    ):
+        pending["started_at"] = now_utc()
+        pending["context_provenance"] = cycle_prov
+    else:
+        cycles.append({
+            "round": len(cycles) + 1,
+            "started_at": now_utc(),
+            "completed_at": None,
+            "result": None,
+            "context_provenance": cycle_prov,
+        })
+
+
+def _close_rejected_review(data: dict) -> None:
+    """Close the round REJECTED and open the next round's placeholder."""
+    cycles = data.get("review_cycles", [])
+    if cycles:
+        cycles[-1]["result"] = "REJECTED"
+        cycles[-1]["completed_at"] = now_utc()
+    cycles.append({
+        "round": len(cycles) + 1,
+        "started_at": None,
+        "completed_at": None,
+        "result": None,
+    })
+
+
+def _require_approved_cycle(cycles: list) -> None:
+    """The single Feature 006 DONE cycle gate (Feature 019 US2, FR-004).
+
+    Historically spelled verbatim in BOTH DONE branches of the transition
+    command; the second (non-REVIEW) branch was statically unreachable —
+    sequence validation only admits DONE from REVIEW — and is absorbed here
+    as defense in depth rather than deleted.
+    """
+    if not cycles:
+        raise SpecopsError("Cannot enter DONE: no review cycles recorded.")
+    latest = cycles[-1]
+    latest_result = (latest.get("result") or "").upper()
+    if latest_result != "APPROVED":
+        raise SpecopsError(
+            f"Cannot enter DONE: latest review cycle result is '{latest.get('result')}'. "
+            "Must be APPROVED."
+        )
+
+
+def _gate_done(data: dict, current: str, normalized_result: str | None) -> None:
+    """The ordered DONE gates (Feature 011 findings gate, then Feature 006 cycle gate).
+
+    Feature 011: block approval while any blocking finding is unverified
+    (feature-global, across every round's handoff). An empty result — including
+    a ledger with no handoffs at all — degrades to the Feature 006 cycle-result
+    gate below (never retroactively blocks; roadmap Rule 5). Guards every DONE
+    entry point (REVIEW->DONE, the APPROVED record, and a plain DONE).
+    """
+    from specops import handoff
+    unverified = handoff.blocking_approval_check(data)
+    if unverified:
+        raise SpecopsError(
+            "Cannot enter DONE: unverified blocking findings remain: "
+            + ", ".join(unverified)
+            + ". Verify them ('specops handoff finding verify') first."
+        )
+
+    cycles = data.get("review_cycles", [])
+    if current == "REVIEW":
+        # R1: apply the result to the open cycle BEFORE the gate check.
+        if normalized_result == "REJECTED":
+            raise SpecopsError(
+                "Cannot enter DONE with result REJECTED. "
+                "Use 'transition-phase IMPLEMENT -r REJECTED' to record a corrective round."
+            )
+        if normalized_result == "APPROVED" and cycles and cycles[-1]["result"] is None:
+            cycles[-1]["result"] = "APPROVED"
+            cycles[-1]["completed_at"] = now_utc()
+    _require_approved_cycle(cycles)
+
+
 def cmd_transition_phase(
     root: Path, phase: str, *, result: str | None, if_needed: bool = False
 ) -> str:
@@ -578,16 +748,11 @@ def cmd_transition_phase(
     rather than an error. This lets a workflow step issue a transition that an
     injected Principle IV directive may have already performed, without
     double-issuing or failing closed.
+
+    A thin orchestrator over the named sub-steps above (Feature 019 US2):
+    normalize → load → validate → cycle bookkeeping → DONE gates → persist.
     """
-    # R2: Validate result vocabulary BEFORE any ledger read/write
-    normalized_result: str | None = None
-    if result is not None:
-        upper = result.upper()
-        if upper not in ("APPROVED", "REJECTED"):
-            raise SpecopsError(
-                f"Invalid result '{result}'. Expected APPROVED or REJECTED."
-            )
-        normalized_result = upper
+    normalized_result = _normalize_result(result)
 
     feature_dir = get_feature_dir(root)
     data, base_rev, base_violations, repo = load_for_write(root, feature_dir)
@@ -604,121 +769,14 @@ def cmd_transition_phase(
     if if_needed and target == current:
         return f"Ledger already in {current}; transition to {target} is a no-op."
 
-    current_idx = PHASES.index(current) if current in PHASES else -1
-    target_idx = PHASES.index(target)
+    _validate_transition(current, target, normalized_result)
 
-    # Normal forward transition
-    valid = False
-    if target_idx == current_idx + 1:
-        valid = True
-    # Special exception: REVIEW → IMPLEMENT with result=REJECTED
-    elif current == "REVIEW" and target == "IMPLEMENT":
-        if normalized_result == "REJECTED":
-            valid = True
-        else:
-            raise SpecopsError(
-                "REVIEW → IMPLEMENT requires '-r REJECTED'. "
-                "Supply the result to record a corrective round."
-            )
-
-    if not valid:
-        next_phase = (
-            PHASES[current_idx + 1] if current_idx + 1 < len(PHASES) else "DONE (already at end)"
-        )
-        raise SpecopsError(
-            f"Invalid transition: {current} → {target}. Expected next phase: {next_phase}."
-        )
-
-    # Entering REVIEW: start the corrective placeholder, or open a new cycle.
-    # REVIEW -> IMPLEMENT(REJECTED) creates the next-round placeholder so the
-    # corrective work has a stable round to reference. Re-entering REVIEW must
-    # activate that placeholder instead of appending a second open round.
     if target == "REVIEW":
-        cycles = data.setdefault("review_cycles", [])
-        # Feature 009: provenance for the cycle's effective diff (baseline → HEAD).
-        cycle_prov = contextmap.provenance_for(
-            root, gitops.name_only_diff(repo, str(data.get("baseline") or ""), "HEAD")
-        )
-        pending = cycles[-1] if cycles else None
-        if (
-            pending
-            and pending.get("result") is None
-            and pending.get("started_at") is None
-        ):
-            pending["started_at"] = now_utc()
-            pending["context_provenance"] = cycle_prov
-        else:
-            round_num = len(cycles) + 1
-            cycles.append({
-                "round": round_num,
-                "started_at": now_utc(),
-                "completed_at": None,
-                "result": None,
-                "context_provenance": cycle_prov,
-            })
-
-    # Closing REVIEW via corrective REVIEW→IMPLEMENT(REJECTED)
+        _enter_review(data, root, repo)
     if current == "REVIEW" and target == "IMPLEMENT" and normalized_result == "REJECTED":
-        cycles = data.get("review_cycles", [])
-        if cycles:
-            cycles[-1]["result"] = "REJECTED"
-            cycles[-1]["completed_at"] = now_utc()
-        # Open new review cycle placeholder for next round
-        next_round = len(cycles) + 1
-        cycles.append({
-            "round": next_round,
-            "started_at": None,
-            "completed_at": None,
-            "result": None,
-        })
-
-    # Feature 011: block approval while any blocking finding is unverified
-    # (feature-global, across every round's handoff). An empty result — including
-    # a ledger with no handoffs at all — degrades to the existing Feature 006
-    # cycle-result gate below (never retroactively blocks; roadmap Rule 5). Guards
-    # every DONE entry point (REVIEW->DONE, the APPROVED record, and a plain DONE).
+        _close_rejected_review(data)
     if target == "DONE":
-        from specops import handoff
-        unverified = handoff.blocking_approval_check(data)
-        if unverified:
-            raise SpecopsError(
-                "Cannot enter DONE: unverified blocking findings remain: "
-                + ", ".join(unverified)
-                + ". Verify them ('specops handoff finding verify') first."
-            )
-
-    # R1: For DONE transitions, apply the result to the open cycle BEFORE the gate check
-    if current == "REVIEW" and target == "DONE":
-        cycles = data.get("review_cycles", [])
-        if normalized_result == "REJECTED":
-            raise SpecopsError(
-                "Cannot enter DONE with result REJECTED. "
-                "Use 'transition-phase IMPLEMENT -r REJECTED' to record a corrective round."
-            )
-        if normalized_result == "APPROVED" and cycles and cycles[-1]["result"] is None:
-            cycles[-1]["result"] = "APPROVED"
-            cycles[-1]["completed_at"] = now_utc()
-
-        if not cycles:
-            raise SpecopsError("Cannot enter DONE: no review cycles recorded.")
-        latest = cycles[-1]
-        latest_result = (latest.get("result") or "").upper()
-        if latest_result != "APPROVED":
-            raise SpecopsError(
-                f"Cannot enter DONE: latest review cycle result is '{latest.get('result')}'. "
-                "Must be APPROVED."
-            )
-    elif target == "DONE":
-        cycles = data.get("review_cycles", [])
-        if not cycles:
-            raise SpecopsError("Cannot enter DONE: no review cycles recorded.")
-        latest = cycles[-1]
-        latest_result = (latest.get("result") or "").upper()
-        if latest_result != "APPROVED":
-            raise SpecopsError(
-                f"Cannot enter DONE: latest review cycle result is '{latest.get('result')}'. "
-                "Must be APPROVED."
-            )
+        _gate_done(data, current, normalized_result)
 
     data["current_phase"] = target
     data["active_artifact"] = ledger.artifact_for_phase(target)
