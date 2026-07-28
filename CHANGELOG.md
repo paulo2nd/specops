@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-28
+
 Feature 021 — Contract Freeze for 1.0. Declares and tests the stability of every
 adopter-facing surface ahead of `1.0.0-rc`, and documents the post-1.0 versioning
 and migration obligations.
