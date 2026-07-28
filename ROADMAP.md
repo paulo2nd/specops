@@ -89,7 +89,7 @@ Roadmap status uses four values:
 | 018 | Internal Hardening | MERGED | — | 1.0 Readiness |
 | 019 | Hardening II — API & State Robustness | MERGED | 018 | 1.0 Readiness |
 | 020 | GitPython Removal | MERGED | 018 | 1.0 Readiness |
-| 021 | Contract Freeze for 1.0 | PLANNED | 018, 019, 020 | 1.0 Readiness |
+| 021 | Contract Freeze for 1.0 | ACTIVE | 018, 019, 020 | 1.0 Readiness |
 
 ### Build sequence (dependency review — 2026-07-23)
 
