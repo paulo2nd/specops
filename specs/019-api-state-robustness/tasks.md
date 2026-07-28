@@ -138,7 +138,7 @@ Single project: `src/specops/`, `tests/` at repository root (per plan.md).
 - [X] T029 [P] Add the CHANGELOG.md `[Unreleased]` entry: internal hardening with zero user-visible change; note the lock stale-reclaim race fix (defect, not behavior change) and the internal API additions (records, render_template, name_status_diff, HUMAN_COMMIT) per contracts/internal-api.md
 - [X] T030 [P] Sweep `docs/` (EN and PT) for references to renamed/changed internals (lock reclaim behavior, `(human)` handling, handoff loader); update only where internals are actually described
 - [X] T031 Run the full quickstart validation end-to-end (quickstart §1–§7) and record the §4 scan outputs + §2 falsification note in the PR description (all SC)
-- [ ] T032 Flip the Feature 019 row `ACTIVE → MERGED` in `ROADMAP.md` as the final commit inside this feature's PR (repo convention: the flip rides the feature PR, never a separate chore PR)
+- [X] T032 Flip the Feature 019 row `ACTIVE → MERGED` in `ROADMAP.md` as the final commit inside this feature's PR (repo convention: the flip rides the feature PR, never a separate chore PR)
 
 ---
 
