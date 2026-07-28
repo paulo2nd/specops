@@ -8,7 +8,7 @@ from typing import cast
 import git
 import yaml
 
-from specops import config, contextmap, gitops, ledger, records, shell, speckit
+from specops import config, contextmap, fsutil, gitops, ledger, records, shell, speckit
 from specops import evidence as evidence_mod
 from specops.errors import SpecopsError
 from specops.ledger import now_utc
@@ -263,14 +263,15 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
     feature_name = feature_dir.name
 
     template = (_templates_dir() / "status.yaml").read_text(encoding="utf-8")
-    content = (
-        template
-        .replace("{{feature-name}}", feature_name)
-        .replace("{{branch}}", branch)
-        .replace("{{commit-hash}}", baseline)
-        .replace("{{active-artifact}}", ledger.artifact_for_phase("SPECIFY"))
-        .replace("{{timestamp}}", now_utc())
-    )
+    # Completeness-checked render (FR-010): template drift fails loudly here
+    # instead of scaffolding a ledger with silent {{...}} residue.
+    content = fsutil.render_template(template, {
+        "feature-name": feature_name,
+        "branch": branch,
+        "commit-hash": baseline,
+        "active-artifact": ledger.artifact_for_phase("SPECIFY"),
+        "timestamp": now_utc(),
+    })
     data = yaml.safe_load(content)
 
     tasks_text = _read_tasks_md(feature_dir)
@@ -302,14 +303,13 @@ def synthesize_ledger_at_plan(feature_dir: Path, repo: git.Repo, lane_data: dict
     baseline = str(lane_data.get("baseline") or gitops.head_sha(repo))
     ts = now_utc()
     template = (_templates_dir() / "status.yaml").read_text(encoding="utf-8")
-    content = (
-        template
-        .replace("{{feature-name}}", feature_dir.name)
-        .replace("{{branch}}", branch)
-        .replace("{{commit-hash}}", baseline)
-        .replace("{{active-artifact}}", ledger.artifact_for_phase("PLAN"))
-        .replace("{{timestamp}}", ts)
-    )
+    content = fsutil.render_template(template, {
+        "feature-name": feature_dir.name,
+        "branch": branch,
+        "commit-hash": baseline,
+        "active-artifact": ledger.artifact_for_phase("PLAN"),
+        "timestamp": ts,
+    })
     data = yaml.safe_load(content)
     data["current_phase"] = "PLAN"
     ledger.attach_lane_provenance(data, lane_data)

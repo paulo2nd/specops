@@ -55,7 +55,7 @@ def history_checks(
 
     # Baseline check (warn only)
     baseline = data.get("baseline", "")
-    if baseline and not gitops.is_ancestor(repo, baseline):
+    if baseline and not ledger.is_human_commit(baseline) and not gitops.is_ancestor(repo, baseline):
         warnings.append(
             f"Warning: baseline commit '{baseline[:7]}' not found in local history."
         )
@@ -65,7 +65,7 @@ def history_checks(
         if task.get("orphaned"):
             warnings.append(f"Warning: '{tid}' is orphaned (removed from tasks.md).")
         for sha in task.get("commits", []):
-            if sha == "(human)":
+            if ledger.is_human_commit(sha):
                 continue
             if not gitops.is_ancestor(repo, sha):
                 violations.append(f"{tid}: commit '{sha[:7]}' is not in branch history")

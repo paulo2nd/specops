@@ -45,6 +45,12 @@ DEFAULT_WORKFLOW_LANE = "full"
 # discovered (unplanned) effective-diff path as legitimate; see specops.trace.
 ACK_FIELDS = ("path", "task", "reason")
 
+# The ledger's human-work sentinel (R11): a commit value recorded as "(human)"
+# marks work performed outside Git. Owned HERE (Feature 019 US4, FR-009) — the
+# generic git layer knows nothing about it; callers that read ledger commit-ish
+# values filter via is_human_commit before asking git about ancestry.
+HUMAN_COMMIT = "(human)"
+
 # Feature 012 (v6) — structured evidence. A top-level `evidence` list holds
 # id-addressable records; tasks carry `evidence_refs` and findings an `evidence_id`
 # into it. The legacy `<CLASS>:<summary>` string is retained; see specops.evidence.
@@ -122,6 +128,11 @@ def to_aware(value: str | None) -> str | None:
 def artifact_for_phase(phase: str | None) -> str:
     """Return the artifact bound to *phase* (FR-027)."""
     return _ARTIFACT_FOR_PHASE.get(phase or "", "spec.md")
+
+
+def is_human_commit(sha: str) -> bool:
+    """True when *sha* is the ledger's ``(human)`` outside-Git work sentinel (R11)."""
+    return sha == HUMAN_COMMIT
 
 
 # ---------------------------------------------------------------------------
@@ -608,7 +619,7 @@ def validate_identity(
         return "branch"
 
     baseline = data.get("baseline")
-    if baseline and not gitops.is_ancestor(repo, baseline):
+    if baseline and not is_human_commit(baseline) and not gitops.is_ancestor(repo, baseline):
         return "baseline"
 
     return None

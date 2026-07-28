@@ -8,8 +8,11 @@ truncate a host-owned prompt file).
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from pathlib import Path
+
+from specops.errors import SpecopsError
 
 
 def atomic_write(path: Path, content: str) -> None:
@@ -41,3 +44,26 @@ def atomic_write(path: Path, content: str) -> None:
             os.close(dir_fd)
     except OSError:
         pass  # directory fsync is best-effort (not supported on all platforms)
+
+
+_PLACEHOLDER_RE = re.compile(r"\{\{[^{}]+\}\}")
+
+
+def render_template(text: str, mapping: dict[str, str]) -> str:
+    """Render a ``{{key}}`` scaffold template, asserting placeholder completeness
+    (Feature 019 US4, FR-010).
+
+    Every mapping key replaces its ``{{key}}`` tokens; extra mapping keys are
+    ignored (additive templates never break older code). Any ``{{...}}`` residue
+    left after substitution is template drift and raises :class:`SpecopsError`
+    naming the unfilled placeholder(s) — a scaffold is never written with silent
+    residue. (No current template legitimately emits literal ``{{``.)
+    """
+    for key, value in mapping.items():
+        text = text.replace("{{" + key + "}}", value)
+    residue = sorted({m.group(0) for m in _PLACEHOLDER_RE.finditer(text)})
+    if residue:
+        raise SpecopsError(
+            "Template rendering left unfilled placeholder(s): " + ", ".join(residue)
+        )
+    return text

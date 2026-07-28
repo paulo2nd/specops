@@ -20,7 +20,7 @@ from typing import Any
 
 import yaml
 
-from specops import config, gitops, ledger, outcome, safety, speckit
+from specops import config, fsutil, gitops, ledger, outcome, safety, speckit
 from specops.errors import LedgerParseError, SpecopsError
 
 LANE_FILENAME = "lane.yaml"
@@ -156,20 +156,6 @@ def _overrides(root: Path) -> dict[str, list[str]]:
     return config.lane_safety_overrides(cfg)
 
 
-def _parse_name_status(raw: str) -> list[tuple[str, str]]:
-    """Parse `git diff --name-status -M` lines into (status, path) pairs.
-
-    Rename-aware (``-M``): a rename is a single ``R`` on the NEW path, not a
-    delete+add, so an ordinary file move is not mis-flagged destructive (safety.detect).
-    """
-    out: list[tuple[str, str]] = []
-    for line in raw.splitlines():
-        if line.strip():
-            parts = line.split("\t")
-            out.append((parts[0][:1], parts[-1]))
-    return out
-
-
 def _unmanaged_dirty(repo: Any, feature_name: str) -> list[str]:
     """Return uncommitted PRODUCT paths, excluding SpecOps/Speckit methodology artifacts.
 
@@ -211,14 +197,19 @@ def _require_resolvable_baseline(repo: Any, data: dict) -> None:
 
 
 def _diff_status(repo: Any, baseline: str, staged: bool) -> list[tuple[str, str]]:
-    """Return rename-aware (status, path) pairs for baseline..HEAD, plus staged when asked."""
+    """Return rename-aware (status, path) pairs for baseline..HEAD, plus staged when asked.
+
+    Composes the single shared parser/invocation (``gitops.name_status_diff``,
+    Feature 019 US4): rename-aware (``-M``) so an ordinary file move is a single
+    ``R`` on the new path, not a delete+add mis-flagged destructive (safety.detect).
+    """
     pairs: list[tuple[str, str]] = []
     if baseline and gitops.commit_exists(repo, baseline):
         with contextlib.suppress(gitops.git.GitCommandError):  # degrade: no committed diff
-            pairs.extend(_parse_name_status(repo.git.diff("--name-status", "-M", baseline, "HEAD")))
+            pairs.extend(gitops.name_status_diff(repo, baseline, "HEAD", rename_aware=True))
     if staged:
         with contextlib.suppress(gitops.git.GitCommandError):  # degrade: no staged diff
-            pairs.extend(_parse_name_status(repo.git.diff("--cached", "--name-status", "-M")))
+            pairs.extend(gitops.name_status_diff(repo, None, rename_aware=True, cached=True))
     return pairs
 
 
@@ -263,14 +254,14 @@ def cmd_start(root: Path, *, answers: list[str], bundle: str | None) -> LaneResu
     branch = gitops.current_branch(repo)
     template = (_templates_dir() / LANE_FILENAME).read_text(encoding="utf-8")
     ts = ledger.now_utc()
-    content = (
-        template
-        .replace("{{lane-id}}", feature_dir.name)
-        .replace("{{feature-name}}", feature_dir.name)
-        .replace("{{branch}}", branch)
-        .replace("{{commit-hash}}", baseline)
-        .replace("{{timestamp}}", ts)
-    )
+    # Completeness-checked render (FR-010): lane-template drift fails loudly.
+    content = fsutil.render_template(template, {
+        "lane-id": feature_dir.name,
+        "feature-name": feature_dir.name,
+        "branch": branch,
+        "commit-hash": baseline,
+        "timestamp": ts,
+    })
     data = yaml.safe_load(content)
     data["eligibility"]["answers"] = [
         {"key": c, "confirmed": True} for c in ELIGIBILITY_CRITERIA

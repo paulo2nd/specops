@@ -67,9 +67,9 @@ def test_is_ancestor_fake_sha_returns_false(tmp_git_repo: Path) -> None:
     assert not gitops.is_ancestor(repo, "deadbeef" * 5)
 
 
-def test_is_ancestor_human_marker_exempt(tmp_git_repo: Path) -> None:
-    repo = gitops.find_repo(tmp_git_repo)
-    assert gitops.is_ancestor(repo, "(human)")
+# The "(human)" exemption moved OUT of the git layer to its ledger-owning
+# callers (Feature 019 US4, FR-009) — the git-layer and command-level contracts
+# are now pinned by tests/unit/test_human_commit.py.
 
 
 def test_name_only_diff_empty_range(tmp_git_repo: Path) -> None:
@@ -176,3 +176,59 @@ def test_effective_diff_is_codepoint_sorted(tmp_git_repo: Path) -> None:
     _commit(tmp_git_repo, "three files")
     diff = gitops.effective_diff(gitops.find_repo(tmp_git_repo), base)
     assert diff == sorted(diff)
+
+
+# ---------------------------------------------------------------------------
+# Feature 019 US4 (FR-008): the single --name-status parser, rename-awareness
+# as a parameter.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_name_status_plain_and_blank_lines() -> None:
+    raw = "M\tsrc/a.py\nA\tsrc/b.py\n\n   \n"
+    assert gitops.parse_name_status(raw) == [("M", "src/a.py"), ("A", "src/b.py")]
+
+
+def test_parse_name_status_rename_line_reports_new_path() -> None:
+    assert gitops.parse_name_status("R100\told.py\tnew.py") == [("R", "new.py")]
+
+
+def _rename_repo(tmp_git_repo):
+    """A repo whose HEAD renames tracked.py -> moved.py relative to the baseline."""
+    from tests.conftest import git
+
+    root = tmp_git_repo
+    (root / "tracked.py").write_text("x = 1\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "add tracked")
+    baseline = git(root, "rev-parse", "HEAD")
+    git(root, "mv", "tracked.py", "moved.py")
+    git(root, "commit", "-m", "rename")
+    return root, baseline
+
+
+def test_name_status_diff_rename_aware_single_r(tmp_git_repo) -> None:
+    root, baseline = _rename_repo(tmp_git_repo)
+    repo = gitops.find_repo(root)
+    pairs = gitops.name_status_diff(repo, baseline, "HEAD", rename_aware=True)
+    assert pairs == [("R", "moved.py")]
+
+
+def test_name_status_diff_no_renames_decomposes(tmp_git_repo) -> None:
+    root, baseline = _rename_repo(tmp_git_repo)
+    repo = gitops.find_repo(root)
+    pairs = gitops.name_status_diff(repo, baseline, "HEAD", rename_aware=False)
+    assert set(pairs) == {("D", "tracked.py"), ("A", "moved.py")}
+    # effective_diff_status stays the thin rename-decomposed projection.
+    assert set(gitops.effective_diff_status(repo, baseline, "HEAD")) == set(pairs)
+
+
+def test_name_status_diff_cached_reads_the_index(tmp_git_repo) -> None:
+    from tests.conftest import git
+
+    root = tmp_git_repo
+    (root / "staged.txt").write_text("s\n")
+    git(root, "add", "staged.txt")
+    repo = gitops.find_repo(root)
+    pairs = gitops.name_status_diff(repo, None, rename_aware=True, cached=True)
+    assert ("A", "staged.txt") in pairs

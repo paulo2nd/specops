@@ -755,6 +755,8 @@ def cmd_validate(root: Path) -> HandoffResult:
             defects.append((DANGLING_REFERENCE, f"{fid}: references unknown task '{task}'"))
         if repo is not None:
             for sha in f.get("commits") or []:
+                if ledger.is_human_commit(sha):
+                    continue  # R11: outside-Git work is exempt (callers filter, FR-009)
                 if not gitops.is_ancestor(repo, sha):
                     defects.append((DANGLING_REFERENCE,
                                     f"{fid}: references unresolvable commit '{sha[:7]}' "

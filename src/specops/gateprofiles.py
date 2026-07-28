@@ -56,7 +56,61 @@ _CLASS_FOR_STATUS = {
     S_USAGE_ERROR: outcome.INFRA_ERROR,
 }
 
-_VALID_APPLIES_KEYS = {"always", "contexts", "paths", "risk", "gate_ref"}
+# ---------------------------------------------------------------------------
+# Declarative field tables (Feature 019 US4, FR-011): the single source of the
+# profile/predicate field knowledge — key set, expected type, presence
+# convention, and the validator's type-defect wording — consumed by BOTH the
+# lenient parser (fallback on mismatch) and the validator (defect on mismatch),
+# so a field added to one side can never be forgotten by the other. Checks that
+# are not per-field shape checks (duplicate names, unknown-context references,
+# path-pattern classification, timeout positivity) remain explicit code.
+# ---------------------------------------------------------------------------
+
+# applies.<key> → (presence convention, expected type, validator wording).
+# "present" flags a key that exists with ANY non-conforming value (even null);
+# "notnone" tolerates an explicit null (historical validate behavior).
+_APPLIES_FIELDS: dict[str, tuple[str, type, str]] = {
+    "always": ("present", bool, "a boolean"),
+    "contexts": ("notnone", list, "a list"),
+    "paths": ("notnone", list, "a list"),
+    "risk": ("present", dict, "a mapping"),
+    "gate_ref": ("notnone", str, "a string"),
+}
+_VALID_APPLIES_KEYS = set(_APPLIES_FIELDS)
+
+# profile.<key> → (expected type, lenient-parse default). ``name`` is handled
+# apart (a profile without a usable name is dropped by parse / labeled by validate).
+_PROFILE_FIELDS: dict[str, tuple[type, Any]] = {
+    "command": (str, ""),
+    "timeout": (int, DEFAULT_TIMEOUT),
+    "required": (bool, True),
+}
+
+
+def _lenient_applies(raw: dict, key: str) -> Any | None:
+    """Lenient parse of ``applies.<key>``: the table-typed value, or None on mismatch."""
+    _presence, expected, _word = _APPLIES_FIELDS[key]
+    val = raw.get(key)
+    return val if isinstance(val, expected) else None
+
+
+def _lenient_profile(raw: dict, key: str) -> Any:
+    """Lenient parse of a profile field: the table-typed value, or its default."""
+    expected, default = _PROFILE_FIELDS[key]
+    val = raw.get(key, default)
+    if expected is int and isinstance(val, bool):
+        return default  # bool is an int subclass; never a valid timeout
+    return val if isinstance(val, expected) else default
+
+
+def _applies_type_defect(applies: dict, key: str, name: str) -> str | None:
+    """The validator's table-driven type check for ``applies.<key>`` (or None)."""
+    presence, expected, word = _APPLIES_FIELDS[key]
+    val = applies.get(key)
+    present = (key in applies) if presence == "present" else (val is not None)
+    if present and not isinstance(val, expected):
+        return f"{name}: `applies.{key}` must be {word}."
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -145,16 +199,17 @@ def _norm(value: Any) -> Any:
 def _parse_predicate(raw: Any) -> ApplicabilityPredicate:
     if not isinstance(raw, dict):
         return ApplicabilityPredicate(always=True)
-    ctx_raw = raw.get("contexts")
-    contexts = tuple(str(c) for c in ctx_raw) if isinstance(ctx_raw, list) else ()
-    path_raw = raw.get("paths")
-    paths = tuple(str(p) for p in path_raw) if isinstance(path_raw, list) else ()
-    risk_raw = raw.get("risk")
+    ctx_raw = _lenient_applies(raw, "contexts")
+    contexts = tuple(str(c) for c in ctx_raw) if ctx_raw is not None else ()
+    path_raw = _lenient_applies(raw, "paths")
+    paths = tuple(str(p) for p in path_raw) if path_raw is not None else ()
+    risk_raw = _lenient_applies(raw, "risk")
     risk: tuple[tuple[str, Any], ...] = ()
-    if isinstance(risk_raw, dict):
+    if risk_raw is not None:
         risk = tuple((str(k), v) for k, v in risk_raw.items())
-    gate_ref = raw.get("gate_ref")
-    gate_ref = str(gate_ref) if isinstance(gate_ref, str) else None
+    gate_ref_raw = _lenient_applies(raw, "gate_ref")
+    gate_ref = str(gate_ref_raw) if gate_ref_raw is not None else None
+    # Deliberately looser than the table (historical): any truthy value enables.
     always = bool(raw.get("always", False))
     # An empty predicate means "always" (a gate with no scoping runs unconditionally).
     if not always and not contexts and not paths and not risk and gate_ref is None:
@@ -168,16 +223,12 @@ def _parse_profile(raw: Any) -> GateProfile | None:
     if not isinstance(raw, dict) or not isinstance(raw.get("name"), str) or not raw["name"]:
         return None
     name = raw["name"]
-    cmd_raw = raw.get("command")
-    command = cmd_raw if isinstance(cmd_raw, str) else ""
-    timeout = raw.get("timeout", DEFAULT_TIMEOUT)
-    if not isinstance(timeout, int) or isinstance(timeout, bool):
-        timeout = DEFAULT_TIMEOUT
-    required = raw.get("required", True)
-    required = required if isinstance(required, bool) else True
     return GateProfile(
-        name=name, command=command, applies=_parse_predicate(raw.get("applies")),
-        timeout=timeout, required=required,
+        name=name,
+        command=_lenient_profile(raw, "command"),
+        applies=_parse_predicate(raw.get("applies")),
+        timeout=_lenient_profile(raw, "timeout"),
+        required=_lenient_profile(raw, "required"),
     )
 
 
@@ -423,22 +474,24 @@ def _validate_applies(
     unknown = set(applies) - _VALID_APPLIES_KEYS
     if unknown:
         diags.append(f"{name}: unknown `applies` key(s): {', '.join(sorted(unknown))}.")
-    if "always" in applies and not isinstance(applies["always"], bool):
-        diags.append(f"{name}: `applies.always` must be a boolean.")
+    # Per-key type checks are table-driven (_APPLIES_FIELDS) so parse and validate
+    # can never disagree on a field's expected shape (FR-011).
+    if (d := _applies_type_defect(applies, "always", name)) is not None:
+        diags.append(d)
     # `contexts` MUST be a list — a scalar would otherwise crash/garble the loop below
     # and (in the parser) silently collapse the predicate to always=True.
     contexts = applies.get("contexts")
-    if contexts is not None and not isinstance(contexts, list):
-        diags.append(f"{name}: `applies.contexts` must be a list.")
+    if (d := _applies_type_defect(applies, "contexts", name)) is not None:
+        diags.append(d)
         contexts = None
     # `risk` MUST be a mapping (named-key -> value); a list/scalar would be dropped by
     # the parser and silently widen the gate to always-run.
-    if "risk" in applies and not isinstance(applies["risk"], dict):
-        diags.append(f"{name}: `applies.risk` must be a mapping.")
+    if (d := _applies_type_defect(applies, "risk", name)) is not None:
+        diags.append(d)
     paths = applies.get("paths")
     if paths is not None:
-        if not isinstance(paths, list):
-            diags.append(f"{name}: `applies.paths` must be a list.")
+        if (d := _applies_type_defect(applies, "paths", name)) is not None:
+            diags.append(d)
         else:
             for pat in paths:
                 code = contextmap.classify_pattern(pat)
@@ -448,11 +501,10 @@ def _validate_applies(
         for c in contexts:
             if isinstance(c, str) and c not in known_ids:
                 diags.append(f"{name}: `applies.contexts` references unknown context {c!r}.")
-    ref = applies.get("gate_ref")
     # gate_ref points at a context's declared gate id; it need not be a context id,
     # so we do not treat it as dangling here (a gate id lives in the map's `gates`).
-    if ref is not None and not isinstance(ref, str):
-        diags.append(f"{name}: `applies.gate_ref` must be a string.")
+    if (d := _applies_type_defect(applies, "gate_ref", name)) is not None:
+        diags.append(d)
 
 
 def cmd_list(root: Path, changed_paths: list[str]) -> GateCommandResult:
