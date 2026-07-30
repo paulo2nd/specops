@@ -150,7 +150,7 @@ Marks the task `DONE` with exactly one evidence source:
 - `--evidence "CLASS:summary"`: caller-supplied, with `CLASS` in
   `CLI_LOG | TEST_REPORT | SCREENSHOT_PATH | CODE_DIFF`.
 
-### `specops status transition-phase <phase> [-r APPROVED|REJECTED]`
+### `specops status transition-phase <phase> [-r APPROVED|REJECTED] [--if-needed]`
 
 Advances the phase one step forward. Two transitions require `-r`:
 
@@ -160,6 +160,13 @@ specops status transition-phase IMPLEMENT -r REJECTED # rejected → send back f
 ```
 
 Entering `DONE` requires the latest review cycle to be `APPROVED`.
+`--if-needed` makes the command a no-op (exit 0) when the ledger is already in
+the target phase — for idempotent workflow steps that may re-run (Feature 007).
+
+### `specops status record-step <clarify|checklist|analyze> --decision <run|skip>`
+
+Records the human's run/skip decision for an optional lifecycle step
+(Feature 007), so skipped steps are on the record instead of silently absent.
 
 ### `specops reconcile`
 
@@ -203,6 +210,11 @@ pass, and SpecOps/Speckit-managed artifacts (`specs/**`, `.specify/**`,
 ```bash
 specops preflight             # local: gate-check the current change
 ```
+
+Flags: `--json` emits the stable outcome envelope; `--soft` (with `--json`)
+always exits 0 so the JSON verdict — not the exit code — drives a workflow
+do-while loop (Feature 007); `--sarif` emits a SARIF 2.1.0 projection of the
+review findings and exits 0 (read-only export, Feature 012).
 
 As a CI gate:
 
@@ -378,9 +390,10 @@ The suite runs inside `specops preflight` (there is no standalone runner). Every
 and every task/finding evidence link is recorded as a **structured evidence record** —
 a cache-key-derived id (`EV-<hex12>`), producer, command, exit code, timestamp, commit
 range, affected paths, summary, and an optional local-artifact `sha256` digest — stored
-in the `status.yaml` ledger (schema **v6**), alongside the retained legacy
+in the `status.yaml` ledger (schema **v6**, migrated forward automatically),
+alongside the retained legacy
 `<CLASS>:<summary>` string. A gate whose full cache key still matches a prior record is
-`cached` (not re-run). Opt-in `--sarif` on `review`/`gate report` emits a SARIF 2.1.0
+`cached` (not re-run). Opt-in `--sarif` on `preflight`/`gate report` emits a SARIF 2.1.0
 projection of the review findings.
 
 The ledger migrates **v5 → v6** automatically on the next state-changing command:

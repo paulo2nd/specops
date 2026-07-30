@@ -100,7 +100,7 @@ directives degrade to no-ops.
 |---|---|
 | `specops init` | Prepare a Speckit repo: inject directives, install `/specops-review`, create `specops.json` |
 | `specops extension …` | Native Spec Kit extension lifecycle, plus the `specops` and `specops-lite` workflows |
-| `specops status …` | Drive the ledger: `show`, `init-spec`, `start-task`, `complete-task`, `transition-phase`, `migrate`, `rebaseline` |
+| `specops status …` | Drive the ledger: `show`, `init-spec`, `start-task`, `complete-task`, `transition-phase`, `record-step`, `migrate`, `rebaseline` |
 | `specops preflight` | Deterministic review gate, cheapest-first — CI-safe (formerly `specops review`) |
 | `specops reconcile` | Read-only gate: every recorded commit reachable, every `DONE` task evidenced |
 | `specops consistency` | Read-only gate: SC coverage tags + plan path action suffixes |
