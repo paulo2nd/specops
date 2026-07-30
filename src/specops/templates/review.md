@@ -1,6 +1,11 @@
 ## /specops-review
 
-Token-optimized review command for SpecOps. Follow the steps below in strict order — reject as early as possible to avoid reading unnecessary code.
+Token-optimized review command for SpecOps. It has two jobs, in strict order:
+
+1. **Audit the SpecOps flow** — the deterministic gates (Step 2) prove the pipeline is clean.
+2. **Code-review the generated code** — the surgical diff review (Step 3) hunts real defects in the code produced during IMPLEMENT. This is a genuine code review, not a checklist audit; the gates never substitute for it.
+
+Follow the steps below in order — reject as early as possible to avoid reading unnecessary code, but once the gates pass, never skip or shorten the code review.
 
 ### Step 1 — Load Skills
 
@@ -36,13 +41,27 @@ When no map is present, skip this step (supported no-op).
 
 ### Step 3 — Surgical Diff Review
 
+This step **is a code review**. A passing gate suite says nothing about whether the implemented code is correct — finding defects in it is your job here.
+
 Read only the files listed by the working-tree gate in the `specops preflight` output — that list is the effective diff against the ledger baseline. Do not review anything outside it.
 
-Review against:
+**3a — Code review of the diff (mandatory).** Review the changed code for genuine defects:
+
+- Correctness bugs: logic errors, inverted/missing conditions, off-by-one, wrong API usage.
+- Unhandled edge cases and error paths (empty input, missing files, failure modes, concurrency).
+- Regressions: behavior the diff silently changes beyond its stated intent.
+- Security defects introduced by the change (injection, path traversal, unsafe deserialization, secrets).
+- Tests that assert the wrong thing, cannot fail, or leave new behavior uncovered.
+
+If your environment provides a native code-review capability (e.g. the `/code-review` skill in Claude Code, or an equivalent review command in your integration), **invoke it scoped to the effective diff** and carry its confirmed findings into Step 4. The native reviewer complements your own pass — it never replaces it, and it never records the verdict: every finding you accept must become a structured finding (Step 4). Findings emitted as JSON/SARIF by an external tool can be imported wholesale with `specops handoff finding import-json` / `import-sarif` instead of re-entered by hand. If no native capability exists, perform the code review yourself directly on the diff.
+
+**3b — Conformance review.** Review the same diff against:
 - The spec Success Criteria and acceptance conditions.
 - The plan's declared architecture and path declarations.
 - The contexts reported by `specops context impact` (Step 2a) when a map is present.
 - The Constitution's Core Principles (correctness, not style).
+
+A defect from 3a gates approval exactly like a spec violation from 3b — record both as structured findings with the appropriate severity.
 
 ### Step 4 — Record Structured Findings (Feature 011)
 
