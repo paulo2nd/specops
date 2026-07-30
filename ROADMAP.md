@@ -90,6 +90,8 @@ Roadmap status uses four values:
 | 019 | Hardening II — API & State Robustness | MERGED | 018 | 1.0 Readiness |
 | 020 | GitPython Removal | MERGED | 018 | 1.0 Readiness |
 | 021 | Contract Freeze for 1.0 | MERGED | 018, 019, 020 | 1.0 Readiness |
+| 022 | Lifecycle Recording Coverage | PLANNED | 006, 007, 010, 021 | Lifecycle Coverage |
+| 023 | Context Read-Set Consumption in IMPLEMENT | PLANNED | 009 | Lifecycle Coverage |
 
 ### Build sequence (dependency review — 2026-07-23)
 
@@ -179,6 +181,29 @@ Rationale for the intermediate releases: #23/#24 are user-facing defects in
 0.5.0 (config loss, wrong version gate) — they warrant a patch release ahead of
 the long cycle; 0.6.0 marks the point where the 2026-07-25 review is fully
 discharged (Feature 018 + every issue closed).
+
+### Build sequence (dependency review — 2026-07-30)
+
+The 1.0 Readiness milestone is complete (018–021 MERGED). A 2026-07-30 review of
+the directive contract (which phase uses which CLI capability) found lifecycle
+coverage gaps. Per the Dependency and Replanning Policy, defect-sized findings
+went to issues — #50 (workflow.yml records clarify/checklist decisions before
+the ledger exists), #51 (implement directive's corrective round lacks a
+findings-discovery step), #52 (commands.md review-summary drift) — never to this
+roadmap. The two feature-sized gaps form the Lifecycle Coverage cycle:
+
+> **023 → 022**
+
+- **023** first — directive and documentation work over already-frozen surfaces
+  (`context resolve --phase` has existed since Feature 009); zero contract risk,
+  buildable immediately.
+- **022** second — requires a ledger design decision (the pre-ledger recording
+  seam and the converge append semantics) and builds on the #50 fix, which
+  should land first as its own fix PR off `main`.
+
+Issue timing: #50 before Feature 022's implementation (its fix defines the
+recording seam 022 generalizes); #51 and #52 are directive/doc text fixes,
+anytime, no conflict with either feature.
 
 ## Standard Spec Kit Execution Protocol
 
@@ -1063,6 +1088,115 @@ change afterward is mechanically detected by the contract tests.
 > cut 1.0.0-rc once the real-usage criterion is met — no new capabilities, no
 > alias removals.
 
+## Feature 022 — Lifecycle Recording Coverage
+
+### Objective
+
+Give every Spec Kit lifecycle command a defined SpecOps story, closing the two
+coverage gaps found in the 2026-07-30 directive-contract review: the
+task-list-mutating auxiliary commands (`/speckit.converge`,
+`/speckit.taskstoissues`) have no directive, no hook, and undefined ledger
+behavior; and the optional-step decisions (clarify/checklist/analyze) are
+recorded only in workflow-driven runs — and even there through a seam that
+fails before the ledger exists (issue #50).
+
+### Required outcomes
+
+- A converge directive/hook defining the SpecOps steps when converge appends
+  tasks to an existing `tasks.md`: appended tasks enter the ledger through a
+  deterministic CLI path (append vs. rebaseline semantics decided in the
+  feature's plan), carry `[SC-xxx]` coverage tags, and reconcile cleanly.
+- Running converge on a SpecOps-managed repository without the recording path
+  fails closed with a specific diagnostic — never silent ledger divergence.
+- `/speckit.taskstoissues` is verified and documented as read-only with respect
+  to ledger state (or given a trivial directive if it is not).
+- Optional-step decision parity: clarify/checklist/analyze run/skip decisions
+  are recorded in **both** entry modes (workflow-driven and slash-command),
+  through a recording seam that works before the ledger exists — buffered,
+  earlier ledger creation, or retroactive recording at `init-spec` — building on
+  the issue #50 fix.
+- The `--if-needed` asymmetry between the workflow definition (idempotent
+  engine re-runs) and the directives (bare fail-closed transitions with
+  stop-and-ask) is documented as a deliberate contract.
+- New behavior degrades safely: with SpecOps not initialized, every new
+  directive is a no-op (Rule 5).
+- Contract discipline: additive only under the Feature 021 freeze; any ledger
+  schema change ships with a migration per the post-1.0 versioning policy.
+
+### Explicit non-goals
+
+- No reimplementation of converge or taskstoissues themselves (Rule 8) —
+  SpecOps adds only the recording, validation, and ledger layer.
+- No automatic classification or judgment of converge-added work — record, do
+  not validate (Design Philosophy).
+- No issue-tracker integration beyond what `taskstoissues` already does.
+
+### Acceptance gate
+
+On a SpecOps-managed fixture: converge-appended tasks enter the ledger with SC
+tags and execute through the normal start/complete loop with `specops
+reconcile` green; converge without the recording path fails closed; and a full
+lifecycle run in either entry mode leaves all three optional-step decisions
+recorded in the ledger.
+
+### `/speckit.specify` brief
+
+> Define the SpecOps story for every lifecycle command: a converge directive
+> with deterministic ledger append/rebaseline semantics and SC coverage tags, a
+> verified read-only taskstoissues, and optional-step decision recording that
+> works in both workflow-driven and slash-command runs including before the
+> ledger exists — fail closed on unrecorded task-list mutation, degrade to
+> no-ops without SpecOps, and stay additive under the 1.0 contract freeze.
+
+## Feature 023 — Context Read-Set Consumption in IMPLEMENT
+
+### Objective
+
+Close the Feature 009 loop: the minimal phase read set is computed at plan time
+(`context plan-check`) and consumed at review time (`context impact`), but
+nothing consumes it during IMPLEMENT — the phase that reads the most. Make the
+implement directive resolve and honor the minimal read set.
+
+### Required outcomes
+
+- The implement directive instructs the agent, at session start before the
+  first task, to resolve the IMPLEMENT-phase read set (`specops context resolve
+  --phase IMPLEMENT`, per task path or feature-level) and scope its reads to
+  the resolved context package.
+- Out-of-set reads follow the paved road: a genuine discovery is acknowledged
+  through the existing Feature 010 flow (`specops trace acknowledge`) — the
+  read set is guidance plus record, never a gate.
+- Reuse the existing deterministic resolution and stable JSON (Feature 008) —
+  no new resolution engine. Whether the task's resolved read set is also
+  surfaced in `status start-task` output (additive only under the 021 freeze)
+  is decided in the feature's plan.
+- New behavior degrades safely: with no context map the directive step is a
+  supported no-op (Rule 5).
+- English and Portuguese documentation updated equivalently.
+
+### Explicit non-goals
+
+- No enforcement or blocking on out-of-set reads — this feature scopes reads;
+  it does not create a new gate.
+- No change to context-resolution semantics or the context-map schema.
+- No new CLI surface unless the plan proves `context resolve` insufficient for
+  per-task scoping.
+
+### Acceptance gate
+
+On a mapped fixture, an IMPLEMENT session's prescribed reads are covered by the
+resolved context package for each task; an out-of-set discovery is acknowledged
+through the existing trace flow without blocking; and an unmapped repository
+behaves exactly as today.
+
+### `/speckit.specify` brief
+
+> Consume the context map's minimal read set during IMPLEMENT: the implement
+> directive resolves the phase read set with the existing `context resolve
+> --phase` surface and scopes agent reads to it, out-of-set discoveries flow
+> through the existing acknowledgement path, behavior degrades to a no-op
+> without a map, and no new gate or resolution engine is introduced.
+
 ## Dependency and Replanning Policy
 
 - A feature may be split when `/speckit.clarify` or `/speckit.plan` proves that
@@ -1111,3 +1245,11 @@ public contracts (018), the remaining state-handling and locking debt is retired
 (020), and every adopter-facing contract is frozen, tested, and documented (021).
 With the real-usage criterion of the release strategy satisfied, `1.0.0-rc` is
 cut; `1.0.0` follows per the milestone-based release policy.
+
+### Lifecycle Coverage complete
+
+Features 022–023 are merged. Every lifecycle command — converge, taskstoissues,
+and the optional steps in both entry modes — has a defined, recorded SpecOps
+story with fail-closed handling of unrecorded task-list mutation, and the
+context map's minimal read set is consumed at implement time, not only at plan
+and review.
