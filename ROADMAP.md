@@ -1115,6 +1115,10 @@ fails before the ledger exists (issue #50).
   through a recording seam that works before the ledger exists — buffered,
   earlier ledger creation, or retroactive recording at `init-spec` — building on
   the issue #50 fix.
+- Recording is mandatory; the step is not. Every optional step remains freely
+  skippable — a `skip` is a first-class recorded decision, and no entry mode
+  ever forces an optional step to run or blocks on a recorded skip (Design
+  Philosophy: record, do not validate).
 - The `--if-needed` asymmetry between the workflow definition (idempotent
   engine re-runs) and the directives (bare fail-closed transitions with
   stop-and-ask) is documented as a deliberate contract.
@@ -1137,7 +1141,8 @@ On a SpecOps-managed fixture: converge-appended tasks enter the ledger with SC
 tags and execute through the normal start/complete loop with `specops
 reconcile` green; converge without the recording path fails closed; and a full
 lifecycle run in either entry mode leaves all three optional-step decisions
-recorded in the ledger.
+recorded in the ledger — including a run where the human skips every optional
+step, which completes without obstruction.
 
 ### `/speckit.specify` brief
 
@@ -1145,8 +1150,9 @@ recorded in the ledger.
 > with deterministic ledger append/rebaseline semantics and SC coverage tags, a
 > verified read-only taskstoissues, and optional-step decision recording that
 > works in both workflow-driven and slash-command runs including before the
-> ledger exists — fail closed on unrecorded task-list mutation, degrade to
-> no-ops without SpecOps, and stay additive under the 1.0 contract freeze.
+> ledger exists — every decision recorded, no optional step made mandatory,
+> fail closed on unrecorded task-list mutation, degrade to no-ops without
+> SpecOps, and stay additive under the 1.0 contract freeze.
 
 ## Feature 023 — Context Read-Set Consumption in IMPLEMENT
 
