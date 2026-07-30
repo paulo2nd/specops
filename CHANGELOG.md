@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-30
+
+### Changed
+
+- **`/specops-review` template**: Step 3 now states explicitly that the surgical diff
+  review is a **code review** of the generated code — a mandatory defect hunt
+  (correctness, edge cases, regressions, security, test quality) split from the
+  spec/plan/constitution conformance pass — and instructs the agent to invoke the host's
+  native code-review capability (e.g. Claude Code's `/code-review`) scoped to the
+  effective diff when one exists, recording accepted findings as structured findings
+  (or importing tool output via `handoff finding import-json`/`import-sarif`). The
+  installed skill frontmatter description now announces the code-review role so
+  agents surface the skill correctly.
+
 ## [0.7.0] - 2026-07-28
 
 Feature 021 — Contract Freeze for 1.0. Declares and tests the stability of every
@@ -706,7 +720,9 @@ honestly named `preflight`, and a single read-only diagnostic explains project h
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/paulo2nd/specops/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/paulo2nd/specops/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/paulo2nd/specops/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/paulo2nd/specops/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/paulo2nd/specops/compare/v0.4.0...v0.5.0

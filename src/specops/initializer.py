@@ -268,7 +268,10 @@ def install_review(review_path: Path, content: str, sep: str) -> None:
     """Install the review prompt file, wrapping with skills-mode frontmatter when needed."""
     review_path.parent.mkdir(parents=True, exist_ok=True)
     if review_path.name == "SKILL.md":
-        frontmatter = "---\ndescription: SpecOps token-optimized review command\n---\n\n"
+        frontmatter = (
+            "---\ndescription: SpecOps semantic review — deterministic gate audit "
+            "plus a mandatory code review of the effective diff\n---\n\n"
+        )
         full_content = frontmatter + content
     else:
         full_content = content
