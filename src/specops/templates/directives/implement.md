@@ -42,6 +42,20 @@ The ledger is the authority; the agent is the executor.
   `{map: none}`/`{map: invalid}` marker). This is mechanical — no agent action is
   required and nothing to record by hand.
 
+### Context Read Set (Feature 023)
+
+- At session start, before the first task (alongside the other session-start
+  steps), read the `**SpecOps-Contexts**: …` line from the active feature's
+  `plan.md` and resolve the IMPLEMENT-phase context package for each declared
+  context id:
+  `specops context resolve --id <context-id> --phase implement`
+  (the flag value is the map's lowercase phase key; the uppercase ledger phase
+  name is not a valid value here).
+- Scope the session's reads to the **union** of the resolved packages — each
+  package's `read_set` plus its `expanded_read_set` (dependency-contributed
+  reads). Reading less than the union is always fine; the union bounds what to
+  read, not what must be read.
+
 ### Discovered Paths (Feature 010)
 
 - If implementing a task legitimately requires changing a file that was **not**

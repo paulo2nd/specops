@@ -294,3 +294,57 @@ def test_provenance_no_map(context_map_repo: Path) -> None:
 def test_provenance_invalid_map(context_map_repo: Path) -> None:
     write_map(context_map_repo, "schema_version: 1\ncontexts: [oops]\n")
     assert cm.provenance_for(context_map_repo, ["x"]) == {"map": "invalid"}
+
+
+# ---------------------------------------------------------------------------
+# IMPLEMENT-phase read-set consumption (Feature 023, SC-001/SC-003/SC-004)
+# ---------------------------------------------------------------------------
+
+
+def _implement_package_files(result) -> set[str]:
+    """All files of a resolved package: read_set plus expanded_read_set paths."""
+    pkg = result.extra["package"]
+    return set(pkg["read_set"]) | {e["path"] for e in pkg["expanded_read_set"]}
+
+
+def test_implement_readset_perpath_covered_by_declared_union(
+        context_map_repo: Path) -> None:
+    # Acceptance gate (SC-001): for every plan-declared path, the package
+    # resolved per path (--phase implement) is contained in the union of the
+    # declared contexts' id-resolved packages — the union the directive scopes
+    # an IMPLEMENT session to.
+    write_map(context_map_repo, DEP_GRAPH_MAP)
+    declared_ids = ["api", "config"]          # plan's **SpecOps-Contexts** line
+    declared_paths = ["src/api/h.py", "src/config/y.py"]  # tasks' prescribed reads
+
+    union: set[str] = set()
+    for cid in declared_ids:
+        r = cm.cmd_resolve(context_map_repo, path=None, ctx_id=cid, phase="implement")
+        assert r.status == cm.S_RESOLVED and r.exit_code == 0
+        union |= _implement_package_files(r)
+
+    for p in declared_paths:
+        r = cm.cmd_resolve(context_map_repo, path=p, ctx_id=None, phase="implement")
+        assert r.status == cm.S_RESOLVED and r.exit_code == 0
+        assert _implement_package_files(r) <= union, f"uncovered reads for {p}"
+
+
+def test_implement_readset_union_includes_dependency_reads(
+        context_map_repo: Path) -> None:
+    # A dependency contributes reads via expanded_read_set: api depends on
+    # config, so api's IMPLEMENT package carries config's reads with the edge.
+    write_map(context_map_repo, DEP_GRAPH_MAP)
+    r = cm.cmd_resolve(context_map_repo, path=None, ctx_id="api", phase="implement")
+    assert r.status == cm.S_RESOLVED
+    expanded = r.extra["package"]["expanded_read_set"]
+    assert {"path": "src/config", "via": "api->config"} in expanded
+    # No "implement" key in the map -> the base read set is the phase fallback.
+    assert r.extra["package"]["read_set_source"] == "base"
+
+
+def test_implement_readset_resolution_is_deterministic(
+        context_map_repo: Path) -> None:
+    write_map(context_map_repo, DEP_GRAPH_MAP)
+    a = cm.cmd_resolve(context_map_repo, path=None, ctx_id="web", phase="implement")
+    b = cm.cmd_resolve(context_map_repo, path=None, ctx_id="web", phase="implement")
+    assert a.extra == b.extra
