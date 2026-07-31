@@ -348,3 +348,20 @@ def test_implement_readset_resolution_is_deterministic(
     a = cm.cmd_resolve(context_map_repo, path=None, ctx_id="web", phase="implement")
     b = cm.cmd_resolve(context_map_repo, path=None, ctx_id="web", phase="implement")
     assert a.extra == b.extra
+
+
+def test_implement_readset_no_map_is_supported_noop(context_map_repo: Path) -> None:
+    # SC-003: no map -> "no map present", PASS/exit 0 — the directive step is a
+    # supported no-op and an unmapped repo behaves exactly as today.
+    r = cm.cmd_resolve(context_map_repo, path=None, ctx_id="api", phase="implement")
+    assert r.status == cm.S_NO_MAP and r.exit_code == 0
+
+
+def test_implement_readset_invalid_map_is_gate_rejection(context_map_repo: Path) -> None:
+    # SC-004 (frozen contract): an invalid map keeps exit 1 from resolve; the
+    # *directive* maps any non-zero exit to "proceed without scoping" — the CLI
+    # classification itself must not change.
+    write_map(context_map_repo, "schema_version: 1\ncontexts: [oops]\n")
+    r = cm.cmd_resolve(context_map_repo, path=None, ctx_id="api", phase="implement")
+    assert r.exit_code == 1
+    assert cm.CLASS_FOR_STATUS[r.status] == outcome.GATE_REJECTION

@@ -83,11 +83,11 @@ This feature touches only: `src/specops/templates/directives/implement.md`,
 
 ### Tests for User Story 3 (write first, confirm the content tests FAIL) ⚠️
 
-- [ ] T007 [US3] Extend tests/unit/test_implement_directive.py with failing content tests for C6 plus delivery invariants: (a) content — "no map present" → supported no-op, and **any non-zero exit** of the resolution step → proceed without read-set scoping, never halt (no wording that gates); (b) legacy path — `initializer.inject_block` of the updated implement.md content is idempotent (`created` then `unchanged`, exactly one implement block), mirroring test_lite_directive.py; (c) in tests/unit/test_contextmap_consume.py, assert the R4 degradation rows through `cmd_resolve` with `phase="implement"`: no map → `no_map_present`/PASS, invalid map → GATE_REJECTION (expected to pass immediately — frozen-contract proof, SC-003/SC-004)
+- [x] T007 [US3] Extend tests/unit/test_implement_directive.py with failing content tests for C6 plus delivery invariants: (a) content — "no map present" → supported no-op, and **any non-zero exit** of the resolution step → proceed without read-set scoping, never halt (no wording that gates); (b) legacy path — `initializer.inject_block` of the updated implement.md content is idempotent (`created` then `unchanged`, exactly one implement block), mirroring test_lite_directive.py; (c) in tests/unit/test_contextmap_consume.py, assert the R4 degradation rows through `cmd_resolve` with `phase="implement"`: no map → `no_map_present`/PASS, invalid map → GATE_REJECTION (expected to pass immediately — frozen-contract proof, SC-003/SC-004)
 
 ### Implementation for User Story 3
 
-- [ ] T008 [US3] Extend the Context Read Set section in src/specops/templates/directives/implement.md with the degradation instructions (C6) and confirm the existing Graceful Degradation section still covers the CLI-absent case unchanged; T007 now passes
+- [x] T008 [US3] Extend the Context Read Set section in src/specops/templates/directives/implement.md with the degradation instructions (C6) and confirm the existing Graceful Degradation section still covers the CLI-absent case unchanged; T007 now passes
 
 **Checkpoint**: All user stories complete — spec's acceptance gate satisfiable end-to-end on fixtures. Commit once for US3.
 

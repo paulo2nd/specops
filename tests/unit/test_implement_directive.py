@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from specops import extension
+from specops import extension, initializer
 
 IMPLEMENT_MD = (
     Path(__file__).resolve().parents[2]
@@ -110,3 +110,40 @@ def test_directive_routes_discoveries_to_existing_acknowledge_flow() -> None:
     assert "--reason" not in section
     # No new acknowledgement type for reads is invented.
     assert "read acknowledgement" not in section.lower()
+
+
+# --- content: US3 — degradation (C6, Rule 5) --------------------------------
+
+
+def test_directive_degrades_when_no_map_present() -> None:
+    # C6: "no map present" (exit 0) -> the step is a supported no-op.
+    section = _readset_section().lower()
+    assert "no map present" in section
+    assert "no-op" in section
+
+
+def test_directive_degrades_on_any_nonzero_exit_never_halts() -> None:
+    # C6: any non-zero exit of the resolution step -> proceed without read-set
+    # scoping; never halt. (Covers the invalid-map exit 1, frozen contract.)
+    # Whitespace-normalized: content must not depend on markdown hard-wrapping.
+    section = " ".join(_readset_section().lower().split()).replace("**", "")
+    assert "non-zero exit" in section
+    assert "without read-set scoping" in section
+    assert "never halt" in section
+
+
+# --- legacy path (marker-block injection) -----------------------------------
+
+
+def test_legacy_inject_of_updated_directive_is_idempotent(tmp_path: Path) -> None:
+    prompt = tmp_path / "implement.md"
+    prompt.write_text("# implement prompt\n")
+    content = _directive_text().strip()
+
+    first = initializer.inject_block(prompt, "implement", content)
+    second = initializer.inject_block(prompt, "implement", content)
+    assert first == "created"
+    assert second == "unchanged"  # a second identical inject is a no-op
+    injected = prompt.read_text(encoding="utf-8")
+    # Exactly one implement block, carrying the new section.
+    assert injected.count(SECTION_HEADING) == 1

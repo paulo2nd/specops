@@ -61,6 +61,11 @@ The ledger is the authority; the agent is the executor.
   `plan.md` follows the "Discovered Paths (Feature 010)" flow below
   (`specops trace acknowledge`) — reads are guidance; the drift gate governs
   changes, and that flow is the paved road for them.
+- Degradation: "no map present" (exit 0) means this step is a supported
+  no-op — proceed exactly as without it. Any **non-zero exit** of the
+  resolution step (for example an invalid map) means proceed **without
+  read-set scoping** — never halt on this step and never treat its outcome as
+  a gate.
 
 ### Discovered Paths (Feature 010)
 
