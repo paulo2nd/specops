@@ -97,9 +97,9 @@ This feature touches only: `src/specops/templates/directives/implement.md`,
 
 **Purpose**: Documentation (EN/PT parity) and final validation.
 
-- [ ] T009 [P] Update docs/commands.md — the "map is consumed in the lifecycle" list (currently plan-check/impact/stale, docs/commands.md:299-310) gains implement-time consumption: the implement directive resolves the phase read set via `context resolve --phase implement` and scopes agent reads to it (guidance plus record, never a gate; no-op without a map)
-- [ ] T010 [P] Update README.md (context feature row/description, README.md:109) and README.pt-br.md (equivalent line, README.pt-br.md:114) so both describe implement-time read-set consumption equivalently — full EN/PT parity in the same PR (research.md R8; docs/stability.md intentionally untouched)
-- [ ] T011 Run the full quickstart validation (specs/023-context-readset-implement/quickstart.md): full gate (ruff, mypy, pytest), directive-delivery tests, acceptance-gate tests, and the documentation-parity greps; confirm no test outside this feature's two test files changed behavior. Commit once for polish
+- [x] T009 [P] Update docs/commands.md — the "map is consumed in the lifecycle" list (currently plan-check/impact/stale, docs/commands.md:299-310) gains implement-time consumption: the implement directive resolves the phase read set via `context resolve --phase implement` and scopes agent reads to it (guidance plus record, never a gate; no-op without a map)
+- [x] T010 [P] Update README.md (context feature row/description, README.md:109) and README.pt-br.md (equivalent line, README.pt-br.md:114) so both describe implement-time read-set consumption equivalently — full EN/PT parity in the same PR (research.md R8; docs/stability.md intentionally untouched)
+- [x] T011 Run the full quickstart validation (specs/023-context-readset-implement/quickstart.md): full gate (ruff, mypy, pytest), directive-delivery tests, acceptance-gate tests, and the documentation-parity greps; confirm no test outside this feature's two test files changed behavior. Commit once for polish
 
 ---
 

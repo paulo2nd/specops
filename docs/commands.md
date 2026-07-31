@@ -310,6 +310,16 @@ The map is **consumed** in the lifecycle by three more read-only commands:
 - `specops context stale` — context-map patterns matching zero **Git-tracked**
   files (moved/removed), with the owning context; never edits the map.
 
+The read set is also consumed at **implement time** (Feature 023): the implement
+directive resolves the IMPLEMENT-phase context package for each context declared
+in the plan (`specops context resolve --id <cid> --phase implement`) at session
+start and scopes the agent's reads to the union of the resolved packages. The
+read set is guidance plus record, never a gate — an out-of-set read blocks
+nothing, and a discovery that changes an undeclared path follows the existing
+`specops trace acknowledge` flow. Without a map the step is a supported no-op;
+any non-zero exit of the resolution step means the session proceeds without
+read-set scoping.
+
 Consuming these also snapshots **context provenance** (resolved context ids + map
 digest, or an explicit `{map: none}`/`{map: invalid}` marker) into every task and
 review-cycle ledger record (schema v3), and `specops preflight` surfaces a
