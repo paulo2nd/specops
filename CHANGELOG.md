@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-31
+
+### Changed
+
+- Implement directive (Feature 023 follow-up): the context read set is now
+  explicitly framed as a starting point, never a ceiling on discovery. The
+  session's reads *start from* the union of the resolved packages (default
+  scope, not a required reading list), and reads needed to implement a task
+  correctly — call sites, tests, configs, any affected surface — are always in
+  scope even when outside the union; token economy never outranks correctness.
+  Same clarification mirrored in `docs/commands.md`, `README.md`, and
+  `README.pt-br.md`. No mechanical change: out-of-set reads already blocked
+  nothing, and changed undeclared paths still follow the Feature 010
+  `trace acknowledge` flow.
+
+### Fixed
+
+- CHANGELOG: added the missing `[0.8.0]` compare link and repointed
+  `[Unreleased]` to compare from `v0.8.0`.
+
 ## [0.8.0] - 2026-07-31
 
 Lifecycle Coverage milestone (Features 022 + 023): every Spec Kit lifecycle
@@ -806,7 +826,9 @@ honestly named `preflight`, and a single read-only diagnostic explains project h
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/paulo2nd/specops/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/paulo2nd/specops/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/paulo2nd/specops/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/paulo2nd/specops/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/paulo2nd/specops/compare/v0.5.1...v0.6.0
