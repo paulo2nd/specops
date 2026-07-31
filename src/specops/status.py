@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 from typing import cast
 
@@ -549,6 +550,61 @@ def cmd_complete_task(
     )
     finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' completed. Evidence: {evidence_str}"
+
+
+def cmd_sync_tasks(root: Path, *, check: bool = False, as_json: bool = False) -> str:
+    """Explicitly record a task-list mutation into the ledger (Feature 022, US1).
+
+    The converge recording seam: applies the same :func:`_sync_tasks` merge that
+    init-spec/start-task/complete-task already use (append semantics — new IDs →
+    PENDING, vanished IDs → ``orphaned: true``, existing entries preserved by ID)
+    as an explicit, deterministic command, so a task-list mutation (e.g.
+    ``/speckit.converge``) is recorded at the seam instead of lazily at the next
+    task start. ``check=True`` validates the recording path and reports what
+    would change without writing — the converge pre-mutation fail-closed
+    precondition (FR-003). Records state only; coverage judgment stays with the
+    existing read-only surfaces (record, do not validate — FR-004).
+    """
+    feature_dir = get_feature_dir(root)
+    data, base_rev, base_violations, _repo = load_for_write(root, feature_dir)
+
+    if not (feature_dir / "tasks.md").is_file():
+        raise SpecopsError(f"tasks.md not found in {feature_dir}. Nothing to sync.")
+
+    before = {
+        t["id"]: bool(t.get("orphaned"))
+        for t in data.get("tasks", []) if isinstance(t, dict)
+    }
+    _sync_tasks(data, _read_tasks_md(feature_dir))
+    after = data["tasks"]
+    appended = [t["id"] for t in after if t["id"] not in before]
+    newly_orphaned = [
+        t["id"] for t in after
+        if t.get("orphaned") and t["id"] in before and not before[t["id"]]
+    ]
+    unchanged = len(after) - len(appended) - len(newly_orphaned)
+
+    if (appended or newly_orphaned) and not check:
+        finalize(feature_dir, data, base_rev, base_violations)
+
+    if as_json:
+        return json.dumps({
+            "appended": appended, "orphaned": newly_orphaned,
+            "unchanged": unchanged, "check": check,
+        })
+    if not appended and not newly_orphaned:
+        prefix = "sync-tasks --check: ok" if check else "sync-tasks:"
+        return f"{prefix} no changes."
+    detail = []
+    if appended:
+        detail.append(f"{len(appended)} appended ({', '.join(appended)})")
+    else:
+        detail.append("0 appended")
+    detail.append(f"{len(newly_orphaned)} orphaned"
+                  + (f" ({', '.join(newly_orphaned)})" if newly_orphaned else ""))
+    if check:
+        return "sync-tasks --check: ok — would record " + ", ".join(detail) + "."
+    return "sync-tasks: " + ", ".join(detail) + "."
 
 
 def cmd_show(root: Path) -> str:

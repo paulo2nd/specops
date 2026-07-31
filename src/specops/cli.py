@@ -479,6 +479,31 @@ def status_record_step(
     typer.echo(status.cmd_record_step(root, step, decision=decision))
 
 
+@status_app.command("sync-tasks")
+@_handle_errors
+def status_sync_tasks(
+    check: bool = typer.Option(
+        False, "--check",
+        help="Validate the recording path and report what would change, without "
+             "writing (the converge pre-mutation precondition, Feature 022).",
+    ),
+    json_out: bool = typer.Option(
+        False, "--json",
+        help="Emit a stable JSON object: {appended, orphaned, unchanged, check}.",
+    ),
+) -> None:
+    """Explicitly record a task-list mutation into the ledger (Feature 022).
+
+    Appends new tasks.md IDs as PENDING, marks vanished IDs orphaned, and
+    preserves existing entries — the same merge init-spec/start-task already
+    apply, exposed at the converge seam. A zero-change run succeeds.
+    """
+    root = Path(".")
+    _require_git(root)
+    from specops import status
+    typer.echo(status.cmd_sync_tasks(root, check=check, as_json=json_out))
+
+
 @status_app.command("transition-phase")
 @_handle_errors
 def status_transition_phase(

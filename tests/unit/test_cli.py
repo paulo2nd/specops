@@ -286,3 +286,71 @@ class TestReconcileConsistency:
             result = runner.invoke(app, ["consistency"])
         assert result.exit_code == 0
         assert "w1" in result.output
+
+
+# ---------------------------------------------------------------------------
+# status sync-tasks (Feature 022, US1 — converge recording seam)
+# ---------------------------------------------------------------------------
+
+class TestStatusSyncTasks:
+    def _write_tasks_md(self, root: Path, *ids: str) -> None:
+        (root / "specs" / "001-test" / "tasks.md").write_text(
+            "".join(f"- [ ] {tid} Task {tid}\n" for tid in ids), encoding="utf-8"
+        )
+
+    def test_sync_tasks_appends_and_exits_0(self, ledger_repo: Path) -> None:
+        self._write_tasks_md(ledger_repo, "T001", "T002")
+        with patch("specops.cli.Path", return_value=ledger_repo):
+            result = runner.invoke(app, ["status", "sync-tasks"])
+        assert result.exit_code == 0
+        assert "1 appended" in result.output  # T001 pre-existed in the ledger
+
+    def test_sync_tasks_zero_change_exits_0(self, ledger_repo: Path) -> None:
+        self._write_tasks_md(ledger_repo, "T001")
+        with patch("specops.cli.Path", return_value=ledger_repo):
+            result = runner.invoke(app, ["status", "sync-tasks"])
+        assert result.exit_code == 0
+        assert "no changes" in result.output
+
+    def test_sync_tasks_missing_ledger_exit_1_specific_diagnostic(self, git_repo: Path) -> None:
+        """FR-003: the recording-path precondition names what is missing."""
+        self._write_tasks_md(git_repo, "T001")
+        with patch("specops.cli.Path", return_value=git_repo):
+            result = runner.invoke(app, ["status", "sync-tasks", "--check"])
+        assert result.exit_code == 1
+        assert "Ledger not found" in result.output
+        assert "init-spec" in result.output
+
+    def test_sync_tasks_corrupt_ledger_exit_2(self, ledger_repo: Path) -> None:
+        (ledger_repo / "specs" / "001-test" / "status.yaml").write_text("[not: a: ledger")
+        self._write_tasks_md(ledger_repo, "T001")
+        with patch("specops.cli.Path", return_value=ledger_repo):
+            result = runner.invoke(app, ["status", "sync-tasks"])
+        assert result.exit_code == 2
+
+    def test_sync_tasks_missing_tasks_md_exit_1_diagnostic(self, ledger_repo: Path) -> None:
+        with patch("specops.cli.Path", return_value=ledger_repo):
+            result = runner.invoke(app, ["status", "sync-tasks"])
+        assert result.exit_code == 1
+        assert "tasks.md" in result.output
+
+    def test_sync_tasks_check_writes_nothing(self, ledger_repo: Path) -> None:
+        self._write_tasks_md(ledger_repo, "T001", "T002")
+        ledger_path = ledger_repo / "specs" / "001-test" / "status.yaml"
+        before = ledger_path.read_bytes()
+        with patch("specops.cli.Path", return_value=ledger_repo):
+            result = runner.invoke(app, ["status", "sync-tasks", "--check"])
+        assert result.exit_code == 0
+        assert "T002" in result.output  # reports what would append
+        assert ledger_path.read_bytes() == before
+
+    def test_sync_tasks_json_shape(self, ledger_repo: Path) -> None:
+        self._write_tasks_md(ledger_repo, "T001", "T002")
+        with patch("specops.cli.Path", return_value=ledger_repo):
+            result = runner.invoke(app, ["status", "sync-tasks", "--json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["appended"] == ["T002"]
+        assert payload["orphaned"] == []
+        assert payload["unchanged"] == 1
+        assert payload["check"] is False
