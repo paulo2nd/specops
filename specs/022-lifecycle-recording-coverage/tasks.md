@@ -92,11 +92,11 @@ Single project: `src/specops/` + `tests/` at repository root (per plan.md). All 
 
 ### Tests for User Story 3 (write first, confirm they FAIL where applicable) ⚠️
 
-- [ ] T018 [P] [US3] Create tests/unit/test_taskstoissues_readonly.py (SC-004): the built manifest contains no `before_taskstoissues`/`after_taskstoissues` SpecOps entries; the SpecOps hook registry equals exactly the documented set (converge-pre, converge, clarify, checklist, analyze, lite, specify, plan, tasks, implement) so future additions are deliberate; a fixture ledger is byte-identical across `extension install` + `update`
+- [x] T018 [P] [US3] Create tests/unit/test_taskstoissues_readonly.py (SC-004): the built manifest contains no `before_taskstoissues`/`after_taskstoissues` SpecOps entries; the SpecOps hook registry equals exactly the documented set (converge-pre, converge, clarify, checklist, analyze, lite, specify, plan, tasks, implement) so future additions are deliberate; a fixture ledger is byte-identical across `extension install` + `update`
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Document the taskstoissues read-only ledger contract in docs/commands.md (lifecycle-coverage section: no hook, no directive, ledger untouched; contingency directive only if the upstream command ever mutates repo state); T018 green confirms the code side
+- [x] T019 [US3] Document the taskstoissues read-only ledger contract in docs/commands.md (lifecycle-coverage section: no hook, no directive, ledger untouched; contingency directive only if the upstream command ever mutates repo state); T018 green confirms the code side
 
 **Checkpoint**: All user stories complete — every lifecycle command has a defined SpecOps story; spec acceptance gate satisfiable end-to-end on fixtures. Commit once for US3.
 
@@ -106,7 +106,7 @@ Single project: `src/specops/` + `tests/` at repository root (per plan.md). All 
 
 **Purpose**: Documentation parity, contract bookkeeping, and final validation.
 
-- [ ] T020 Extend docs/commands.md: `status sync-tasks` (+ `--check`/`--json`, exit contract), `record-step` pre-ledger buffering + `--if-absent` + `converge` step value + skip derivation, the buffer's transient lifecycle (may appear in intermediate commits, removed at drain — remediation A1), the workflow converge gate, and the `--if-needed` asymmetry as a deliberate contract (FR-009; same file as T019 — sequential, no [P])
+- [x] T020 Extend docs/commands.md: `status sync-tasks` (+ `--check`/`--json`, exit contract), `record-step` pre-ledger buffering + `--if-absent` + `converge` step value + skip derivation, the buffer's transient lifecycle (may appear in intermediate commits, removed at drain — remediation A1), the workflow converge gate, and the `--if-needed` asymmetry as a deliberate contract (FR-009; same file as T019 — sequential, no [P])
 - [ ] T021 [P] Update README.md and README.pt-br.md equivalently (same PR, full parity — SC-007): lifecycle recording coverage — converge recording, decision parity in both entry modes, taskstoissues read-only
 - [ ] T022 [P] Add the `[Unreleased]` CHANGELOG.md entry: Feature 022 — additive `status sync-tasks`, pre-ledger record-step buffering, five new native hooks, workflow converge gate, taskstoissues read-only contract
 - [ ] T023 Amend .specify/memory/constitution.md (MINOR, 1.9.3 → 1.10.0, precedent Features 010–013): Principle IV Ledger & Phase Wiring broadened to the auxiliary/optional lifecycle commands (converge recording seam, optional-step decision recording in both entry modes); update the Sync Impact Report naming the template changes shipped in this change set
