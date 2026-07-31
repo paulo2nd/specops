@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Feature 023 — Context Read-Set Consumption in IMPLEMENT. Closes the Feature 009
+loop: the phase that reads the most now consumes the context map's minimal read
+set. Directive-and-documentation change only — no CLI, schema, or frozen-contract
+change.
+
+### Added
+
+- **Implement directive — Context Read Set section**: at session start, before the
+  first task, the agent resolves the IMPLEMENT-phase context package for each
+  context declared in the plan (`specops context resolve --id <cid> --phase
+  implement --json`) and scopes the session's reads to the union of the resolved
+  packages (`read_set` + `expanded_read_set`). The read set is guidance plus
+  record, never a gate: out-of-set reads block nothing and need no
+  acknowledgement; a discovery that changes an undeclared path follows the
+  existing Feature 010 `trace acknowledge` flow. Degradation is safe by
+  construction — "no map present" is a supported no-op and any non-zero exit of
+  the resolution step means the session proceeds without read-set scoping.
+  Delivered through both paths (native `after_implement` hook and legacy marker
+  block) from the same directive source.
+
 ## [0.7.1] - 2026-07-30
 
 ### Changed

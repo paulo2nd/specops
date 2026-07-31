@@ -2,7 +2,10 @@
 
 Covers: map digest determinism (R1), reverse-edge impact incl. cycle-safety and
 closed edge-set attribution (R2/R3), plan-topology validation (R4), stale
-detection over tracked files (R8), and provenance markers (R6). Behavior is
+detection over tracked files (R8), and provenance markers (R6). Also covers the
+Feature 023 IMPLEMENT-phase read-set consumption invariants (SC-001 coverage of
+per-path packages by the declared-context union, dependency-contributed reads,
+determinism, and the no-map/invalid-map degradation statuses). Behavior is
 exercised against fixtures/inline maps — never this repository.
 """
 from __future__ import annotations
@@ -294,3 +297,74 @@ def test_provenance_no_map(context_map_repo: Path) -> None:
 def test_provenance_invalid_map(context_map_repo: Path) -> None:
     write_map(context_map_repo, "schema_version: 1\ncontexts: [oops]\n")
     assert cm.provenance_for(context_map_repo, ["x"]) == {"map": "invalid"}
+
+
+# ---------------------------------------------------------------------------
+# IMPLEMENT-phase read-set consumption (Feature 023, SC-001/SC-003/SC-004)
+# ---------------------------------------------------------------------------
+
+
+def _implement_package_files(result) -> set[str]:
+    """All files of a resolved package: read_set plus expanded_read_set paths."""
+    pkg = result.extra["package"]
+    return set(pkg["read_set"]) | {e["path"] for e in pkg["expanded_read_set"]}
+
+
+def test_implement_readset_perpath_covered_by_declared_union(
+        context_map_repo: Path) -> None:
+    # Acceptance gate (SC-001): for every plan-declared path, the package
+    # resolved per path (--phase implement) is contained in the union of the
+    # declared contexts' id-resolved packages — the union the directive scopes
+    # an IMPLEMENT session to.
+    write_map(context_map_repo, DEP_GRAPH_MAP)
+    declared_ids = ["api", "config"]          # plan's **SpecOps-Contexts** line
+    declared_paths = ["src/api/h.py", "src/config/y.py"]  # tasks' prescribed reads
+
+    union: set[str] = set()
+    for cid in declared_ids:
+        r = cm.cmd_resolve(context_map_repo, path=None, ctx_id=cid, phase="implement")
+        assert r.status == cm.S_RESOLVED and r.exit_code == 0
+        union |= _implement_package_files(r)
+
+    for p in declared_paths:
+        r = cm.cmd_resolve(context_map_repo, path=p, ctx_id=None, phase="implement")
+        assert r.status == cm.S_RESOLVED and r.exit_code == 0
+        assert _implement_package_files(r) <= union, f"uncovered reads for {p}"
+
+
+def test_implement_readset_union_includes_dependency_reads(
+        context_map_repo: Path) -> None:
+    # A dependency contributes reads via expanded_read_set: api depends on
+    # config, so api's IMPLEMENT package carries config's reads with the edge.
+    write_map(context_map_repo, DEP_GRAPH_MAP)
+    r = cm.cmd_resolve(context_map_repo, path=None, ctx_id="api", phase="implement")
+    assert r.status == cm.S_RESOLVED
+    expanded = r.extra["package"]["expanded_read_set"]
+    assert {"path": "src/config", "via": "api->config"} in expanded
+    # No "implement" key in the map -> the base read set is the phase fallback.
+    assert r.extra["package"]["read_set_source"] == "base"
+
+
+def test_implement_readset_resolution_is_deterministic(
+        context_map_repo: Path) -> None:
+    write_map(context_map_repo, DEP_GRAPH_MAP)
+    a = cm.cmd_resolve(context_map_repo, path=None, ctx_id="web", phase="implement")
+    b = cm.cmd_resolve(context_map_repo, path=None, ctx_id="web", phase="implement")
+    assert a.extra == b.extra
+
+
+def test_implement_readset_no_map_is_supported_noop(context_map_repo: Path) -> None:
+    # SC-003: no map -> "no map present", PASS/exit 0 — the directive step is a
+    # supported no-op and an unmapped repo behaves exactly as today.
+    r = cm.cmd_resolve(context_map_repo, path=None, ctx_id="api", phase="implement")
+    assert r.status == cm.S_NO_MAP and r.exit_code == 0
+
+
+def test_implement_readset_invalid_map_is_gate_rejection(context_map_repo: Path) -> None:
+    # SC-004 (frozen contract): an invalid map keeps exit 1 from resolve; the
+    # *directive* maps any non-zero exit to "proceed without scoping" — the CLI
+    # classification itself must not change.
+    write_map(context_map_repo, "schema_version: 1\ncontexts: [oops]\n")
+    r = cm.cmd_resolve(context_map_repo, path=None, ctx_id="api", phase="implement")
+    assert r.exit_code == 1
+    assert cm.CLASS_FOR_STATUS[r.status] == outcome.GATE_REJECTION

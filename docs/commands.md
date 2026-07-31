@@ -315,6 +315,16 @@ digest, or an explicit `{map: none}`/`{map: invalid}` marker) into every task an
 review-cycle ledger record (schema v3), and `specops preflight` surfaces a
 non-blocking warning when the map changed since planning.
 
+The read set is also consumed at **implement time** (Feature 023): the implement
+directive resolves the IMPLEMENT-phase context package for each context declared
+in the plan (`specops context resolve --id <cid> --phase implement --json`) at
+session start and scopes the agent's reads to the union of the resolved
+packages. The read set is guidance plus record, never a gate — an out-of-set
+read blocks nothing, and a discovery that changes an undeclared path follows the
+existing `specops trace acknowledge` flow; this step records nothing by itself.
+Without a map the step is a supported no-op; any non-zero exit of the resolution
+step means the session proceeds without read-set scoping.
+
 All commands accept `--json` for a stable, versioned machine surface. Exit codes:
 `0` success (including the supported "no map present" and "no matching context"
 states), `1` a blocking/unsound map, `2` a usage error. Path matching is

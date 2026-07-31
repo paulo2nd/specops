@@ -10,11 +10,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from specops import extension, initializer
+from tests.conftest import directive_path
 
-LITE_MD = (
-    Path(__file__).resolve().parents[2]
-    / "src" / "specops" / "templates" / "directives" / "lite.md"
-)
+LITE_MD = directive_path("lite")
 
 
 # --- native path (extensions.yml hooks) ------------------------------------

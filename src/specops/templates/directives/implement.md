@@ -42,6 +42,34 @@ The ledger is the authority; the agent is the executor.
   `{map: none}`/`{map: invalid}` marker). This is mechanical — no agent action is
   required and nothing to record by hand.
 
+### Context Read Set (Feature 023)
+
+- At session start, before the first task (alongside the other session-start
+  steps), read the `**SpecOps-Contexts**: …` line from the active feature's
+  `plan.md` and resolve the IMPLEMENT-phase context package for each declared
+  context id:
+  `specops context resolve --id <context-id> --phase implement --json`
+  (the phase value is the map's lowercase phase key; the uppercase ledger phase
+  name is not a valid value here — and `--json` is required: the package fields
+  below are emitted only in the JSON envelope).
+- Scope the session's reads to the **union** of the resolved packages — each
+  package's `read_set` plus its `expanded_read_set` (dependency-contributed
+  reads). Reading less than the union is always fine; the union bounds what to
+  read, not what must be read.
+- The read set is **guidance plus record — never a gate**: a read outside the
+  union is permitted, blocks nothing, and by itself requires no acknowledgement.
+- A genuine discovery that leads to a **changed** path not declared in
+  `plan.md` follows the "Discovered Paths (Feature 010)" flow below
+  (`specops trace acknowledge`) — reads are guidance; the drift gate governs
+  changes, and that flow is the paved road for them.
+- Degradation: "no map present" (exit 0) means this step is a supported
+  no-op — proceed exactly as without it. A "no matching context" result for a
+  declared id (also exit 0) means that context contributes no package —
+  proceed and read normally for its scope. Any **non-zero exit** of the
+  resolution step (for example an invalid map) means proceed **without
+  read-set scoping** — never halt on this step and never treat its outcome as
+  a gate.
+
 ### Discovered Paths (Feature 010)
 
 - If implementing a task legitimately requires changing a file that was **not**

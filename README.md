@@ -87,7 +87,7 @@ directives drive the ledger at each stage seam:
 | **specify** | Marks the repo as SpecOps-managed (informational; no ledger yet) |
 | **plan** | Enforces empirical path verification and the `consistency` gate |
 | **tasks** | Creates the ledger (`status init-spec`), advances the phase to `TASKS`, and requires `[SC-xxx]` coverage tags on every task |
-| **implement** | Opens `IMPLEMENT`, runs the evidence-backed ledger loop, then opens `REVIEW` |
+| **implement** | Opens `IMPLEMENT`, resolves the context map's minimal read set and scopes reads to it (guidance, never a gate; no-op without a map), runs the evidence-backed ledger loop, then opens `REVIEW` |
 | **review** | `/specops-review` validates the diff and records `APPROVED` / `REJECTED` |
 
 The phase machine is `SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE`.

@@ -92,7 +92,7 @@ rodou, as diretivas injetadas conduzem o ledger em cada costura de estágio:
 | **specify** | Marca o repositório como gerenciado pelo SpecOps (informativo; ainda sem ledger) |
 | **plan** | Impõe a verificação empírica de caminhos e o gate `consistency` |
 | **tasks** | Cria o ledger (`status init-spec`), avança a fase para `TASKS` e exige tags de cobertura `[SC-xxx]` em toda tarefa |
-| **implement** | Abre `IMPLEMENT`, executa o loop do ledger com evidências e então abre `REVIEW` |
+| **implement** | Abre `IMPLEMENT`, resolve o read set mínimo do mapa de contexto e escopa as leituras a ele (orientação, nunca um gate; no-op sem mapa), executa o loop do ledger com evidências e então abre `REVIEW` |
 | **review** | O `/specops-review` valida o diff e registra `APPROVED` / `REJECTED` |
 
 A máquina de fases é `SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE`.
