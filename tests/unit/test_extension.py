@@ -36,8 +36,13 @@ def test_merge_writes_all_hook_points() -> None:
     assert set(merged["hooks"]) == {
         "before_specify",  # Feature 013: lightweight-lane recognition directive
         "after_specify",
+        "after_clarify",    # Feature 022: run-decision recording
+        "after_checklist",  # Feature 022: run-decision recording
         "before_plan",
         "after_tasks",
+        "after_analyze",    # Feature 022: run-decision recording
+        "before_converge",  # Feature 022: fail-closed recording-path precondition
+        "after_converge",   # Feature 022: deterministic ledger append
         "after_implement",
     }
     assert merged["specops"]["cli_compat"]["min_cli_version"] == extension.compat.MIN_CLI_VERSION
@@ -68,3 +73,32 @@ def test_semantically_equal_detects_prompt_change() -> None:
          "description": "d", "prompt": "CHANGED"}
     ]
     assert not extension.semantically_equal(a, b)
+
+
+# --- Feature 022 US1: converge hook pair in the built manifest ---------------
+
+def test_manifest_registers_converge_hook_pair() -> None:
+    hooks = extension._build_hooks()
+    for point, needle in (
+        ("before_converge", "sync-tasks --check"),
+        ("after_converge", "specops status sync-tasks"),
+    ):
+        assert point in hooks, f"missing hook point {point}"
+        (entry,) = hooks[point]
+        assert entry["extension"] == extension.OWNER
+        assert entry["enabled"] is True
+        assert entry["optional"] is False
+        assert needle in entry["prompt"]
+
+
+# --- Feature 022 US2: run-decision recorders in the built manifest -----------
+
+def test_manifest_registers_optional_step_recorders() -> None:
+    hooks = extension._build_hooks()
+    for step in ("clarify", "checklist", "analyze"):
+        point = f"after_{step}"
+        assert point in hooks, f"missing hook point {point}"
+        (entry,) = hooks[point]
+        assert entry["extension"] == extension.OWNER
+        assert entry["optional"] is False  # recording is mandatory, the step is not
+        assert f"specops status record-step {step} --decision run" in entry["prompt"]

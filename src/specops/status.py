@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import copy
+import json
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -9,7 +11,7 @@ import yaml
 
 from specops import config, contextmap, fsutil, gitops, ledger, records, shell, speckit
 from specops import evidence as evidence_mod
-from specops.errors import SpecopsError
+from specops.errors import LedgerParseError, SpecopsError
 from specops.ledger import now_utc
 
 # ---------------------------------------------------------------------------
@@ -105,7 +107,10 @@ def compact_status(root: Path) -> dict:
 def _sync_tasks(data: records.LedgerLike, tasks_text: str) -> None:
     """Sync ledger tasks[] from tasks.md content.
 
-    New IDs → PENDING; vanished IDs → orphaned: true (preserved). (R5)
+    New IDs → PENDING; vanished IDs → orphaned: true (preserved). An ID that
+    reappears in tasks.md is revived — its ``orphaned`` flag is cleared, so a
+    live task is never left excluded from counts, coverage, or gates
+    (Feature 022 review fix). (R5)
     """
     current_ids = speckit.extract_task_ids(tasks_text)
     existing = {t["id"]: t for t in data.get("tasks", [])}
@@ -113,6 +118,7 @@ def _sync_tasks(data: records.LedgerLike, tasks_text: str) -> None:
     synced: list[records.TaskRecord] = []
     for tid in current_ids:
         if tid in existing:
+            existing[tid].pop("orphaned", None)  # present in tasks.md again → live
             synced.append(existing[tid])
         else:
             synced.append({
@@ -176,7 +182,7 @@ def _identity_mismatch(diverged: str) -> SpecopsError:
 
 
 def load_for_write(
-    root: Path, feature_dir: Path
+    root: Path, feature_dir: Path, *, backup: bool = True
 ) -> tuple[records.LedgerDocument, int, list[str], gitops.Repository]:
     """Load, classify, identity-check, and (if needed) migrate the ledger for a write.
 
@@ -186,6 +192,11 @@ def load_for_write(
     ``base_violations`` are the invariant violations already present at load time —
     pre-existing legacy defects that must not, on their own, block an unrelated
     command (only violations a command newly introduces are blocking; see finalize).
+
+    ``backup=False`` skips the on-disk backup of a migratable ledger — for
+    read-only callers (e.g. ``sync-tasks --check``) that need the same
+    classification/identity gates and in-memory migration but must not touch
+    disk (Feature 022 review fix).
     """
     on_disk = _load_ledger(feature_dir)
 
@@ -205,9 +216,10 @@ def load_for_write(
     base_revision = ledger.revision_of(on_disk)
     data: records.LedgerLike = copy.deepcopy(on_disk)
     if cls == ledger.MIGRATABLE:
-        backup_rel = ledger.backup_ledger(root, feature_dir)
+        backup_rel = ledger.backup_ledger(root, feature_dir) if backup else None
         data = ledger.migrate_to_current(data)
-        data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
+        if backup_rel is not None:
+            data.setdefault("recovery", {})["migrated_from_backup"] = backup_rel
     ledger.ensure_workflow_block(data)  # back-fill additive Feature 007 block
     base_violations = ledger.validate_invariants(data)
     # The one canonical cast point (Feature 019 US3): the document has been
@@ -277,7 +289,14 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
     if tasks_text:
         _sync_tasks(data, tasks_text)
 
+    # Feature 022 (FR-007): decisions recorded before the ledger existed are
+    # drained into the fresh ledger — this seam is what makes pre-ledger
+    # recording safe in every entry mode. The buffer is deleted only after the
+    # write persists, so a failed write never loses the decisions.
+    _drain_pending_steps(feature_dir, data)
+
     ledger.write_new(feature_dir, data)
+    _discard_pending_steps(feature_dir)
     try:
         rel = ledger_path.relative_to(root.resolve())
     except ValueError:
@@ -312,7 +331,12 @@ def synthesize_ledger_at_plan(feature_dir: Path, repo: gitops.Repository, lane_d
     data = yaml.safe_load(content)
     data["current_phase"] = "PLAN"
     ledger.attach_lane_provenance(data, lane_data)
+    # Feature 022 (FR-007): promotion is a ledger-creation seam too — decisions
+    # buffered before promotion drain here exactly as at init-spec, so no
+    # pre-ledger recording is lost and no stale buffer lingers.
+    _drain_pending_steps(feature_dir, data)
     ledger.write_new(feature_dir, data)
+    _discard_pending_steps(feature_dir)
     # The lite lane never runs /speckit-specify, so no spec.md exists — but a ledger at
     # PLAN and the before_plan directive expect one. Seed a minimal specification stub from
     # the lane's context so the resumed full workflow has an artifact to plan against; the
@@ -337,16 +361,124 @@ def synthesize_ledger_at_plan(feature_dir: Path, repo: gitops.Repository, lane_d
     return ledger_path
 
 
-_OPTIONAL_STEPS = ("clarify", "checklist", "analyze")
+_OPTIONAL_STEPS = ("clarify", "checklist", "analyze", "converge")
 _STEP_DECISIONS = ("run", "skip")
 
+# Feature 022 (FR-007): pre-ledger decision buffer — feature-scoped so an
+# abandoned run's buffer is inert and dies with its feature directory.
+_PENDING_STEPS_FILENAME = ".specops-pending-steps.json"
+_PENDING_STEPS_VERSION = 1
 
-def cmd_record_step(root: Path, step: str, *, decision: str) -> str:
+
+def _pending_steps_path(feature_dir: Path) -> Path:
+    return feature_dir / _PENDING_STEPS_FILENAME
+
+
+def _find_step(entries: list[dict], step: str) -> dict | None:
+    """Return the entry recorded for *step*, or None (single lookup owner)."""
+    return next(
+        (e for e in entries if isinstance(e, dict) and e.get("step") == step), None
+    )
+
+
+def _upsert_step(entries: list[dict], step: str, decision: str) -> None:
+    """Replace-by-step insert of ``{step, decision, at}`` (single upsert owner)."""
+    entries[:] = [e for e in entries if not (isinstance(e, dict) and e.get("step") == step)]
+    entries.append({"step": step, "decision": decision, "at": now_utc()})
+
+
+def _already_recorded(step: str, existing: dict) -> str:
+    return (
+        f"Optional step '{step}' already recorded: "
+        f"{existing.get('decision')} (unchanged)."
+    )
+
+
+def _load_pending_steps(feature_dir: Path) -> list[dict]:
+    """Read the pre-ledger decision buffer as a list of step entries.
+
+    Absent → ``[]`` silently. Unreadable or unknown-version content → ``[]``
+    with a stderr note — the buffer is bookkeeping, never a failure source.
+    """
+    path = _pending_steps_path(feature_dir)
+    if not path.is_file():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = None
+    if (
+        not isinstance(raw, dict)
+        or raw.get("version") != _PENDING_STEPS_VERSION
+        or not isinstance(raw.get("steps"), list)
+    ):
+        print(f"note: discarding unusable pending-steps buffer: {path}", file=sys.stderr)
+        return []
+    return [e for e in raw["steps"] if isinstance(e, dict)]
+
+
+def _drain_pending_steps(feature_dir: Path, data: records.LedgerLike) -> None:
+    """Merge buffered decisions into ``workflow.skipped_steps`` (never deletes).
+
+    Called at ledger creation (Feature 022, FR-007): recording works before the
+    ledger exists because ledger creation is the seam where the buffer becomes
+    ledger state. The buffer file is deleted by the caller only AFTER the ledger
+    write persists (:func:`_discard_pending_steps`), so a failed write never
+    loses the human's decisions. Every skipped entry — invalid shape or a
+    workspace-identity (branch) mismatch — is reported on stderr, never
+    silently dropped; unusable whole buffers are reported by
+    :func:`_load_pending_steps`.
+    """
+    path = _pending_steps_path(feature_dir)
+    if not path.is_file():
+        return
+    entries = _load_pending_steps(feature_dir)
+    ledger.ensure_workflow_block(data)
+    target = data["workflow"]["skipped_steps"]
+    ledger_branch = data.get("branch")
+    for entry in entries:
+        if entry.get("step") not in _OPTIONAL_STEPS or entry.get("decision") not in _STEP_DECISIONS:
+            print(
+                f"note: discarding invalid pending-step entry {entry!r} from {path}",
+                file=sys.stderr,
+            )
+            continue
+        entry_branch = entry.get("branch")
+        if entry_branch is not None and ledger_branch and entry_branch != ledger_branch:
+            print(
+                f"note: discarding pending-step entry for '{entry['step']}' recorded "
+                f"on branch '{entry_branch}' (ledger branch is '{ledger_branch}'): {path}",
+                file=sys.stderr,
+            )
+            continue
+        # Ledger records keep the frozen {step, decision, at} shape — the
+        # buffer-only provenance key is stripped at the seam.
+        target[:] = [e for e in target if e.get("step") != entry["step"]]
+        target.append({
+            "step": entry["step"], "decision": entry["decision"],
+            "at": entry.get("at") or now_utc(),
+        })
+
+
+def _discard_pending_steps(feature_dir: Path) -> None:
+    """Delete the buffer — called only after the drained ledger write persisted."""
+    _pending_steps_path(feature_dir).unlink(missing_ok=True)
+
+
+def cmd_record_step(
+    root: Path, step: str, *, decision: str, if_absent: bool = False
+) -> str:
     """Record a human run/skip decision for an optional lifecycle step (Feature 007, FR-006).
 
     Appends ``{step, decision, at}`` to the ledger's additive
     ``workflow.skipped_steps`` block. Re-recording the same step replaces its
     prior entry so a resumed workflow never accumulates duplicates.
+
+    Feature 022: before the ledger exists the decision is buffered to the
+    feature-scoped pending-steps file and drained into the ledger at init-spec
+    (FR-007). With ``if_absent=True`` an existing decision — buffered or in the
+    ledger — is reported and left untouched, making skip derivation a single
+    idempotent command that never overwrites an explicit choice.
     """
     if step not in _OPTIONAL_STEPS:
         raise SpecopsError(
@@ -356,11 +488,40 @@ def cmd_record_step(root: Path, step: str, *, decision: str) -> str:
         raise SpecopsError(f"Invalid decision '{decision}'. Expected 'run' or 'skip'.")
 
     feature_dir = get_feature_dir(root)
+
+    if not _ledger_path(feature_dir).is_file():
+        # Pre-ledger seam (Feature 022, FR-007): buffer instead of failing.
+        # There is no ledger identity to validate against yet, so the current
+        # branch is captured as provenance — the drain seam discards entries
+        # recorded on a different branch than the one the ledger binds to.
+        repo = gitops.find_repo(root)
+        if repo is None:
+            raise SpecopsError("Not a Git repository.")
+        branch = gitops.current_branch(repo)
+        entries = _load_pending_steps(feature_dir)
+        existing = _find_step(entries, step)
+        if if_absent and existing is not None:
+            return _already_recorded(step, existing)
+        _upsert_step(entries, step, decision)
+        entries[-1]["branch"] = branch
+        fsutil.atomic_write(
+            _pending_steps_path(feature_dir),
+            json.dumps(
+                {"version": _PENDING_STEPS_VERSION, "steps": entries}, indent=2
+            ) + "\n",
+        )
+        return (
+            f"Recorded optional step '{step}': {decision} "
+            "(buffered until the ledger exists)."
+        )
+
     data, base_rev, base_violations, _repo = load_for_write(root, feature_dir)
 
     steps = data["workflow"]["skipped_steps"]  # ensured present by load_for_write
-    steps[:] = [s for s in steps if s.get("step") != step]
-    steps.append({"step": step, "decision": decision, "at": now_utc()})
+    existing_entry = _find_step(steps, step)
+    if if_absent and existing_entry is not None:
+        return _already_recorded(step, existing_entry)
+    _upsert_step(steps, step, decision)
 
     finalize(feature_dir, data, base_rev, base_violations)
     return f"Recorded optional step '{step}': {decision}."
@@ -549,6 +710,78 @@ def cmd_complete_task(
     )
     finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' completed. Evidence: {evidence_str}"
+
+
+def cmd_sync_tasks(root: Path, *, check: bool = False, as_json: bool = False) -> str:
+    """Explicitly record a task-list mutation into the ledger (Feature 022, US1).
+
+    The converge recording seam: applies the same :func:`_sync_tasks` merge that
+    init-spec/start-task/complete-task already use (append semantics — new IDs →
+    PENDING, vanished IDs → ``orphaned: true``, existing entries preserved by ID)
+    as an explicit, deterministic command, so a task-list mutation (e.g.
+    ``/speckit.converge``) is recorded at the seam instead of lazily at the next
+    task start. ``check=True`` validates the recording path and reports what
+    would change without writing — the converge pre-mutation fail-closed
+    precondition (FR-003). Records state only; coverage judgment stays with the
+    existing read-only surfaces (record, do not validate — FR-004).
+    """
+    feature_dir = get_feature_dir(root)
+    # --check is a pure dry-run: same classification/identity gates, but no
+    # on-disk backup of a migratable ledger (review fix — a precondition
+    # documented as non-writing must not dirty the working tree).
+    data, base_rev, base_violations, _repo = load_for_write(
+        root, feature_dir, backup=not check
+    )
+
+    if not (feature_dir / "tasks.md").is_file():
+        raise SpecopsError(f"tasks.md not found in {feature_dir}. Nothing to sync.")
+
+    raw_tasks = [t for t in data.get("tasks", []) if isinstance(t, dict)]
+    if any("id" not in t for t in raw_tasks):
+        raise LedgerParseError(
+            f"Ledger {_ledger_path(feature_dir)} has task entries without an 'id' "
+            "key; repair the ledger before syncing."
+        )
+    before = {t["id"]: bool(t.get("orphaned")) for t in raw_tasks}
+    _sync_tasks(data, _read_tasks_md(feature_dir))
+    after = data["tasks"]
+    appended = [t["id"] for t in after if t["id"] not in before]
+    newly_orphaned = [
+        t["id"] for t in after
+        if t.get("orphaned") and t["id"] in before and not before[t["id"]]
+    ]
+    # A previously-orphaned ID that reappeared in tasks.md is revived (its
+    # orphaned flag cleared by _sync_tasks) — a recordable change like any other.
+    revived = [
+        t["id"] for t in after
+        if not t.get("orphaned") and before.get(t["id"]) is True
+    ]
+    unchanged = len(after) - len(appended) - len(newly_orphaned) - len(revived)
+    changed = bool(appended or newly_orphaned or revived)
+
+    if changed and not check:
+        finalize(feature_dir, data, base_rev, base_violations)
+
+    if as_json:
+        return json.dumps({
+            "appended": appended, "orphaned": newly_orphaned, "revived": revived,
+            "unchanged": unchanged, "check": check,
+        })
+    if not changed:
+        prefix = "sync-tasks --check: ok" if check else "sync-tasks:"
+        return f"{prefix} no changes."
+    detail = []
+    if appended:
+        detail.append(f"{len(appended)} appended ({', '.join(appended)})")
+    else:
+        detail.append("0 appended")
+    detail.append(f"{len(newly_orphaned)} orphaned"
+                  + (f" ({', '.join(newly_orphaned)})" if newly_orphaned else ""))
+    if revived:
+        detail.append(f"{len(revived)} revived ({', '.join(revived)})")
+    if check:
+        return "sync-tasks --check: ok — would record " + ", ".join(detail) + "."
+    return "sync-tasks: " + ", ".join(detail) + "."
 
 
 def cmd_show(root: Path) -> str:

@@ -50,7 +50,10 @@ def test_install_registers_and_leaves_host_untouched(fake_speckit_repo, compat_o
     data = _manifest(root)
     assert set(data["hooks"]) == {
         "before_specify",  # Feature 013: lightweight-lane recognition directive
-        "after_specify", "before_plan", "after_tasks", "after_implement"
+        "after_specify", "before_plan", "after_tasks", "after_implement",
+        # Feature 022: optional-step decision recording + converge recording seam
+        "after_clarify", "after_checklist", "after_analyze",
+        "before_converge", "after_converge",
     }
     assert any(c["id"] == "specops-review" for c in data["commands"])
     assert (root / ".claude" / "skills" / "specops-review" / "SKILL.md").is_file()

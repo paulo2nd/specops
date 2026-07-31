@@ -62,12 +62,21 @@ composes **Spec Kit's own native workflow engine** to run the augmented lifecycl
 specify workflow run specops
 ```
 
-It drives specify → clarify/checklist (human skip gates, recorded in the ledger)
-→ plan → **human planning-readiness gate** (no tasks until approved) → tasks →
-analyze → a bounded **corrective `do-while` loop** → a **terminal review gate**
-that fails closed unless the verdict is `APPROVED`. Forward-seam phase transitions
-stay owned by the injected directives; the workflow never double-issues them, and
-a fail-closed `specops reconcile` precondition keeps the ledger authoritative.
+It drives specify → clarify/checklist (human skip gates, each decision recorded
+at its gate — pre-ledger decisions are buffered and drained into the ledger at
+creation, Feature 022) → plan → **human planning-readiness gate** (no tasks
+until approved) → tasks → analyze → a bounded **corrective `do-while` loop** →
+a **terminal review gate** that fails closed unless the verdict is `APPROVED`.
+Forward-seam phase transitions stay owned by the injected directives; the
+workflow never double-issues them, and a fail-closed `specops reconcile`
+precondition keeps the ledger authoritative.
+
+Each corrective round also offers **converge** as a recorded optional step
+(Feature 022): after a rejected round the workflow asks whether to run
+`/speckit.converge` to reconcile the task list with what the codebase still
+needs; the run/skip choice is recorded like every optional-step decision, and
+a converge run records its appended tasks through `specops status sync-tasks`
+(see below).
 
 Each corrective round (Feature 016) runs the deterministic `specops preflight` gate
 as a cheap **fail-closed precondition** and then — only when it passes — drives the
@@ -117,7 +126,9 @@ best-effort summary plus a one-line diagnostic.
 ### `specops status init-spec [<name>]`
 
 Creates `<feature_dir>/status.yaml` from the packaged scaffold, syncing task IDs
-from `tasks.md`. Usually run for you by the tasks directive.
+from `tasks.md`. Usually run for you by the tasks directive. Optional-step
+decisions recorded before the ledger existed (see `record-step`) are drained
+into `workflow.skipped_steps` here and the buffer file is deleted (Feature 022).
 
 ### `specops status migrate`
 
@@ -163,10 +174,80 @@ Entering `DONE` requires the latest review cycle to be `APPROVED`.
 `--if-needed` makes the command a no-op (exit 0) when the ledger is already in
 the target phase — for idempotent workflow steps that may re-run (Feature 007).
 
-### `specops status record-step <clarify|checklist|analyze> --decision <run|skip>`
+The `--if-needed` split is a **deliberate contract** (Feature 022): the
+workflow definition uses `--if-needed` because the engine may re-run steps on
+resume/re-entry, where an already-reached phase is a no-op, not an error. The
+injected directives use **bare fail-closed transitions with stop-and-ask**
+instead — in an agent session an unexpected current phase is a question for
+the human, never something to silently skip past.
+
+### `specops status record-step <clarify|checklist|analyze|converge> --decision <run|skip> [--if-absent]`
 
 Records the human's run/skip decision for an optional lifecycle step
 (Feature 007), so skipped steps are on the record instead of silently absent.
+Feature 022 extends it:
+
+- **Pre-ledger buffering**: before the ledger exists the decision is written to
+  the feature-scoped buffer `specs/<feature>/.specops-pending-steps.json`
+  (atomic, replace-by-step, carrying the recording branch as provenance) and
+  drained into `workflow.skipped_steps` at ledger creation (`init-spec`, or
+  lane promotion), which deletes the buffer only **after** the ledger write
+  persists. At the drain seam, entries recorded on a different branch than the
+  one the ledger binds to — and individually invalid entries — are discarded
+  with a stderr note, never silently. The buffer lives in a committed
+  directory, so it may transiently appear in commits between record and drain —
+  harmless; it is removed at drain, and a buffer whose run is abandoned before
+  ledger creation is inert and disappears with the feature directory.
+- **`--if-absent`**: record only when the step has no decision yet (buffered or
+  in the ledger); otherwise report the existing decision and change nothing
+  (exit 0). This is how the tasks/implement directives derive `skip` for steps
+  whose lifecycle window closed — one idempotent command that never overwrites
+  an explicit choice, in both entry modes (workflow-driven and slash-command).
+- **`converge`** is a recordable step: the full workflow's corrective round
+  offers converge through a gate and records the choice. In slash-command mode
+  there is no converge decision point — running converge is recorded through
+  its recording path (`status sync-tasks`), and not running it records nothing.
+
+### `specops status sync-tasks [--check] [--json]`
+
+Explicitly records a task-list mutation into the ledger (Feature 022) — the
+**converge recording seam**. Applies the same merge `init-spec`/`start-task`
+already use: new `tasks.md` IDs enter as `PENDING`, vanished IDs are preserved
+as `orphaned: true`, existing entries (including completed ones) are untouched,
+and a previously-vanished ID that **reappears** in `tasks.md` is revived (its
+`orphaned` flag cleared) so a live task is never left excluded from counts and
+gates. Deterministic and idempotent; a zero-change run succeeds with "no
+changes".
+
+- `--check`: validate the recording path and report what would change,
+  **without writing** — a pure dry-run (it creates no backup even for a
+  migratable old-schema ledger) and the converge pre-mutation precondition.
+  The converge pre-directive runs it **before** converge touches `tasks.md`
+  and stops-and-asks on any non-zero exit, so an unrecorded task-list mutation
+  is never silent.
+- `--json`: stable object `{appended, orphaned, revived, unchanged, check}`.
+- Exit codes: `0` recorded / no changes / check passed; `1` blocking
+  precondition (no ledger yet, `tasks.md` missing); `2` infrastructure or data
+  error (corrupt ledger). It records state and gates nothing — SC-coverage
+  judgment stays with `specops consistency` (record, do not validate).
+
+### Lifecycle coverage: converge and taskstoissues (Feature 022)
+
+Every Spec Kit lifecycle command has a defined SpecOps story:
+
+- **`/speckit.converge`** carries a directive pair: `before_converge` fails
+  closed **before mutation** via `specops status sync-tasks --check`
+  (stop-and-ask, `tasks.md` untouched), and `after_converge` has the agent tag
+  every appended task with `[SC-xxx]` coverage labels, record the append via
+  `specops status sync-tasks`, and report `specops consistency` output without
+  gating on it — an untagged task surfaces as missing coverage, never blocks.
+  On a repository without SpecOps both directives are no-ops.
+- **`/speckit.taskstoissues`** is **read-only with respect to ledger state**:
+  SpecOps registers no hook and no directive for it, it invokes no `specops`
+  command, and its only write surface is the external issue tracker. This
+  contract is protected by a permanent regression test
+  (`tests/unit/test_taskstoissues_readonly.py`); if the upstream command ever
+  mutates repository state, it receives a trivial recording directive.
 
 ### `specops reconcile`
 

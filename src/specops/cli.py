@@ -469,14 +469,50 @@ def status_rebaseline() -> None:
 @status_app.command("record-step")
 @_handle_errors
 def status_record_step(
-    step: str = typer.Argument(..., help="Optional step: clarify | checklist | analyze."),
+    step: str = typer.Argument(
+        ..., help="Optional step: clarify | checklist | analyze | converge."
+    ),
     decision: str = typer.Option(..., "--decision", help="Decision: run | skip."),
+    if_absent: bool = typer.Option(
+        False, "--if-absent",
+        help="Record only when the step has no decision yet; otherwise report "
+             "the existing decision and change nothing (Feature 022).",
+    ),
 ) -> None:
-    """Record a human run/skip decision for an optional lifecycle step (Feature 007)."""
+    """Record a human run/skip decision for an optional lifecycle step (Feature 007).
+
+    Before the ledger exists the decision is buffered in the feature directory
+    and drained into the ledger at init-spec (Feature 022).
+    """
     root = Path(".")
     _require_git(root)
     from specops import status
-    typer.echo(status.cmd_record_step(root, step, decision=decision))
+    typer.echo(status.cmd_record_step(root, step, decision=decision, if_absent=if_absent))
+
+
+@status_app.command("sync-tasks")
+@_handle_errors
+def status_sync_tasks(
+    check: bool = typer.Option(
+        False, "--check",
+        help="Validate the recording path and report what would change, without "
+             "writing (the converge pre-mutation precondition, Feature 022).",
+    ),
+    json_out: bool = typer.Option(
+        False, "--json",
+        help="Emit a stable JSON object: {appended, orphaned, unchanged, check}.",
+    ),
+) -> None:
+    """Explicitly record a task-list mutation into the ledger (Feature 022).
+
+    Appends new tasks.md IDs as PENDING, marks vanished IDs orphaned, and
+    preserves existing entries — the same merge init-spec/start-task already
+    apply, exposed at the converge seam. A zero-change run succeeds.
+    """
+    root = Path(".")
+    _require_git(root)
+    from specops import status
+    typer.echo(status.cmd_sync_tasks(root, check=check, as_json=json_out))
 
 
 @status_app.command("transition-phase")

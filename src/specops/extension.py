@@ -43,12 +43,24 @@ _WORKFLOWS: dict[str, dict[str, str]] = {
 
 # directive stem -> (hook_point, optional, description). Prompt provenance is the
 # directive template (research R1); the host reads these hook points.
+# `/speckit.taskstoissues` deliberately has NO entry: it is verified read-only with
+# respect to ledger state (Feature 022, US3) — guarded by test_taskstoissues_readonly.
 _HOOK_SPECS: list[tuple[str, str, bool, str]] = [
     ("lite", "before_specify", True,
      "SpecOps lightweight-lane recognition (propose the lite lane for small reversible changes)"),
     ("specify", "after_specify", True, "SpecOps specification directives"),
+    ("clarify", "after_clarify", False,
+     "SpecOps optional-step decision recording (clarify ran, Feature 022)"),
+    ("checklist", "after_checklist", False,
+     "SpecOps optional-step decision recording (checklist ran, Feature 022)"),
     ("plan", "before_plan", False, "SpecOps planning directives (consistency gate)"),
     ("tasks", "after_tasks", False, "SpecOps task-generation directives (ledger creation seam)"),
+    ("analyze", "after_analyze", False,
+     "SpecOps optional-step decision recording (analyze ran, Feature 022)"),
+    ("converge-pre", "before_converge", False,
+     "SpecOps converge recording-path precondition (fail closed before mutation, Feature 022)"),
+    ("converge", "after_converge", False,
+     "SpecOps converge recording directives (deterministic ledger append, Feature 022)"),
     ("implement", "after_implement", False, "SpecOps implementation directives (review seam)"),
 ]
 
