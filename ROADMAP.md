@@ -90,7 +90,7 @@ Roadmap status uses four values:
 | 019 | Hardening II — API & State Robustness | MERGED | 018 | 1.0 Readiness |
 | 020 | GitPython Removal | MERGED | 018 | 1.0 Readiness |
 | 021 | Contract Freeze for 1.0 | MERGED | 018, 019, 020 | 1.0 Readiness |
-| 022 | Lifecycle Recording Coverage | PLANNED | 006, 007, 010, 021 | Lifecycle Coverage |
+| 022 | Lifecycle Recording Coverage | MERGED | 006, 007, 010, 021 | Lifecycle Coverage |
 | 023 | Context Read-Set Consumption in IMPLEMENT | MERGED | 009 | Lifecycle Coverage |
 
 ### Build sequence (dependency review — 2026-07-23)
