@@ -85,9 +85,12 @@ directives drive the ledger at each stage seam:
 | Speckit stage | What SpecOps does |
 |---|---|
 | **specify** | Marks the repo as SpecOps-managed (informational; no ledger yet) |
+| **clarify / checklist / analyze** | Records the run decision; a skip is derived — never forced — at the next stage (`record-step`, buffered before the ledger exists) |
 | **plan** | Enforces empirical path verification and the `consistency` gate |
-| **tasks** | Creates the ledger (`status init-spec`), advances the phase to `TASKS`, and requires `[SC-xxx]` coverage tags on every task |
+| **tasks** | Creates the ledger (`status init-spec`, draining buffered decisions), advances the phase to `TASKS`, and requires `[SC-xxx]` coverage tags on every task |
 | **implement** | Opens `IMPLEMENT`, resolves the context map's minimal read set and scopes reads to it (guidance, never a gate; no-op without a map), runs the evidence-backed ledger loop, then opens `REVIEW` |
+| **converge** | Fails closed *before* an unrecordable task-list mutation (`sync-tasks --check`), then records appended tasks with coverage tags (`sync-tasks`) |
+| **taskstoissues** | Nothing — verified read-only for ledger state, protected by a regression test |
 | **review** | `/specops-review` validates the diff and records `APPROVED` / `REJECTED` |
 
 The phase machine is `SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE`.
@@ -100,7 +103,7 @@ directives degrade to no-ops.
 |---|---|
 | `specops init` | Prepare a Speckit repo: inject directives, install `/specops-review`, create `specops.json` |
 | `specops extension …` | Native Spec Kit extension lifecycle, plus the `specops` and `specops-lite` workflows |
-| `specops status …` | Drive the ledger: `show`, `init-spec`, `start-task`, `complete-task`, `transition-phase`, `record-step`, `migrate`, `rebaseline` |
+| `specops status …` | Drive the ledger: `show`, `init-spec`, `start-task`, `complete-task`, `transition-phase`, `record-step`, `sync-tasks`, `migrate`, `rebaseline` |
 | `specops preflight` | Deterministic review gate, cheapest-first — CI-safe (formerly `specops review`) |
 | `specops reconcile` | Read-only gate: every recorded commit reachable, every `DONE` task evidenced |
 | `specops consistency` | Read-only gate: SC coverage tags + plan path action suffixes |

@@ -17,15 +17,18 @@ specops status sync-tasks [--check] [--json]
 | (default) | Load ledger + `tasks.md` for the active feature; apply `_sync_tasks` (new IDs → `PENDING`, vanished IDs → `orphaned: true`, existing entries preserved by ID); save through the standard ledger write path (lock + revision check). Report appended / orphaned / unchanged counts. Zero-change runs succeed with "no changes". |
 | `--check` | Validate the recording path **without writing**: active feature resolvable, ledger present and loadable, `tasks.md` readable. Report what would be appended/orphaned. This is the converge pre-mutation precondition (FR-003). |
 
-## Exit codes (frozen 0/1/2 contract)
+## Exit codes (frozen 0/1/2 contract — implemented mapping)
 
 | Code | Meaning | Example diagnostics (specific, FR-003) |
 |---|---|---|
-| 0 | Recorded (or `--check` passed; zero-change included) | `sync-tasks: 3 appended, 0 orphaned` / `sync-tasks --check: ok (3 would append)` |
-| 2 | Recording path unavailable / infrastructure error | `No ledger found for feature '…' — run 'specops status init-spec' first`; `Ledger parse error: …`; `tasks.md not found under '…'` |
+| 0 | Recorded (or `--check` passed; zero-change included) | `sync-tasks: 3 appended, 0 orphaned` / `sync-tasks --check: ok — would record …` |
+| 1 | Blocking precondition — recording path not ready (existing `SpecopsError` convention) | `Ledger not found: … Run 'specops status init-spec' first.`; `tasks.md not found in …` |
+| 2 | Infrastructure / data error | `Cannot parse ledger …` (corrupt YAML / invalid structure) |
 
-No exit-1 outcome: sync-tasks records state, it gates nothing (record, do not
-validate — FR-004). SC-coverage reporting is `specops consistency`'s job.
+sync-tasks itself gates nothing on content (record, do not validate — FR-004):
+exit 1 marks a missing precondition, never a judgment on the tasks. SC-coverage
+reporting is `specops consistency`'s job. For the directive, ANY non-zero exit
+of `--check` → stop-and-ask.
 
 ## Output
 

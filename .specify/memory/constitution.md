@@ -1,6 +1,39 @@
 <!--
 Sync Impact Report
 ==================
+Version change: 1.9.3 → 1.10.0
+Rationale (1.10.0, 2026-07-31): MINOR amendment landed during /speckit-implement of
+specs/022-lifecycle-recording-coverage (Lifecycle Recording Coverage). Feature 022
+gives every Spec Kit lifecycle command a defined SpecOps story, and one existing
+Principle IV directive — **Ledger & Phase Wiring** — is broadened (no principle
+removed or redefined): directive coverage extends beyond the phase-bearing stages
+to the auxiliary and optional lifecycle commands. Converge's task-list append now
+enters the ledger through a deterministic CLI seam (`specops status sync-tasks`,
+additive), failing closed BEFORE mutation via `sync-tasks --check` (stop-and-ask,
+never silent ledger divergence), with SC coverage tags imposed by the directive and
+coverage reported — never gated — by `specops consistency` (record, do not
+validate). Optional-step run/skip decisions (clarify, checklist, analyze, and the
+workflow's converge gate) are recorded in BOTH entry modes: run decisions via new
+after_clarify/after_checklist/after_analyze hooks, skips derived at the next seam
+with the additive `record-step --if-absent`, and pre-ledger decisions buffered in
+the feature-scoped pending-steps file drained at `status init-spec` (the ledger is
+still created at the tasks stage — the buffer is transient bookkeeping, not ledger
+state). `/speckit.taskstoissues` is verified read-only for ledger state (no hook,
+no directive — contract by absence, pinned by a regression test). Recording is
+mandatory; the step never is: no optional step is forced and a recorded skip never
+blocks. Every new directive degrades to a no-op where SpecOps is not initialized.
+MINOR bump: materially expanded guidance on a non-removed principle; the
+additive/never-destructive intent is preserved; ledger schema stays v7 (no
+migration) and all CLI/manifest changes are additive under the Feature 021 freeze.
+Templates updated in the same change set: src/specops/templates/directives/
+converge-pre.md (new), converge.md (new), clarify.md (new), checklist.md (new),
+analyze.md (new), tasks.md (skip derivation), implement.md (analyze skip
+derivation), and src/specops/templates/workflows/specops/workflow.yml (gate-adjacent
+record steps, corrective-round converge gate, --if-needed contract comment).
+Verified by the feature's own fixture tests, never against this repository (No
+Self-Application).
+
+Previous report (1.9.3):
 Version change: 1.9.2 → 1.9.3
 Rationale (1.9.3, 2026-07-28): PATCH amendment landed with Feature 021 (Contract Freeze
 for 1.0), the final feature of the 1.0 Readiness cycle. Principle VI (Exit Codes as
@@ -465,6 +498,20 @@ sourced identically from the SpecOps templates. The directives are:
   stage seam, never left to the human to trigger manually. The ledger is created
   at the tasks stage (after `tasks.md` exists), and the review cycle is opened at
   implement completion so `/specops-review` has an open cycle to record into.
+  Since Feature 022 this wiring also covers the auxiliary and optional lifecycle
+  commands: a converge run's task-list append enters the ledger through the
+  deterministic `specops status sync-tasks` seam — failing closed **before**
+  mutation via `sync-tasks --check` (stop-and-ask; an unrecorded task-list
+  mutation is never silent) — with SC coverage tags imposed by the directive and
+  coverage **reported, never gated**, by `specops consistency`; optional-step
+  run/skip decisions (clarify, checklist, analyze, and the workflow's converge
+  gate) are recorded in both entry modes via `status record-step` — run
+  decisions by the after-command hooks, skips derived at the next seam with
+  `--if-absent` (never overwriting an explicit choice), and pre-ledger decisions
+  buffered in the feature-scoped pending-steps file that `init-spec` drains and
+  deletes. Recording is mandatory; the step never is — no optional step is
+  forced and a recorded skip never blocks. `/speckit.taskstoissues` is verified
+  read-only with respect to ledger state and deliberately receives no directive.
   When a context map is present, closing a task or opening a review cycle also
   snapshots the resolved context ids and the context-map digest into the ledger
   record (or an explicit `{map: none}`/`{map: invalid}` marker), the review
@@ -575,4 +622,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.9.3 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-28
+**Version**: 1.10.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-31

@@ -57,6 +57,7 @@ starts clean; re-records replace prior entries in place.
 ## Exit codes (frozen 0/1/2 contract)
 
 0 on recorded (ledger or buffer) and on the `--if-absent` no-op (existing
-decision reported); 2 on infrastructure/usage error (unknown step, invalid
-decision, unresolvable feature, corrupt ledger). No exit-1 outcome. Unchanged
-from today except the pre-ledger success path.
+decision reported); 1 on validation/precondition failures (unknown step,
+invalid decision, unresolvable feature — the existing `SpecopsError`
+convention, unchanged); 2 on infrastructure/data errors (corrupt ledger).
+Unchanged from today except the pre-ledger success path.

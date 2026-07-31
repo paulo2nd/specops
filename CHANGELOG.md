@@ -13,6 +13,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Feature 022 — Lifecycle Recording Coverage. Every Spec Kit lifecycle command now
+has a defined SpecOps story: converge records its task-list append through a
+deterministic CLI seam (or fails closed before mutating), optional-step run/skip
+decisions are recorded in both entry modes — including before the ledger exists —
+and taskstoissues is verified read-only. All changes additive under the 1.0
+contract freeze; the ledger schema stays at v7 (no migration).
+
+### Added (Feature 022)
+
+- **`specops status sync-tasks [--check] [--json]`** (new, additive): explicitly
+  records a task-list mutation into the ledger using the same append merge
+  `init-spec`/`start-task` already apply — new IDs enter as `PENDING`, vanished
+  IDs are preserved as `orphaned`, completed entries are untouched;
+  deterministic, idempotent, zero-change runs succeed. `--check` validates the
+  recording path without writing (the converge pre-mutation precondition);
+  `--json` emits `{appended, orphaned, unchanged, check}`.
+- **Converge directive pair** (`before_converge`/`after_converge` native hooks):
+  fail closed **before mutation** via `sync-tasks --check` (stop-and-ask,
+  `tasks.md` untouched, specific diagnostic — never silent ledger divergence);
+  after converge, tag appended tasks `[SC-xxx]`, record via `sync-tasks`, and
+  report `specops consistency` without gating (record, do not validate).
+- **Pre-ledger decision buffering in `record-step`**: before the ledger exists a
+  run/skip decision is buffered to the feature-scoped
+  `specs/<feature>/.specops-pending-steps.json` (atomic, replace-by-step) and
+  drained into `workflow.skipped_steps` at `init-spec`, which deletes the
+  buffer; an abandoned run's buffer is inert and dies with its feature
+  directory. Generalizes the issue-#50 fix at the CLI layer.
+- **`record-step --if-absent`** (new, additive): record only when the step has
+  no decision yet; otherwise report the existing decision and change nothing —
+  the idempotent primitive behind skip derivation, never overwriting an
+  explicit choice. **`converge`** joins the recordable step values.
+- **Run-decision recording hooks** (`after_clarify`/`after_checklist`/
+  `after_analyze`): in slash-command mode each optional step records its own
+  run decision; the tasks/implement directives derive `skip` at the next seam
+  (`--if-absent`, native-manifest path only) — decision parity across entry
+  modes, with no step ever forced and no block on a recorded skip.
+- **Workflow converge gate**: the full workflow's corrective round offers
+  `/speckit.converge` as a recorded optional step (gate → `record-step
+  converge` → conditional run) before the corrective implement pass.
+- **taskstoissues read-only contract**: verified and documented — no hook, no
+  directive, ledger byte-identical across install/update; protected by a
+  permanent regression test that pins the hook registry to the documented set.
+
+### Changed (Feature 022)
+
+- **`specops` workflow definition**: the clarify/checklist record steps return
+  to sit adjacent to their gates (the issue-#50 after-tasks deferral is
+  dissolved by pre-ledger buffering), and the `--if-needed` asymmetry between
+  the workflow definition (idempotent engine re-runs) and the directives (bare
+  fail-closed transitions with stop-and-ask) is documented as a deliberate
+  contract in the definition and in docs/commands.md.
+
+---
+
 Feature 023 — Context Read-Set Consumption in IMPLEMENT. Closes the Feature 009
 loop: the phase that reads the most now consumes the context map's minimal read
 set. Directive-and-documentation change only — no CLI, schema, or frozen-contract

@@ -90,9 +90,12 @@ rodou, as diretivas injetadas conduzem o ledger em cada costura de estágio:
 | Estágio Speckit | O que o SpecOps faz |
 |---|---|
 | **specify** | Marca o repositório como gerenciado pelo SpecOps (informativo; ainda sem ledger) |
+| **clarify / checklist / analyze** | Registra a decisão de rodar; um skip é derivado — nunca forçado — no estágio seguinte (`record-step`, com buffer antes de o ledger existir) |
 | **plan** | Impõe a verificação empírica de caminhos e o gate `consistency` |
-| **tasks** | Cria o ledger (`status init-spec`), avança a fase para `TASKS` e exige tags de cobertura `[SC-xxx]` em toda tarefa |
+| **tasks** | Cria o ledger (`status init-spec`, drenando decisões em buffer), avança a fase para `TASKS` e exige tags de cobertura `[SC-xxx]` em toda tarefa |
 | **implement** | Abre `IMPLEMENT`, resolve o read set mínimo do mapa de contexto e escopa as leituras a ele (orientação, nunca um gate; no-op sem mapa), executa o loop do ledger com evidências e então abre `REVIEW` |
+| **converge** | Falha fechado *antes* de uma mutação irregistrável da lista de tarefas (`sync-tasks --check`), depois registra as tarefas anexadas com tags de cobertura (`sync-tasks`) |
+| **taskstoissues** | Nada — verificado como somente leitura para o estado do ledger, protegido por teste de regressão |
 | **review** | O `/specops-review` valida o diff e registra `APPROVED` / `REJECTED` |
 
 A máquina de fases é `SPECIFY → PLAN → TASKS → IMPLEMENT → REVIEW → DONE`.
@@ -105,7 +108,7 @@ sozinhos — as diretivas degradam para no-ops.
 |---|---|
 | `specops init` | Prepara um repositório Speckit: injeta diretivas, instala o `/specops-review`, cria `specops.json` |
 | `specops extension …` | Ciclo de vida nativo de extensões do Spec Kit, mais os workflows `specops` e `specops-lite` |
-| `specops status …` | Conduz o ledger: `show`, `init-spec`, `start-task`, `complete-task`, `transition-phase`, `record-step`, `migrate`, `rebaseline` |
+| `specops status …` | Conduz o ledger: `show`, `init-spec`, `start-task`, `complete-task`, `transition-phase`, `record-step`, `sync-tasks`, `migrate`, `rebaseline` |
 | `specops preflight` | Gate determinístico de review, do mais barato para o mais caro — seguro para CI (antigo `specops review`) |
 | `specops reconcile` | Gate somente leitura: todo commit registrado é alcançável, toda tarefa `DONE` tem evidência |
 | `specops consistency` | Gate somente leitura: tags de cobertura SC + sufixos de ação nos caminhos do plano |
