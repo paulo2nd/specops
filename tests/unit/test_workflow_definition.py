@@ -78,6 +78,14 @@ def test_optional_steps_are_human_gated() -> None:
         assert ids.index(f"{opt}-gate") < ids.index(f"{opt}-record")
 
 
+def test_record_steps_run_after_the_ledger_exists() -> None:
+    """Issue #50: `status record-step` requires the ledger, which init-spec creates
+    during the tasks step — every record step must therefore come after tasks."""
+    ids = [s["id"] for s in _load()["steps"]]
+    for opt in ("clarify", "checklist", "analyze"):
+        assert ids.index("tasks") < ids.index(f"{opt}-record")
+
+
 def test_no_duplicate_step_ids() -> None:
     ids = [s["id"] for s in _flatten(_load()["steps"])]
     assert len(ids) == len(set(ids))
