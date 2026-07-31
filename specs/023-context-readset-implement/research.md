@@ -13,8 +13,11 @@ instructs the agent to read the `**SpecOps-Contexts**: …` line from the active
 feature's `plan.md` and run, for each declared context id:
 
 ```
-specops context resolve --id <cid> --phase implement
+specops context resolve --id <cid> --phase implement --json
 ```
+
+(`--json` is required: the package — `read_set`, `expanded_read_set` — is
+emitted only in the JSON envelope; the human output is a one-line summary.)
 
 The session's **context package** is the union of each resolved package's
 `read_set` plus `expanded_read_set`. Task-level reads are scoped to this union

@@ -2,7 +2,10 @@
 
 Covers: map digest determinism (R1), reverse-edge impact incl. cycle-safety and
 closed edge-set attribution (R2/R3), plan-topology validation (R4), stale
-detection over tracked files (R8), and provenance markers (R6). Behavior is
+detection over tracked files (R8), and provenance markers (R6). Also covers the
+Feature 023 IMPLEMENT-phase read-set consumption invariants (SC-001 coverage of
+per-path packages by the declared-context union, dependency-contributed reads,
+determinism, and the no-map/invalid-map degradation statuses). Behavior is
 exercised against fixtures/inline maps — never this repository.
 """
 from __future__ import annotations

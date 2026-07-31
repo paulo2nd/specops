@@ -10,6 +10,17 @@ import yaml
 
 from specops import ledger
 
+# Product directive templates — the single source for both delivery paths
+# (native extension hooks and legacy marker-block injection).
+DIRECTIVES_DIR = (
+    Path(__file__).resolve().parents[1] / "src" / "specops" / "templates" / "directives"
+)
+
+
+def directive_path(name: str) -> Path:
+    """Path of a product directive template (e.g. ``directive_path("implement")``)."""
+    return DIRECTIVES_DIR / f"{name}.md"
+
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Register the golden-capture record flag (Feature 018 behavior freeze).

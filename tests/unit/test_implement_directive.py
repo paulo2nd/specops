@@ -6,7 +6,8 @@ its content encodes the contract C1-C7 of
 specs/023-context-readset-implement/contracts/implement-directive.md:
 resolve the IMPLEMENT-phase read set at session start and scope reads to it,
 guidance-not-gate with discoveries routed through the existing Feature 010 flow,
-and safe degradation (no map -> no-op; any non-zero exit -> proceed unscoped).
+and safe degradation (no map / no match -> no-op; any non-zero exit -> proceed
+unscoped).
 """
 from __future__ import annotations
 
@@ -14,16 +15,16 @@ import re
 from pathlib import Path
 
 from specops import extension, initializer
+from tests.conftest import directive_path
 
-IMPLEMENT_MD = (
-    Path(__file__).resolve().parents[2]
-    / "src" / "specops" / "templates" / "directives" / "implement.md"
-)
+IMPLEMENT_MD = directive_path("implement")
 
 SECTION_HEADING = "### Context Read Set (Feature 023)"
 
-# The only CLI surfaces the section may name (contract C7): existing, frozen ones.
+# The only CLI surfaces the section may name (contract C7): existing, frozen
+# ones, matched exactly — a prefix, extension, or unknown flag must fail.
 ALLOWED_COMMANDS = {"specops context resolve", "specops trace acknowledge"}
+ALLOWED_FLAGS = {"--id", "--phase", "--json"}
 
 
 def _directive_text() -> str:
@@ -31,12 +32,14 @@ def _directive_text() -> str:
 
 
 def _readset_section() -> str:
-    """The Context Read Set section body (heading to the next ### heading)."""
+    """The Context Read Set section body (heading to the next ### heading),
+    whitespace-normalized: content must not depend on markdown hard-wrapping."""
     text = _directive_text()
     assert SECTION_HEADING in text, f"missing section heading {SECTION_HEADING!r}"
     start = text.index(SECTION_HEADING)
     nxt = text.find("### ", start + len(SECTION_HEADING))
-    return text[start:] if nxt == -1 else text[start:nxt]
+    raw = text[start:] if nxt == -1 else text[start:nxt]
+    return " ".join(raw.split())
 
 
 # --- native path (extensions.yml after_implement hook) ----------------------
@@ -54,11 +57,12 @@ def test_native_hook_carries_implement_readset_section() -> None:
 
 def test_directive_resolves_implement_readset_at_session_start() -> None:
     section = _readset_section()
-    # C1: before the first task, one resolve per declared context id from plan.md.
+    # C1: before the first task, one resolve per declared context id from
+    # plan.md — with --json, since the package is only in the JSON envelope.
     assert "before the first task" in section
     assert "**SpecOps-Contexts**" in section
     assert "specops context resolve --id" in section
-    assert "--phase implement" in section
+    assert "--phase implement --json" in section
 
 
 def test_directive_uses_lowercase_implement_phase_flag() -> None:
@@ -79,11 +83,20 @@ def test_directive_scopes_reads_to_union_of_packages() -> None:
 
 
 def test_directive_readset_names_no_new_surfaces() -> None:
-    # C7: only existing frozen surfaces are named — no new command, flag, or record.
+    # C7: only existing frozen surfaces are named — no new command, flag, or
+    # record. Commands are matched exactly (an extension like
+    # `trace acknowledge-read` must fail), and every --flag in the section must
+    # be a known flag of the allowed commands.
     section = _readset_section()
-    for cmd in set(re.findall(r"specops [a-z]+(?: [a-z-]+)?", section)):
-        assert any(cmd.startswith(allowed) or allowed.startswith(cmd)
-                   for allowed in ALLOWED_COMMANDS), f"unexpected surface: {cmd!r}"
+    for span in re.findall(r"`(specops[^`]*)`", section):
+        cmd_tokens = ["specops"]
+        for tok in span.split()[1:]:
+            if tok.startswith("-") or tok.startswith("<"):
+                break
+            cmd_tokens.append(tok)
+        assert " ".join(cmd_tokens) in ALLOWED_COMMANDS, f"unexpected surface: {span!r}"
+    for flag in set(re.findall(r"--[a-z][a-z-]*", section)):
+        assert flag in ALLOWED_FLAGS, f"unexpected flag: {flag!r}"
     assert "start-task" not in section  # surfacing declined (research R3)
 
 
@@ -122,11 +135,19 @@ def test_directive_degrades_when_no_map_present() -> None:
     assert "no-op" in section
 
 
+def test_directive_degrades_no_matching_context_contributes_no_package() -> None:
+    # C6 (review fix F3): a declared id with no matching context (also exit 0 —
+    # e.g. the map was edited after plan time) contributes no package; the
+    # agent reads normally for that scope instead of silently dropping context.
+    section = _readset_section().lower()
+    assert "no matching context" in section
+    assert "contributes no package" in section
+
+
 def test_directive_degrades_on_any_nonzero_exit_never_halts() -> None:
     # C6: any non-zero exit of the resolution step -> proceed without read-set
     # scoping; never halt. (Covers the invalid-map exit 1, frozen contract.)
-    # Whitespace-normalized: content must not depend on markdown hard-wrapping.
-    section = " ".join(_readset_section().lower().split()).replace("**", "")
+    section = _readset_section().lower()
     assert "non-zero exit" in section
     assert "without read-set scoping" in section
     assert "never halt" in section

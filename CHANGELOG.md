@@ -23,7 +23,7 @@ change.
 - **Implement directive — Context Read Set section**: at session start, before the
   first task, the agent resolves the IMPLEMENT-phase context package for each
   context declared in the plan (`specops context resolve --id <cid> --phase
-  implement`) and scopes the session's reads to the union of the resolved
+  implement --json`) and scopes the session's reads to the union of the resolved
   packages (`read_set` + `expanded_read_set`). The read set is guidance plus
   record, never a gate: out-of-set reads block nothing and need no
   acknowledgement; a discovery that changes an undeclared path follows the

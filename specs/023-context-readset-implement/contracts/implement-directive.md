@@ -18,7 +18,7 @@ continues to cover the CLI-absent case for the whole block.
 
 | # | Instruction | Spec trace |
 |---|-------------|-----------|
-| C1 | At session start, **before the first task** (with the other session-start steps), read the `**SpecOps-Contexts**:` line from the active feature's `plan.md`; for each declared context id run `specops context resolve --id <cid> --phase implement` | FR-001 |
+| C1 | At session start, **before the first task** (with the other session-start steps), read the `**SpecOps-Contexts**:` line from the active feature's `plan.md`; for each declared context id run `specops context resolve --id <cid> --phase implement --json` (`--json` is required — the package fields are emitted only in the JSON envelope; the human output is a one-line summary) | FR-001 |
 | C2 | The literal flag value is lowercase `implement` (the uppercase ledger phase name is a usage error here) | FR-001, research R2 |
 | C3 | Scope the session's reads to the union of the resolved packages (`read_set` + `expanded_read_set` across declared contexts); reading less is always fine | FR-001, FR-002 |
 | C4 | The read set is guidance plus record, **never a gate**: an out-of-set read is permitted, blocks nothing, and requires no acknowledgement by itself | FR-003 |
@@ -30,10 +30,11 @@ continues to cover the CLI-absent case for the whole block.
 > map, selector resolves to nothing — exit 0) is unreachable by construction on
 > this path: the directive resolves by `--id` taken from the plan's declared
 > context line, and `context plan-check` already blocked unknown declared ids
-> at plan time (`S_UNKNOWN_DECLARED_CONTEXT`). No dedicated directive
-> instruction is required; if it ever occurs (e.g. the map was edited
-> mid-feature), the outcome is covered by C6's non-blocking rule — the package
-> is simply absent and reads proceed normally for that selector.
+> at plan time (`S_UNKNOWN_DECLARED_CONTEXT`). If it ever occurs (e.g. the map
+> was edited mid-feature), the directive's degradation rule covers it
+> explicitly: the declared context contributes no package and reads proceed
+> normally for its scope — still exit 0, still never a gate (review fix,
+> finding F3).
 
 ## Delivery invariants
 
