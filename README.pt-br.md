@@ -93,7 +93,7 @@ rodou, as diretivas injetadas conduzem o ledger em cada costura de estágio:
 | **clarify / checklist / analyze** | Registra a decisão de rodar; um skip é derivado — nunca forçado — no estágio seguinte (`record-step`, com buffer antes de o ledger existir) |
 | **plan** | Impõe a verificação empírica de caminhos e o gate `consistency` |
 | **tasks** | Cria o ledger (`status init-spec`, drenando decisões em buffer), avança a fase para `TASKS` e exige tags de cobertura `[SC-xxx]` em toda tarefa |
-| **implement** | Abre `IMPLEMENT`, resolve o read set mínimo do mapa de contexto e escopa as leituras a ele (orientação, nunca um gate; no-op sem mapa), executa o loop do ledger com evidências e então abre `REVIEW` |
+| **implement** | Abre `IMPLEMENT`, resolve o read set mínimo do mapa de contexto e parte dele para as leituras (orientação, nunca um gate nem um teto para discovery; no-op sem mapa), executa o loop do ledger com evidências e então abre `REVIEW` |
 | **converge** | Falha fechado *antes* de uma mutação irregistrável da lista de tarefas (`sync-tasks --check`), depois registra as tarefas anexadas com tags de cobertura (`sync-tasks`) |
 | **taskstoissues** | Nada — verificado como somente leitura para o estado do ledger, protegido por teste de regressão |
 | **review** | O `/specops-review` valida o diff e registra `APPROVED` / `REJECTED` |

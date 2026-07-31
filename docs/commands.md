@@ -399,9 +399,11 @@ non-blocking warning when the map changed since planning.
 The read set is also consumed at **implement time** (Feature 023): the implement
 directive resolves the IMPLEMENT-phase context package for each context declared
 in the plan (`specops context resolve --id <cid> --phase implement --json`) at
-session start and scopes the agent's reads to the union of the resolved
-packages. The read set is guidance plus record, never a gate — an out-of-set
-read blocks nothing, and a discovery that changes an undeclared path follows the
+session start and seeds the agent's reads with the union of the resolved
+packages. The read set is guidance plus record — never a gate, and never a
+ceiling on discovery: an out-of-set read blocks nothing, reads needed to
+implement a task correctly are always in scope even when outside the union,
+and a discovery that changes an undeclared path follows the
 existing `specops trace acknowledge` flow; this step records nothing by itself.
 Without a map the step is a supported no-op; any non-zero exit of the resolution
 step means the session proceeds without read-set scoping.

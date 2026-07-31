@@ -52,12 +52,17 @@ The ledger is the authority; the agent is the executor.
   (the phase value is the map's lowercase phase key; the uppercase ledger phase
   name is not a valid value here — and `--json` is required: the package fields
   below are emitted only in the JSON envelope).
-- Scope the session's reads to the **union** of the resolved packages — each
+- Start the session's reads from the **union** of the resolved packages — each
   package's `read_set` plus its `expanded_read_set` (dependency-contributed
-  reads). Reading less than the union is always fine; the union bounds what to
-  read, not what must be read.
-- The read set is **guidance plus record — never a gate**: a read outside the
-  union is permitted, blocks nothing, and by itself requires no acknowledgement.
+  reads). Reading less than the union is always fine; the union is the default
+  scope, not a required reading list.
+- The read set is **guidance plus record — never a gate, and never a ceiling on
+  discovery**: a read outside the union is permitted, blocks nothing, and by
+  itself requires no acknowledgement. When implementing a task correctly
+  requires understanding files beyond the union — call sites, tests, configs,
+  or any other affected surface — read them. Never skip a needed read, or make
+  a change blind, to stay inside the read set: token economy never outranks
+  correctness.
 - A genuine discovery that leads to a **changed** path not declared in
   `plan.md` follows the "Discovered Paths (Feature 010)" flow below
   (`specops trace acknowledge`) — reads are guidance; the drift gate governs

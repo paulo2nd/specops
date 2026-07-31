@@ -88,7 +88,7 @@ directives drive the ledger at each stage seam:
 | **clarify / checklist / analyze** | Records the run decision; a skip is derived — never forced — at the next stage (`record-step`, buffered before the ledger exists) |
 | **plan** | Enforces empirical path verification and the `consistency` gate |
 | **tasks** | Creates the ledger (`status init-spec`, draining buffered decisions), advances the phase to `TASKS`, and requires `[SC-xxx]` coverage tags on every task |
-| **implement** | Opens `IMPLEMENT`, resolves the context map's minimal read set and scopes reads to it (guidance, never a gate; no-op without a map), runs the evidence-backed ledger loop, then opens `REVIEW` |
+| **implement** | Opens `IMPLEMENT`, resolves the context map's minimal read set and seeds reads with it (guidance, never a gate nor a ceiling on discovery; no-op without a map), runs the evidence-backed ledger loop, then opens `REVIEW` |
 | **converge** | Fails closed *before* an unrecordable task-list mutation (`sync-tasks --check`), then records appended tasks with coverage tags (`sync-tasks`) |
 | **taskstoissues** | Nothing — verified read-only for ledger state, protected by a regression test |
 | **review** | `/specops-review` validates the diff and records `APPROVED` / `REJECTED` |
