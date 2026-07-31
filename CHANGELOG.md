@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-31
+
+Lifecycle Coverage milestone (Features 022 + 023): every Spec Kit lifecycle
+command has a defined SpecOps story, and the IMPLEMENT phase consumes the
+context map's minimal read set.
+
 Feature 022 — Lifecycle Recording Coverage. Every Spec Kit lifecycle command now
 has a defined SpecOps story: converge records its task-list append through a
 deterministic CLI seam (or fails closed before mutating), optional-step run/skip
@@ -78,7 +84,7 @@ loop: the phase that reads the most now consumes the context map's minimal read
 set. Directive-and-documentation change only — no CLI, schema, or frozen-contract
 change.
 
-### Added
+### Added (Feature 023)
 
 - **Implement directive — Context Read Set section**: at session start, before the
   first task, the agent resolves the IMPLEMENT-phase context package for each
