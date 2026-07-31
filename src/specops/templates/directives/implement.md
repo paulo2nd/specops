@@ -55,6 +55,12 @@ The ledger is the authority; the agent is the executor.
   package's `read_set` plus its `expanded_read_set` (dependency-contributed
   reads). Reading less than the union is always fine; the union bounds what to
   read, not what must be read.
+- The read set is **guidance plus record — never a gate**: a read outside the
+  union is permitted, blocks nothing, and by itself requires no acknowledgement.
+- A genuine discovery that leads to a **changed** path not declared in
+  `plan.md` follows the "Discovered Paths (Feature 010)" flow below
+  (`specops trace acknowledge`) — reads are guidance; the drift gate governs
+  changes, and that flow is the paved road for them.
 
 ### Discovered Paths (Feature 010)
 

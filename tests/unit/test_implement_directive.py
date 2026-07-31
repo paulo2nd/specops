@@ -85,3 +85,28 @@ def test_directive_readset_names_no_new_surfaces() -> None:
         assert any(cmd.startswith(allowed) or allowed.startswith(cmd)
                    for allowed in ALLOWED_COMMANDS), f"unexpected surface: {cmd!r}"
     assert "start-task" not in section  # surfacing declined (research R3)
+
+
+# --- content: US2 — guidance plus record, never a gate (C4/C5) --------------
+
+
+def test_directive_readset_is_never_a_gate() -> None:
+    # C4: an out-of-set read is permitted, blocks nothing, and needs no
+    # acknowledgement by itself.
+    section = _readset_section().lower()
+    assert "never a gate" in section
+    assert "guidance" in section
+    assert "no acknowledgement" in section
+
+
+def test_directive_routes_discoveries_to_existing_acknowledge_flow() -> None:
+    # C5: a discovery that leads to a *changed* undeclared path follows the
+    # existing Feature 010 flow — cross-reference, not restatement.
+    section = _readset_section()
+    assert "Discovered Paths (Feature 010)" in section
+    assert "specops trace acknowledge" in section
+    # Cross-reference, not restatement: the acknowledge command's flags live in
+    # the Feature 010 section only.
+    assert "--reason" not in section
+    # No new acknowledgement type for reads is invented.
+    assert "read acknowledgement" not in section.lower()

@@ -65,11 +65,11 @@ This feature touches only: `src/specops/templates/directives/implement.md`,
 
 ### Tests for User Story 2 (write first, confirm they FAIL) ⚠️
 
-- [ ] T005 [US2] Extend tests/unit/test_implement_directive.py with failing content tests for C4 + C5: (a) the section states the read set never blocks — an out-of-set read is permitted and needs no acknowledgement by itself; (b) it cross-references the existing "Discovered Paths (Feature 010)" flow (`specops trace acknowledge`) for a discovery that leads to a **changed** undeclared path, without restating the acknowledgement contract; (c) negative — no "read acknowledgement" or other new record type appears
+- [x] T005 [US2] Extend tests/unit/test_implement_directive.py with failing content tests for C4 + C5: (a) the section states the read set never blocks — an out-of-set read is permitted and needs no acknowledgement by itself; (b) it cross-references the existing "Discovered Paths (Feature 010)" flow (`specops trace acknowledge`) for a discovery that leads to a **changed** undeclared path, without restating the acknowledgement contract; (c) negative — no "read acknowledgement" or other new record type appears
 
 ### Implementation for User Story 2
 
-- [ ] T006 [US2] Extend the Context Read Set section in src/specops/templates/directives/implement.md with the guidance-not-gate rule and the Feature 010 cross-reference (C4/C5, research.md R6 — reads are guidance; the drift gate governs changes); T005 now passes
+- [x] T006 [US2] Extend the Context Read Set section in src/specops/templates/directives/implement.md with the guidance-not-gate rule and the Feature 010 cross-reference (C4/C5, research.md R6 — reads are guidance; the drift gate governs changes); T005 now passes
 
 **Checkpoint**: User Stories 1–2 complete — scoping plus a sanctioned, non-blocking escape hatch. Commit once for US2.
 
