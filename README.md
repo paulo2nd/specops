@@ -28,7 +28,7 @@ SpecOps addresses each one:
 |---|---|---|
 | **Agents hallucinate progress** | "Done ✅" with no proof | Every task closes with typed evidence; `--auto` attaches test output, commit hashes, and diffs at the commit boundary |
 | **State lives in the chat** | Lost on context reset; not auditable | State is a physical `status.yaml` ledger, Git-verifiable and recovery-safe |
-| **Reviews are slow and expensive** | Agent reads the whole repo | `/specops-review` rejects cheapest-first (reconcile → lint/test → working tree/effective diff) before reading any code |
+| **Reviews are slow and expensive** | Agent reads the whole repo | `/specops-review` rejects cheapest-first (reconcile → gate profiles (lint/test by default) → working tree/effective diff → drift) before reading any code |
 
 ## What it adds to Speckit
 

@@ -29,7 +29,7 @@ recorrentes. O SpecOps trata cada um deles:
 |---|---|---|
 | **Agentes alucinam progresso** | "Feito ✅" sem nenhuma prova | Toda tarefa fecha com evidência tipada; `--auto` anexa saída de testes, hashes de commit e diffs na fronteira do commit |
 | **O estado vive no chat** | Perdido a cada reset de contexto; não auditável | O estado é um ledger físico `status.yaml`, verificável pelo Git e seguro para recuperação |
-| **Reviews são lentos e caros** | O agente lê o repositório inteiro | O `/specops-review` rejeita do mais barato para o mais caro (reconcile → lint/test → working tree/diff efetivo) antes de ler qualquer código |
+| **Reviews são lentos e caros** | O agente lê o repositório inteiro | O `/specops-review` rejeita do mais barato para o mais caro (reconcile → perfis de gate (lint/test por padrão) → working tree/diff efetivo → drift) antes de ler qualquer código |
 
 ## O que ele adiciona ao Speckit
 
