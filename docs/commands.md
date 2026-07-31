@@ -477,9 +477,10 @@ Installed by `specops init` (the name follows the layout's separator, e.g.
 drives the review agent cheapest-rejection-first:
 
 1. Load skills from `skills_dir`.
-2. `specops preflight` — the CLI runs all deterministic gates (reconcile,
-   lint, test, working tree); any non-zero exit is an immediate REJECTED
-   without reading a single line of code.
+2. `specops preflight` — the CLI runs all deterministic gates (reconcile, the
+   selected gate-profile suite — the default `lint`/`test` profile when no
+   `gate-profiles.yaml` exists — working tree, drift); any non-zero exit is an
+   immediate REJECTED without reading a single line of code.
 3. Surgical review of effective-diff files only.
 4. Write `revisions/revision-X.md` and record the `APPROVED`/`REJECTED` outcome.
 
@@ -494,8 +495,8 @@ state commands by hand — the injected directives do, on your behalf.
 Know which command reviews and which enforces:
 
 - **`specops preflight`** (the deterministic gate; formerly `specops review`, now a
-  deprecated alias — Feature 017) runs reconcile/lint/test/drift and
-  returns a verdict. It is a **mechanical gate**, not a code review — it does not
+  deprecated alias — Feature 017) runs reconcile, the gate-profile suite, the
+  working-tree and drift gates, and returns a verdict. It is a **mechanical gate**, not a code review — it does not
   read your code for bugs. Its honest name is the point: an author composing a
   workflow no longer mistakes it for the review step.
 - **`/specops-review`** (the injected review directive) is where a real code review

@@ -75,7 +75,7 @@ specops handoff finding add \
 ```
 
 - `blocking` findings gate approval; `advisory` findings are recorded but never block. `--expected-evidence`/`--closure` are required for `blocking`.
-- Each finding gets a stable id `R<round>-F<NN>`. Record the paths the correction is expected to touch with `specops handoff authorize --path <p> …`.
+- Each finding gets a stable id `R<round>-F<NN>`. Record the paths the correction is expected to touch with `specops handoff authorize --path <p> [--path <p> …]` (the only arguments are repeatable `--path` flags).
 
 If the gate report showed any `SKIPPED` gate, record each as an **advisory** finding so a gate that never ran is visible in the verdict, not silently approved:
 
