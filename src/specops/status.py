@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 from pathlib import Path
 from typing import cast
 
@@ -278,6 +279,11 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
     if tasks_text:
         _sync_tasks(data, tasks_text)
 
+    # Feature 022 (FR-007): decisions recorded before the ledger existed are
+    # drained into the fresh ledger and the buffer is deleted — this seam is
+    # what makes pre-ledger recording safe in every entry mode.
+    _drain_pending_steps(feature_dir, data)
+
     ledger.write_new(feature_dir, data)
     try:
         rel = ledger_path.relative_to(root.resolve())
@@ -338,16 +344,76 @@ def synthesize_ledger_at_plan(feature_dir: Path, repo: gitops.Repository, lane_d
     return ledger_path
 
 
-_OPTIONAL_STEPS = ("clarify", "checklist", "analyze")
+_OPTIONAL_STEPS = ("clarify", "checklist", "analyze", "converge")
 _STEP_DECISIONS = ("run", "skip")
 
+# Feature 022 (FR-007): pre-ledger decision buffer — feature-scoped so an
+# abandoned run's buffer is inert and dies with its feature directory.
+_PENDING_STEPS_FILENAME = ".specops-pending-steps.json"
+_PENDING_STEPS_VERSION = 1
 
-def cmd_record_step(root: Path, step: str, *, decision: str) -> str:
+
+def _pending_steps_path(feature_dir: Path) -> Path:
+    return feature_dir / _PENDING_STEPS_FILENAME
+
+
+def _load_pending_steps(feature_dir: Path) -> list[dict]:
+    """Read the pre-ledger decision buffer as a list of step entries.
+
+    Absent → ``[]`` silently. Unreadable or unknown-version content → ``[]``
+    with a stderr note — the buffer is bookkeeping, never a failure source.
+    """
+    path = _pending_steps_path(feature_dir)
+    if not path.is_file():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = None
+    if (
+        not isinstance(raw, dict)
+        or raw.get("version") != _PENDING_STEPS_VERSION
+        or not isinstance(raw.get("steps"), list)
+    ):
+        print(f"note: discarding unusable pending-steps buffer: {path}", file=sys.stderr)
+        return []
+    return [e for e in raw["steps"] if isinstance(e, dict)]
+
+
+def _drain_pending_steps(feature_dir: Path, data: records.LedgerLike) -> None:
+    """Move buffered decisions into ``workflow.skipped_steps`` and delete the buffer.
+
+    Called at ledger creation (Feature 022, FR-007): recording works before the
+    ledger exists because init-spec is the seam where the buffer becomes ledger
+    state. Unusable buffers are discarded with a stderr note, never fatally.
+    """
+    path = _pending_steps_path(feature_dir)
+    if not path.is_file():
+        return
+    entries = _load_pending_steps(feature_dir)
+    ledger.ensure_workflow_block(data)
+    target = data["workflow"]["skipped_steps"]
+    for entry in entries:
+        if entry.get("step") in _OPTIONAL_STEPS and entry.get("decision") in _STEP_DECISIONS:
+            target[:] = [e for e in target if e.get("step") != entry["step"]]
+            target.append(entry)
+    path.unlink(missing_ok=True)
+
+
+def cmd_record_step(
+    root: Path, step: str, *, decision: str, if_absent: bool = False
+) -> str:
     """Record a human run/skip decision for an optional lifecycle step (Feature 007, FR-006).
 
     Appends ``{step, decision, at}`` to the ledger's additive
     ``workflow.skipped_steps`` block. Re-recording the same step replaces its
     prior entry so a resumed workflow never accumulates duplicates.
+
+    Feature 022: before the ledger exists the decision is buffered to the
+    feature-scoped pending-steps file and drained into the ledger at init-spec
+    (FR-007). With ``if_absent=True`` an existing decision — buffered or in the
+    ledger — is reported and left untouched, making skip derivation a single
+    idempotent command that never overwrites an explicit choice.
     """
     if step not in _OPTIONAL_STEPS:
         raise SpecopsError(
@@ -357,9 +423,38 @@ def cmd_record_step(root: Path, step: str, *, decision: str) -> str:
         raise SpecopsError(f"Invalid decision '{decision}'. Expected 'run' or 'skip'.")
 
     feature_dir = get_feature_dir(root)
+
+    if not _ledger_path(feature_dir).is_file():
+        # Pre-ledger seam (Feature 022, FR-007): buffer instead of failing.
+        entries = _load_pending_steps(feature_dir)
+        existing = next((e for e in entries if e.get("step") == step), None)
+        if if_absent and existing is not None:
+            return (
+                f"Optional step '{step}' already recorded: "
+                f"{existing.get('decision')} (unchanged)."
+            )
+        entries = [e for e in entries if e.get("step") != step]
+        entries.append({"step": step, "decision": decision, "at": now_utc()})
+        fsutil.atomic_write(
+            _pending_steps_path(feature_dir),
+            json.dumps(
+                {"version": _PENDING_STEPS_VERSION, "steps": entries}, indent=2
+            ) + "\n",
+        )
+        return (
+            f"Recorded optional step '{step}': {decision} "
+            "(buffered until the ledger exists)."
+        )
+
     data, base_rev, base_violations, _repo = load_for_write(root, feature_dir)
 
     steps = data["workflow"]["skipped_steps"]  # ensured present by load_for_write
+    existing_entry = next((s for s in steps if s.get("step") == step), None)
+    if if_absent and existing_entry is not None:
+        return (
+            f"Optional step '{step}' already recorded: "
+            f"{existing_entry.get('decision')} (unchanged)."
+        )
     steps[:] = [s for s in steps if s.get("step") != step]
     steps.append({"step": step, "decision": decision, "at": now_utc()})
 

@@ -78,12 +78,16 @@ def test_optional_steps_are_human_gated() -> None:
         assert ids.index(f"{opt}-gate") < ids.index(f"{opt}-record")
 
 
-def test_record_steps_run_after_the_ledger_exists() -> None:
-    """Issue #50: `status record-step` requires the ledger, which init-spec creates
-    during the tasks step — every record step must therefore come after tasks."""
+def test_record_steps_sit_adjacent_to_their_gates() -> None:
+    """Feature 022 (dissolves the #50 workaround): `record-step` buffers pre-ledger,
+    so each decision is recorded immediately after its gate — bookkeeping is no
+    longer deferred past the tasks step."""
     ids = [s["id"] for s in _load()["steps"]]
     for opt in ("clarify", "checklist", "analyze"):
-        assert ids.index("tasks") < ids.index(f"{opt}-record")
+        assert ids.index(f"{opt}-record") == ids.index(f"{opt}-gate") + 1
+    # clarify/checklist decisions now precede tasks (buffered until init-spec).
+    for opt in ("clarify", "checklist"):
+        assert ids.index(f"{opt}-record") < ids.index("tasks")
 
 
 def test_no_duplicate_step_ids() -> None:
@@ -195,3 +199,57 @@ def test_enforcement_is_not_gated_by_configuration() -> None:
     for expr in (loop["condition"], guard["condition"]):
         assert "inputs." not in expr
         assert "config" not in expr.lower()
+
+
+# --- Feature 022: converge gate in the corrective round + contract comments ----
+
+def test_corrective_round_offers_optional_converge(tmp_path: object) -> None:
+    """FR-001a: the corrective round offers converge as a recorded optional step —
+    gate → record (`record-step converge`) → conditional `speckit.converge`."""
+    all_steps = {s["id"]: s for s in _flatten(_load()["steps"])}
+
+    gate = all_steps["converge-gate"]
+    assert gate["type"] == "gate"
+    assert gate["options"] == ["run", "skip"]
+    assert "on_reject" not in gate  # optional, never aborts
+
+    record = all_steps["converge-record"]
+    assert record["run"] == (
+        "specops status record-step converge "
+        "--decision {{ steps.converge-gate.output.choice }}"
+    )
+
+    run_if = all_steps["converge-run"]
+    assert run_if["type"] == "if"
+    assert run_if["condition"] == "{{ steps.converge-gate.output.choice == 'run' }}"
+    nested = {s["id"]: s for s in run_if["then"]}
+    assert nested["converge"].get("command") == "speckit.converge"
+
+    # Placement: inside the corrective-round branch, after the corrective
+    # transition opens the round — converge reconciles the task list before
+    # the corrective implement pass.
+    branch = {s["id"]: s for s in _flatten(_load()["steps"])}["corrective-round"]
+    branch_ids = [s["id"] for s in branch["then"]]
+    assert branch_ids.index("open-corrective-round") < branch_ids.index("converge-gate")
+    assert branch_ids.index("converge-gate") < branch_ids.index("converge-record")
+    assert branch_ids.index("converge-record") < branch_ids.index("converge-run")
+
+
+def test_if_needed_asymmetry_documented_as_deliberate_contract() -> None:
+    """FR-009: the workflow definition documents why IT uses `--if-needed`
+    (idempotent engine re-runs) while the directives use bare fail-closed
+    transitions with stop-and-ask."""
+    text = WORKFLOW.read_text(encoding="utf-8").lower()
+    assert "--if-needed" in text
+    assert "deliberate" in text
+    assert "stop-and-ask" in text or "stop and ask" in text
+
+
+def test_lite_workflow_gains_no_recording_steps() -> None:
+    """Spec Edge Cases: the lite lane has no clarify/checklist/analyze steps and
+    is untouched by Feature 022 — no record-step, no converge."""
+    lite = (
+        WORKFLOW.parent.parent / "specops-lite" / "workflow.yml"
+    ).read_text(encoding="utf-8")
+    assert "record-step" not in lite
+    assert "converge" not in lite

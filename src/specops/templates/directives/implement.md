@@ -99,6 +99,17 @@ The ledger is the authority; the agent is the executor.
 
 Before starting the first task, check `skills_dir` (from `specops.json`). Load any skill files present. If the directory is empty or missing, proceed — skills are optional, not a gate.
 
+### Record the Analyze Decision (Feature 022)
+
+- At session start, if `.specify/extensions.yml` exists (the native extension
+  manifest — on the legacy marker-block path skip this step), record the
+  analyze decision if it is still unrecorded; its window closes when
+  implementation begins:
+  `specops status record-step analyze --decision skip --if-absent`
+- `--if-absent` never overwrites an explicit decision — when one exists the
+  command reports it and changes nothing. Recording never makes the step
+  mandatory; where SpecOps is not initialized this is a no-op.
+
 ### Reconcile Preflight
 
 Before starting the first task of a session:

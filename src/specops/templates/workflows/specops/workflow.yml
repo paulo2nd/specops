@@ -39,12 +39,18 @@ steps:
     input:
       args: "{{ inputs.spec }}"
 
-  # --- Optional: Clarify (human-decided skip; the decision is recorded after the
-  #     tasks step — see clarify-record below) --------------------------------
+  # --- Optional: Clarify -------------------------------------------------------
   - id: clarify-gate
     type: gate
     message: "Run /speckit.clarify for this feature? Choose 'run' or 'skip'."
     options: [run, skip]
+  # Feature 022: recorded at the gate — `record-step` buffers the decision while
+  # the ledger does not exist yet (the buffer drains into the ledger when the
+  # tasks-stage directive creates it), dissolving the issue-#50 deferral that
+  # pushed this bookkeeping after the tasks step.
+  - id: clarify-record
+    type: shell
+    run: "specops status record-step clarify --decision {{ steps.clarify-gate.output.choice }}"
   - id: clarify
     type: if
     condition: "{{ steps.clarify-gate.output.choice == 'run' }}"
@@ -55,11 +61,14 @@ steps:
         input:
           args: "{{ inputs.spec }}"
 
-  # --- Optional: Checklist (decision recorded after tasks — checklist-record) --
+  # --- Optional: Checklist -----------------------------------------------------
   - id: checklist-gate
     type: gate
     message: "Run /speckit.checklist for this feature? Choose 'run' or 'skip'."
     options: [run, skip]
+  - id: checklist-record
+    type: shell
+    run: "specops status record-step checklist --decision {{ steps.checklist-gate.output.choice }}"
   - id: checklist
     type: if
     condition: "{{ steps.checklist-gate.output.choice == 'run' }}"
@@ -90,19 +99,6 @@ steps:
     integration: "{{ inputs.integration }}"
     input:
       args: "{{ inputs.spec }}"
-
-  # --- Record the optional-step decisions (issue #50) --------------------------
-  # `specops status record-step` writes to the ledger, which the after_tasks
-  # directive creates during the tasks step. Recording therefore happens here,
-  # after tasks — the gates above stay where the human actually decides; only
-  # the bookkeeping is deferred. The engine retains earlier step outputs, so
-  # the gate choices remain addressable.
-  - id: clarify-record
-    type: shell
-    run: "specops status record-step clarify --decision {{ steps.clarify-gate.output.choice }}"
-  - id: checklist-record
-    type: shell
-    run: "specops status record-step checklist --decision {{ steps.checklist-gate.output.choice }}"
 
   # --- Optional: Analyze -----------------------------------------------------
   - id: analyze-gate
@@ -195,6 +191,29 @@ steps:
           - id: open-corrective-round
             type: shell
             run: "specops status transition-phase IMPLEMENT -r REJECTED --if-needed"
+          # Feature 022 (FR-001a): converge as a recorded optional step — after a
+          # rejected round, offer to reconcile the task list against what the
+          # codebase still needs before the corrective implement pass. The
+          # decision is recorded like every optional step (the ledger exists
+          # here, so no buffering is involved); converge's own ledger append is
+          # governed by its directives (fail closed before mutation, then
+          # `status sync-tasks`).
+          - id: converge-gate
+            type: gate
+            message: "Run /speckit.converge to reconcile the task list before the corrective round?"
+            options: [run, skip]
+          - id: converge-record
+            type: shell
+            run: "specops status record-step converge --decision {{ steps.converge-gate.output.choice }}"
+          - id: converge-run
+            type: if
+            condition: "{{ steps.converge-gate.output.choice == 'run' }}"
+            then:
+              - id: converge
+                command: speckit.converge
+                integration: "{{ inputs.integration }}"
+                input:
+                  args: "{{ inputs.spec }}"
 
   # --- Terminal deterministic gate (FR-019): fail closed if not APPROVED ------
   # A hard `specops preflight` exits non-zero when the verdict is not APPROVED, so an
@@ -205,6 +224,12 @@ steps:
     run: "specops preflight"
 
   # --- Completion: workflow-owned final transition (idempotent-tolerant) ------
+  # `--if-needed` contract (Feature 022 — a deliberate asymmetry): this WORKFLOW
+  # DEFINITION uses `transition-phase … --if-needed` because the engine may
+  # re-run steps on resume/re-entry — an already-reached phase is a no-op, not
+  # an error. The injected DIRECTIVES use bare fail-closed transitions with
+  # stop-and-ask instead: in an agent session an unexpected current phase is a
+  # question for the human, never something to silently skip past.
   - id: done
     type: shell
     run: "specops status transition-phase DONE -r APPROVED --if-needed"

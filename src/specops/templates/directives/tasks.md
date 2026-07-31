@@ -24,6 +24,22 @@
 - Never hand-edit `status.yaml` or `tasks.md` checkboxes. The ledger is the
   authority; the agent is the executor.
 
+### Record Skipped Optional Steps (Feature 022)
+
+- This derivation requires the native extension manifest: if
+  `.specify/extensions.yml` does not exist, skip this section (on the legacy
+  marker-block path the run decisions are not recorded, so a skip must not be
+  derived from their absence).
+- After `init-spec` succeeds — which also drains any decisions buffered before
+  the ledger existed — derive the skip decisions for the optional steps whose
+  lifecycle window has closed (clarify and checklist precede tasks):
+  1. `specops status record-step clarify --decision skip --if-absent`
+  2. `specops status record-step checklist --decision skip --if-absent`
+- `--if-absent` never overwrites an explicit decision (a gate choice or an
+  earlier recording); when one exists the command reports it and changes
+  nothing. Recording never makes an optional step mandatory and never blocks
+  on a skip.
+
 ### Make the Phase Truthful
 
 - The ledger is created at the `SPECIFY` phase. Bring it to `TASKS`:

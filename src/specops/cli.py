@@ -469,14 +469,25 @@ def status_rebaseline() -> None:
 @status_app.command("record-step")
 @_handle_errors
 def status_record_step(
-    step: str = typer.Argument(..., help="Optional step: clarify | checklist | analyze."),
+    step: str = typer.Argument(
+        ..., help="Optional step: clarify | checklist | analyze | converge."
+    ),
     decision: str = typer.Option(..., "--decision", help="Decision: run | skip."),
+    if_absent: bool = typer.Option(
+        False, "--if-absent",
+        help="Record only when the step has no decision yet; otherwise report "
+             "the existing decision and change nothing (Feature 022).",
+    ),
 ) -> None:
-    """Record a human run/skip decision for an optional lifecycle step (Feature 007)."""
+    """Record a human run/skip decision for an optional lifecycle step (Feature 007).
+
+    Before the ledger exists the decision is buffered in the feature directory
+    and drained into the ledger at init-spec (Feature 022).
+    """
     root = Path(".")
     _require_git(root)
     from specops import status
-    typer.echo(status.cmd_record_step(root, step, decision=decision))
+    typer.echo(status.cmd_record_step(root, step, decision=decision, if_absent=if_absent))
 
 
 @status_app.command("sync-tasks")
