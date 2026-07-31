@@ -25,10 +25,12 @@ contract freeze; the ledger schema stays at v7 (no migration).
 - **`specops status sync-tasks [--check] [--json]`** (new, additive): explicitly
   records a task-list mutation into the ledger using the same append merge
   `init-spec`/`start-task` already apply — new IDs enter as `PENDING`, vanished
-  IDs are preserved as `orphaned`, completed entries are untouched;
-  deterministic, idempotent, zero-change runs succeed. `--check` validates the
-  recording path without writing (the converge pre-mutation precondition);
-  `--json` emits `{appended, orphaned, unchanged, check}`.
+  IDs are preserved as `orphaned`, reappeared IDs are revived (orphaned flag
+  cleared), completed entries are untouched; deterministic, idempotent,
+  zero-change runs succeed. `--check` validates the recording path without
+  writing — a pure dry-run, no backup even on a migratable ledger (the converge
+  pre-mutation precondition); `--json` emits
+  `{appended, orphaned, revived, unchanged, check}`.
 - **Converge directive pair** (`before_converge`/`after_converge` native hooks):
   fail closed **before mutation** via `sync-tasks --check` (stop-and-ask,
   `tasks.md` untouched, specific diagnostic — never silent ledger divergence);
@@ -36,10 +38,13 @@ contract freeze; the ledger schema stays at v7 (no migration).
   report `specops consistency` without gating (record, do not validate).
 - **Pre-ledger decision buffering in `record-step`**: before the ledger exists a
   run/skip decision is buffered to the feature-scoped
-  `specs/<feature>/.specops-pending-steps.json` (atomic, replace-by-step) and
-  drained into `workflow.skipped_steps` at `init-spec`, which deletes the
-  buffer; an abandoned run's buffer is inert and dies with its feature
-  directory. Generalizes the issue-#50 fix at the CLI layer.
+  `specs/<feature>/.specops-pending-steps.json` (atomic, replace-by-step, with
+  the recording branch as provenance) and drained into `workflow.skipped_steps`
+  at every ledger-creation seam (`init-spec` and lane promotion), which deletes
+  the buffer only after the write persists; entries from a different branch or
+  with invalid content are discarded with a stderr note. An abandoned run's
+  buffer is inert and dies with its feature directory. Generalizes the
+  issue-#50 fix at the CLI layer.
 - **`record-step --if-absent`** (new, additive): record only when the step has
   no decision yet; otherwise report the existing decision and change nothing —
   the idempotent primitive behind skip derivation, never overwriting an
@@ -50,8 +55,9 @@ contract freeze; the ledger schema stays at v7 (no migration).
   (`--if-absent`, native-manifest path only) — decision parity across entry
   modes, with no step ever forced and no block on a recorded skip.
 - **Workflow converge gate**: the full workflow's corrective round offers
-  `/speckit.converge` as a recorded optional step (gate → `record-step
-  converge` → conditional run) before the corrective implement pass.
+  `/speckit.converge` as a recorded optional step (gate → sticky-run recording
+  — a `run` records unconditionally, a `skip` only `--if-absent` — →
+  conditional run) before the corrective implement pass.
 - **taskstoissues read-only contract**: verified and documented — no hook, no
   directive, ledger byte-identical across install/update; protected by a
   permanent regression test that pins the hook registry to the documented set.

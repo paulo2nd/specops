@@ -44,9 +44,21 @@ the documented set; fixture ledger byte-identical across install/update.
      type: gate
      message: "Run /speckit.converge to reconcile the task list before the corrective round?"
      options: [run, skip]
+   # Sticky-run recording (review fix): a 'run' records unconditionally
+   # (upgrading a prior skip); a 'skip' records only --if-absent, so a later
+   # round's skip never overwrites a recorded run whose task-list mutation
+   # already happened.
    - id: converge-record
-     type: shell
-     run: "specops status record-step converge --decision {{ steps.converge-gate.output.choice }}"
+     type: if
+     condition: "{{ steps.converge-gate.output.choice == 'run' }}"
+     then:
+       - id: converge-record-run
+         type: shell
+         run: "specops status record-step converge --decision run"
+     else:
+       - id: converge-record-skip
+         type: shell
+         run: "specops status record-step converge --decision skip --if-absent"
    - id: converge-run
      type: if
      condition: "{{ steps.converge-gate.output.choice == 'run' }}"

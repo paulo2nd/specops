@@ -13,6 +13,10 @@
 
 - Analyze just ran — that is the human's decision to run it. Record it:
   `specops status record-step analyze --decision run`
+  A run always records `run` — even over a previously derived `skip` (the
+  step demonstrably ran; the record must say so). In a workflow-driven run
+  the gate records the same decision — the duplicate is a harmless
+  identical replace, and the gate remains the only recorder of `skip`.
 - The ledger normally exists by this point (analyze follows tasks); if it does
   not yet, the CLI buffers the decision automatically — no special handling.
 - Recording is bookkeeping only: it never re-runs, blocks, or gates the step.

@@ -202,9 +202,22 @@ steps:
             type: gate
             message: "Run /speckit.converge to reconcile the task list before the corrective round?"
             options: [run, skip]
+          # Recording is sticky-run across rounds (review fix): once any round
+          # ran converge — mutating the task list — a later round's 'skip'
+          # answer must not rewrite the record to 'skipped'. A 'run' records
+          # unconditionally (upgrading a prior skip); a 'skip' records only
+          # --if-absent, so it never overwrites a recorded run.
           - id: converge-record
-            type: shell
-            run: "specops status record-step converge --decision {{ steps.converge-gate.output.choice }}"
+            type: if
+            condition: "{{ steps.converge-gate.output.choice == 'run' }}"
+            then:
+              - id: converge-record-run
+                type: shell
+                run: "specops status record-step converge --decision run"
+            else:
+              - id: converge-record-skip
+                type: shell
+                run: "specops status record-step converge --decision skip --if-absent"
           - id: converge-run
             type: if
             condition: "{{ steps.converge-gate.output.choice == 'run' }}"

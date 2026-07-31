@@ -14,8 +14,8 @@ specops status sync-tasks [--check] [--json]
 
 | Mode | Effect |
 |---|---|
-| (default) | Load ledger + `tasks.md` for the active feature; apply `_sync_tasks` (new IDs → `PENDING`, vanished IDs → `orphaned: true`, existing entries preserved by ID); save through the standard ledger write path (lock + revision check). Report appended / orphaned / unchanged counts. Zero-change runs succeed with "no changes". |
-| `--check` | Validate the recording path **without writing**: active feature resolvable, ledger present and loadable, `tasks.md` readable. Report what would be appended/orphaned. This is the converge pre-mutation precondition (FR-003). |
+| (default) | Load ledger + `tasks.md` for the active feature; apply `_sync_tasks` (new IDs → `PENDING`, vanished IDs → `orphaned: true`, reappeared IDs **revived** — orphaned flag cleared, existing entries preserved by ID); save through the standard ledger write path (lock + revision check). Report appended / orphaned / revived / unchanged. Zero-change runs succeed with "no changes". A task entry without an `id` key fails cleanly (`LedgerParseError`, exit 2), never a traceback. |
+| `--check` | Validate the recording path **without writing** — a pure dry-run that creates no backup even for a migratable ledger: active feature resolvable, ledger present and loadable, `tasks.md` readable. Report what would change. This is the converge pre-mutation precondition (FR-003). |
 
 ## Exit codes (frozen 0/1/2 contract — implemented mapping)
 
@@ -35,7 +35,7 @@ of `--check` → stop-and-ask.
 Human-readable lines by default; `--json` emits a stable additive object:
 
 ```json
-{ "appended": ["T042"], "orphaned": [], "unchanged": 41, "check": false }
+{ "appended": ["T042"], "orphaned": [], "revived": [], "unchanged": 41, "check": false }
 ```
 
 ## Determinism (US1-4)

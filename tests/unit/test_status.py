@@ -786,6 +786,46 @@ def test_sync_tasks_missing_tasks_md_fails_with_diagnostic(tmp_path: Path) -> No
         s.cmd_sync_tasks(root)
 
 
+def test_sync_tasks_revives_reappeared_orphan(tmp_path: Path) -> None:
+    """Review fix: a previously-vanished ID that reappears in tasks.md is
+    revived (orphaned flag cleared) and reported as a change — never left
+    permanently excluded from counts and gates."""
+    root, feature_dir = _setup_feature(tmp_path, "IMPLEMENT")
+    _write_tasks_md(feature_dir, "T001", "T002")
+    s.cmd_sync_tasks(root)
+    _write_tasks_md(feature_dir, "T001")          # T002 vanishes → orphaned
+    s.cmd_sync_tasks(root)
+    _write_tasks_md(feature_dir, "T001", "T002")  # T002 reappears
+    msg = s.cmd_sync_tasks(root)
+    assert "revived" in msg and "T002" in msg
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    by_id = {t["id"]: t for t in data["tasks"]}
+    assert "orphaned" not in by_id["T002"]  # live again
+
+
+def test_sync_tasks_check_makes_no_backup_on_migratable_ledger(tmp_path: Path) -> None:
+    """Review fix: --check is a pure dry-run — no backup file appears even for
+    a migratable (v1) ledger."""
+    root, feature_dir = _setup_feature(tmp_path, "IMPLEMENT")  # v1 ledger
+    _write_tasks_md(feature_dir, "T001")
+    s.cmd_sync_tasks(root, check=True)
+    backup_dir = root / ".specify" / ".specops-backup"
+    assert not backup_dir.exists() or not any(backup_dir.iterdir())
+
+
+def test_sync_tasks_task_entry_without_id_fails_cleanly(tmp_path: Path) -> None:
+    """Review fix: a malformed task entry surfaces as a clean LedgerParseError
+    (exit 2), never a raw KeyError traceback."""
+    from specops.errors import LedgerParseError
+    root, feature_dir = _setup_feature(tmp_path, "IMPLEMENT")
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    data["tasks"] = [{"status": "PENDING"}]  # no 'id'
+    (feature_dir / "status.yaml").write_text(yaml.dump(data))
+    _write_tasks_md(feature_dir, "T001")
+    with pytest.raises(LedgerParseError, match="without an 'id'"):
+        s.cmd_sync_tasks(root)
+
+
 def test_sync_tasks_appended_task_flows_through_loop_reconcile_green(tmp_path: Path) -> None:
     """SC-001: a converge-appended task completes the normal start/complete loop
     and the existing reconciliation gate stays green (remediation C1)."""

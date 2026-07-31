@@ -193,6 +193,93 @@ def test_if_absent_respects_buffered_decision_pre_ledger(tmp_path: Path) -> None
     assert entry["decision"] == "run"  # the explicit run survived
 
 
+# --- review fixes (Feature 022 high-effort review) ---------------------------
+
+def test_buffer_survives_failed_ledger_write(tmp_path: Path) -> None:
+    """Review fix: the buffer is deleted only AFTER the ledger write persists —
+    a failed write must not lose the buffered decisions."""
+    from unittest.mock import patch
+
+    from specops import ledger as ledger_mod
+    root, feature_dir = _setup_repo(tmp_path)
+    s.cmd_record_step(root, "clarify", decision="run")
+    with (
+        patch.object(ledger_mod, "write_new", side_effect=OSError("disk full")),
+        pytest.raises(OSError),
+    ):
+        s.cmd_init_spec(root, None)
+    assert (feature_dir / BUFFER_NAME).exists()  # decisions not lost
+    # A retry drains them normally.
+    s.cmd_init_spec(root, None)
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    assert data["workflow"]["skipped_steps"][0]["step"] == "clarify"
+    assert not (feature_dir / BUFFER_NAME).exists()
+
+
+def test_drain_discards_entry_from_other_branch_with_note(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Review fix: pre-ledger entries carry branch provenance; the drain seam
+    discards entries recorded on a different branch than the ledger binds to."""
+    root, feature_dir = _setup_repo(tmp_path)
+    s.cmd_record_step(root, "clarify", decision="run")
+    buf = _read_buffer(feature_dir)
+    assert buf["steps"][0]["branch"]  # provenance captured
+    buf["steps"][0]["branch"] = "some-other-branch"
+    (feature_dir / BUFFER_NAME).write_text(json.dumps(buf))
+    s.cmd_init_spec(root, None)
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    assert data["workflow"]["skipped_steps"] == []  # foreign decision not drained
+    assert "some-other-branch" in capsys.readouterr().err
+
+
+def test_drained_ledger_entries_keep_frozen_shape(tmp_path: Path) -> None:
+    """The buffer-only branch provenance key is stripped at the drain seam —
+    ledger skipped_steps entries keep the frozen {step, decision, at} shape."""
+    root, feature_dir = _setup_repo(tmp_path)
+    s.cmd_record_step(root, "checklist", decision="skip")
+    s.cmd_init_spec(root, None)
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    (entry,) = data["workflow"]["skipped_steps"]
+    assert set(entry) == {"step", "decision", "at"}
+
+
+def test_drain_notes_individually_invalid_entries(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Review fix: an invalid entry inside a valid buffer is reported on
+    stderr, never silently dropped."""
+    root, feature_dir = _setup_repo(tmp_path)
+    (feature_dir / BUFFER_NAME).write_text(json.dumps({
+        "version": 1,
+        "steps": [
+            {"step": "clarify", "decision": "yes"},   # invalid decision
+            {"step": "checklist", "decision": "skip", "at": "2026-07-31T00:00:00+00:00"},
+        ],
+    }))
+    s.cmd_init_spec(root, None)
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    assert [e["step"] for e in data["workflow"]["skipped_steps"]] == ["checklist"]
+    err = capsys.readouterr().err
+    assert "invalid pending-step entry" in err and "clarify" in err
+
+
+def test_lane_promotion_drains_buffer_too(tmp_path: Path) -> None:
+    """Review fix: synthesize_ledger_at_plan is a ledger-creation seam like
+    init-spec — buffered decisions drain into the promoted ledger and the
+    buffer is deleted."""
+    from specops import gitops
+    root, feature_dir = _setup_repo(tmp_path)
+    s.cmd_record_step(root, "clarify", decision="run")
+    repo = gitops.find_repo(root)
+    assert repo is not None
+    s.synthesize_ledger_at_plan(feature_dir, repo, {"baseline": None})
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    by_step = {e["step"]: e["decision"] for e in data["workflow"]["skipped_steps"]}
+    assert by_step == {"clarify": "run"}
+    assert not (feature_dir / BUFFER_NAME).exists()
+
+
 # --- CLI flag wiring ---------------------------------------------------------
 
 def test_cli_exposes_if_absent_flag(tmp_path: Path) -> None:

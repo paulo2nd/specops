@@ -189,8 +189,12 @@ Feature 022 extends it:
 
 - **Pre-ledger buffering**: before the ledger exists the decision is written to
   the feature-scoped buffer `specs/<feature>/.specops-pending-steps.json`
-  (atomic, replace-by-step) and drained into `workflow.skipped_steps` at
-  `init-spec`, which deletes the buffer. The buffer lives in a committed
+  (atomic, replace-by-step, carrying the recording branch as provenance) and
+  drained into `workflow.skipped_steps` at ledger creation (`init-spec`, or
+  lane promotion), which deletes the buffer only **after** the ledger write
+  persists. At the drain seam, entries recorded on a different branch than the
+  one the ledger binds to — and individually invalid entries — are discarded
+  with a stderr note, never silently. The buffer lives in a committed
   directory, so it may transiently appear in commits between record and drain —
   harmless; it is removed at drain, and a buffer whose run is abandoned before
   ledger creation is inert and disappears with the feature directory.
@@ -209,14 +213,19 @@ Feature 022 extends it:
 Explicitly records a task-list mutation into the ledger (Feature 022) — the
 **converge recording seam**. Applies the same merge `init-spec`/`start-task`
 already use: new `tasks.md` IDs enter as `PENDING`, vanished IDs are preserved
-as `orphaned: true`, existing entries (including completed ones) are untouched.
-Deterministic and idempotent; a zero-change run succeeds with "no changes".
+as `orphaned: true`, existing entries (including completed ones) are untouched,
+and a previously-vanished ID that **reappears** in `tasks.md` is revived (its
+`orphaned` flag cleared) so a live task is never left excluded from counts and
+gates. Deterministic and idempotent; a zero-change run succeeds with "no
+changes".
 
 - `--check`: validate the recording path and report what would change,
-  **without writing** — the converge pre-mutation precondition. The converge
-  pre-directive runs it **before** converge touches `tasks.md` and stops-and-asks
-  on any non-zero exit, so an unrecorded task-list mutation is never silent.
-- `--json`: stable object `{appended, orphaned, unchanged, check}`.
+  **without writing** — a pure dry-run (it creates no backup even for a
+  migratable old-schema ledger) and the converge pre-mutation precondition.
+  The converge pre-directive runs it **before** converge touches `tasks.md`
+  and stops-and-asks on any non-zero exit, so an unrecorded task-list mutation
+  is never silent.
+- `--json`: stable object `{appended, orphaned, revived, unchanged, check}`.
 - Exit codes: `0` recorded / no changes / check passed; `1` blocking
   precondition (no ledger yet, `tasks.md` missing); `2` infrastructure or data
   error (corrupt ledger). It records state and gates nothing — SC-coverage

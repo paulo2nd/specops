@@ -25,14 +25,19 @@ unchanged (replace-by-step).
 | Ledger state | Behavior |
 |---|---|
 | Exists | Unchanged: replace-by-step write to `workflow.skipped_steps` via the standard write path. |
-| Absent (pre-tasks) | **New**: replace-by-step write to `specs/<feature>/.specops-pending-steps.json` (atomic, `fsutil`); success message notes the decision is buffered. Previously this invocation exited 2 — the error path becomes a success path (additive capability; no frozen test pins the old failure — research R4). |
+| Absent (pre-tasks) | **New**: replace-by-step write to `specs/<feature>/.specops-pending-steps.json` (atomic, `fsutil`), each entry carrying the current branch as provenance (there is no ledger identity to validate against yet); success message notes the decision is buffered. Previously this invocation exited 2 — the error path becomes a success path (additive capability; no frozen test pins the old failure — research R4). |
 
-## Drain (at `init-spec`)
+## Drain (at ledger creation)
 
-`specops status init-spec` (ledger creation) drains buffered entries into the
-new ledger's `workflow.skipped_steps` and **deletes** the buffer file, in the
-same operation that syncs `tasks.md`. Unknown buffer `version` → discard with
-a stderr note, never fatal. No buffer file → no-op.
+Every ledger-creation seam drains the buffer: `specops status init-spec` and
+lane promotion (`synthesize_ledger_at_plan`). Buffered entries merge into the
+new ledger's `workflow.skipped_steps` (stripped to the frozen
+`{step, decision, at}` shape), and the buffer file is deleted only **after**
+the ledger write persists — a failed write never loses decisions. Discarded
+at the seam, each with a stderr note, never fatally: unknown buffer `version`
+(whole buffer), individually invalid entries, and entries whose recorded
+branch differs from the branch the ledger binds to (workspace-identity guard
+for the pre-ledger window). No buffer file → no-op.
 
 ## Abandoned-run semantics (clarification Q4)
 

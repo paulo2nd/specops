@@ -213,11 +213,20 @@ def test_corrective_round_offers_optional_converge(tmp_path: object) -> None:
     assert gate["options"] == ["run", "skip"]
     assert "on_reject" not in gate  # optional, never aborts
 
+    # Sticky-run recording (review fix): 'run' records unconditionally, 'skip'
+    # records only --if-absent so a later round's skip never overwrites a
+    # recorded run (the task-list mutation already happened).
     record = all_steps["converge-record"]
-    assert record["run"] == (
-        "specops status record-step converge "
-        "--decision {{ steps.converge-gate.output.choice }}"
+    assert record["type"] == "if"
+    assert record["condition"] == "{{ steps.converge-gate.output.choice == 'run' }}"
+    assert all_steps["converge-record-run"]["run"] == (
+        "specops status record-step converge --decision run"
     )
+    assert all_steps["converge-record-skip"]["run"] == (
+        "specops status record-step converge --decision skip --if-absent"
+    )
+    assert [s["id"] for s in record["then"]] == ["converge-record-run"]
+    assert [s["id"] for s in record["else"]] == ["converge-record-skip"]
 
     run_if = all_steps["converge-run"]
     assert run_if["type"] == "if"

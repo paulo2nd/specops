@@ -352,5 +352,6 @@ class TestStatusSyncTasks:
         payload = json.loads(result.output)
         assert payload["appended"] == ["T002"]
         assert payload["orphaned"] == []
+        assert payload["revived"] == []
         assert payload["unchanged"] == 1
         assert payload["check"] is False

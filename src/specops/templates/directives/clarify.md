@@ -13,6 +13,10 @@
 
 - Clarify just ran — that is the human's decision to run it. Record it:
   `specops status record-step clarify --decision run`
+  A run always records `run` — even over a previously derived `skip` (the
+  step demonstrably ran; the record must say so). In a workflow-driven run
+  the gate records the same decision — the duplicate is a harmless
+  identical replace, and the gate remains the only recorder of `skip`.
 - Before the ledger exists the CLI buffers the decision automatically and the
   ledger receives it at creation — no special handling is needed here.
 - Recording is bookkeeping only: it never re-runs, blocks, or gates the step.
