@@ -48,9 +48,16 @@ def ledger_repo(git_repo: Path) -> Path:
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=git_repo, capture_output=True, text=True
     ).stdout.strip()
+    # The real current branch, not a hardcoded name: unmocked commands go
+    # through the workspace-identity gate, and CI runners' `git init` default
+    # branch differs from local configs.
+    branch = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=git_repo, capture_output=True, text=True,
+    ).stdout.strip()
     data = {
         "feature": "001-test",
-        "branch": "main",
+        "branch": branch,
         "current_phase": "SPECIFY",
         "baseline": head,
         "tasks": [{"id": "T001", "status": "PENDING", "started_commit": None,
