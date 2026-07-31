@@ -55,7 +55,9 @@ The ledger is the authority; the agent is the executor.
 
 ### Corrective Findings (Feature 011)
 
-- When re-entering IMPLEMENT to resolve a rejected review, each finding is a
+- When re-entering IMPLEMENT to resolve a rejected review, first read the open
+  findings: `specops handoff report` (or the rendered
+  `revisions/revision-<round>.md`). Each finding is a
   structured ledger record with a stable id (`R<round>-F<NN>`). After fixing the
   code and committing, mark the finding `FIXED`, linking the correction:
   `specops handoff finding fix <id> --task <task-id> --commit <sha> --evidence "<CLASS>:<summary>"`
