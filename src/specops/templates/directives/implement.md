@@ -27,6 +27,9 @@ For each task:
      `specops status complete-task <task-id> --evidence "CLI_LOG:<one-line summary>"`
    - **If this IS the final task of the user story**: commit all accumulated work first, then:
      `specops status complete-task <task-id> --auto`
+     `--auto` harvests the story's commits and `CODE_DIFF` mechanically; it runs **no**
+     test (Feature 024). Test verification happens once, at the review gate — not per
+     story.
 
    Either close records both the legacy `<CLASS>:<summary>` string and a **structured
    evidence record** (Feature 012, Ledger v6) referenced by the task's `evidence_refs` —

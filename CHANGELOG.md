@@ -13,6 +13,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Feature 024 — Test execution only at the review gate.** The workflow no
+  longer runs a target project's test suite redundantly within a single feature
+  run (previously U+2 full-suite executions for U user stories; now **1**).
+  - `complete-task --auto` records mechanical commit + `CODE_DIFF` evidence and
+    runs **no** test. Test verification lives entirely at the review gate
+    (`specops preflight`); a per-story test on the happy path was purely
+    confirmatory (the story's code is already committed before it would run).
+    `test_command` is now consumed only by the gate — an unset `test_command` no
+    longer blocks `--auto`.
+  - The terminal gate reuses the soft gate's already-computed `lint`/`test`
+    result instead of re-running it, guarded by a working-tree digest so any
+    change (committed or uncommitted) invalidates reuse. Only the
+    command-executing gates (`lint`/`test`) are cacheable; `reconcile`,
+    `working-tree`, and `drift` always recompute.
+  - The gate-run cache is ephemeral, stored inside the git directory
+    (`<git-dir>/specops/gate-cache/<feature>.yaml`), so `specops preflight` stays
+    byte-for-byte read-only on the committed repo and never dirties the working
+    tree. Fixes a latent bug where a cache hit reported PASS without checking the
+    cached exit code (only passing runs are cached and reused).
+  - Constitution amended to **1.11.0** (Principle III narrowed: `--auto` runs no
+    test at close). Docs, both READMEs, and the implement directive updated.
+
 ## [0.8.1] - 2026-07-31
 
 ### Changed

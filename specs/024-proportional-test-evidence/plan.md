@@ -6,9 +6,9 @@
 
 ## Summary
 
-Move all target-project test execution to the review gate. Two coordinated changes: (1) `complete-task --auto` stops running the client `test_command` and records only mechanical commit + `CODE_DIFF` evidence; (2) the review/preflight gate suite persists a **passing** gate-run as append-only structured evidence (superseding the prior record for the same gate) so the terminal gate reuses the soft gate's already-computed full-suite result instead of re-executing it. Reuse is guarded by a **working-tree digest** added to the existing Feature 012 cache key, so any change — committed or not — invalidates the cache. Only the command-executing gates (`lint`, `test`) participate; state-derived gates (`reconcile`, `working-tree`, `drift`) always recompute. Net effect on the happy path: full-suite executions drop from **U+2 to 1**.
+Move all target-project test execution to the review gate. Two coordinated changes: (1) `complete-task --auto` stops running the client `test_command` and records only mechanical commit + `CODE_DIFF` evidence; (2) the review/preflight gate suite records a **passing** command-gate run in an ephemeral **git-directory-local cache** (`<git-dir>/specops/gate-cache/<feature>.yaml`, superseding the prior record for the same gate) so the terminal gate reuses the soft gate's already-computed full-suite result instead of re-executing it. Reuse is guarded by a **working-tree digest** added to the existing Feature 012 cache key, so any change — committed or not — invalidates the cache. Only the command-executing gates (`lint`, `test`) participate; state-derived gates (`reconcile`, `working-tree`, `drift`) always recompute. Net effect on the happy path: full-suite executions drop from **U+2 to 1**.
 
-The cache lookup, id derivation, and `append_record(supersede=True)` machinery already exist from Feature 012 but are inert end-to-end because review never persisted gate evidence and the key lacked a working-tree dimension. This feature activates them and closes a latent correctness gap in the cache-hit branch.
+The cache lookup, id derivation, and `append_record(supersede=True)` machinery already exist from Feature 012 but are inert end-to-end because review never persisted gate evidence and the key lacked a working-tree dimension. This feature activates them (against a git-dir cache, so `preflight` stays byte-for-byte read-only on the committed repo — see the 2026-08-01 implementation pivot in spec.md) and closes a latent correctness gap in the cache-hit branch (it returns PASS unconditionally today).
 
 ## Technical Context
 
@@ -39,11 +39,11 @@ The cache lookup, id derivation, and `append_record(supersede=True)` machinery a
 | I. Speckit Extension, Never Replacement | ✅ Pass | No change to the extension/injection mechanism; behavior delivered through existing CLI + directive templates. |
 | II. Physical State Ledger | ✅ Pass | Gate-run evidence is recorded in the ledger (the authoritative physical state), consistent with the ledger-as-state model. |
 | III. Automated Evidence Collection | ⚠️ Amend (MINOR) | Currently mandates `complete-task --auto` "run the client's `test_command` … including the `TEST_REPORT`." This feature **narrows** it: `--auto` collects commit hashes + `CODE_DIFF` mechanically and runs **no** test; test verification moves to the review gate. Evidence collection stays tooling-driven (not agent-narrated), so the principle's rationale is preserved — only the "runs the test at close" clause is broadened. |
-| IV. Surgical Agent Behavior via Injected Prompts | ⚠️ Amend (MINOR) | Currently states "`specops preflight` stays byte-for-byte read-only." This feature **narrows** it to "read-only except appending gate-run evidence records (passing runs, superseding the prior record for the same gate); task, phase, and finding state are never mutated." A broadening of an existing directive, not a removal. |
+| IV. Surgical Agent Behavior via Injected Prompts | ✅ Pass | **Unchanged.** The gate-run cache lives inside the git directory (`<git-dir>/specops/gate-cache/<feature>.yaml`), so `specops preflight` still writes nothing to the ledger or working tree — "byte-for-byte read-only" holds as-is. (Implementation pivot 2026-08-01: an earlier draft persisted into the ledger and would have needed this amendment; storing the cache in the git dir removes that need.) |
 | V. Domain Agnosticism | ✅ Pass | No framework-specific test selection; the gate still runs the client's configured commands opaquely. Targeted per-story testing was deliberately rejected to keep this true. |
 | VI. Exit Codes as Gates | ✅ Pass | No change to the `0`/`1`/`2` contract; preflight verdict/exit semantics unchanged. |
 
-**Verdict**: PASS with two authorized MINOR amendments (Principles III and IV). Per the constitution's own versioning policy, broadening non-removed principles is a MINOR bump: **1.10.0 → 1.11.0**, applied in the same change set (Sync Impact Report + principle bodies + the affected `src/specops/templates/` directive), enforced as an implementation task. No unjustified violations; Complexity Tracking not required.
+**Verdict**: PASS with **one** authorized MINOR amendment (Principle III only). Per the constitution's own versioning policy, broadening a non-removed principle is a MINOR bump: **1.10.0 → 1.11.0**, applied in the same change set (Sync Impact Report + Principle III body + the affected `src/specops/templates/` directive), enforced as an implementation task. No unjustified violations; Complexity Tracking not required.
 
 ## Project Structure
 
@@ -67,11 +67,12 @@ specs/024-proportional-test-evidence/
 ```text
 src/specops/
 ├── status.py            # (modify) _auto_evidence: drop the test run; CODE_DIFF-only evidence
-├── review.py            # (modify) profile_gates/_run_profile_gate: persist passing gate evidence
-│                        #          (append-only, supersede); fix cache-hit to honor exit_code;
-│                        #          add worktree digest to the gate cache key; update read-only note
+├── review.py            # (modify) profile_gates/_run_profile_gate: read+persist gate cache in the
+│                        #          git dir (supersede); fix cache-hit to honor exit_code; add
+│                        #          worktree digest to the gate cache key
+├── gatecache.py         # (add)    ephemeral gate-run cache store under <git-dir>/specops/gate-cache/
 ├── evidence.py          # (modify) cache_key: optional worktree_digest field (conditional, back-compat)
-├── gitops.py            # (add)    worktree_digest(repo): hash of uncommitted diff + untracked
+├── gitops.py            # (add)    worktree_digest(repo) + git_dir(repo)
 ├── gateprofiles.py      # (no functional change) lint/test remain the cacheable command gates
 └── cli.py               # (verify) _run_gate still delegates to review.evaluate; no signature change
 

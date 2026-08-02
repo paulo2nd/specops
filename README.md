@@ -148,7 +148,7 @@ destructive actions — is *not* pierceable; there SpecOps halts and asks a huma
 
 | Key | Purpose | Default |
 |---|---|---|
-| `test_command` | Command run by `complete-task --auto` | `pytest` |
+| `test_command` | Command run by the review gate (`specops preflight`) | `pytest` |
 | `lint_command` | Lint gate run by `specops preflight` (empty = skipped) | `""` |
 | `skills_dir` | Directory the review prompt loads skills from | `.specify/skills` |
 

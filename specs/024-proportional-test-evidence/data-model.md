@@ -1,10 +1,14 @@
 # Phase 1 Data Model: Test Execution Only at the Review Gate
 
-No new persisted entity is introduced. This feature changes how two existing structures are **produced** and **keyed**. All storage remains in the feature ledger (`status.yaml`), schema **v7**, under the `evidence` list.
+This feature changes how one existing structure is **produced** and **keyed**, and adds one **ephemeral store** outside the ledger. The committed ledger (`status.yaml`, schema **v7**) is unchanged and unwritten by review.
 
-## Entity: Gate-run evidence record (activated)
+## Store: Gate-run cache (new, ephemeral)
 
-A structured evidence record (`specops.records.EvidenceRecord`) produced by a command-executing gate. The shape is unchanged from Feature 012; what changes is that review now **persists** it and its cache key gains a working-tree dimension.
+A YAML file at `<git-dir>/specops/gate-cache/<feature>.yaml` holding a list of gate-run records (each an evidence-shaped `EvidenceRecord`). It lives **inside the git directory**, so it never appears in the working tree, `git status`, `git diff`, `worktree_digest`, or the tests' `snapshot_tree` (which excludes `.git`). It is created lazily on the first passing command-gate run and is safe to delete (a cold cache just re-executes). Not committed, not cross-clone.
+
+## Entity: Gate-run cache record (activated)
+
+An `EvidenceRecord` (`specops.records.EvidenceRecord`) produced by a command-executing gate, stored in the gate-run cache above. The shape is unchanged from Feature 012; what changes is that review now **records** it (in the cache, not the ledger) and its cache key gains a working-tree dimension.
 
 | Field | Source | Notes for this feature |
 |-------|--------|------------------------|
@@ -17,7 +21,7 @@ A structured evidence record (`specops.records.EvidenceRecord`) produced by a co
 | `affected_paths` | effective diff | As computed in `profile_gates`. |
 | `superseded_by` | `append_record(supersede=True)` | Set on the prior same-producer record when a new run is persisted. |
 
-**Lifecycle**: execute (pass) → `append_record(evidence, rec, supersede=True)` → prior `gate:<name>@…` record for the same producer gets `superseded_by = rec.id`; the new record is the live one. On a later identical run, `_cached_record` finds the live record by id → `cached` disposition, **no execution, no new write** (idempotent by id).
+**Lifecycle**: execute (pass) → `append_record(cache_records, rec, supersede=True)` → prior `gate:<name>@…` record for the same producer gets `superseded_by = rec.id`; the new record is the live one; the cache file is rewritten. On a later identical run, `_cached_record` finds the live record by id → `cached` disposition, **no execution, no cache write** (idempotent by id).
 
 **Invariants**:
 - INV-1: At most one non-superseded record per `producer` at any time.
@@ -70,5 +74,5 @@ The `auto` record and legacy string written by `complete-task --auto` (`status.p
 
 Unchanged phase machine (`SPECIFY → … → REVIEW → DONE`). The only behavioral delta:
 
-- `review-soft` (preflight `--soft`): executes `lint`/`test`, **persists** the passing records.
-- `terminal-gate` (hard preflight): recomputes the cache key (same tree → same `worktree_digest` → same id) → **reuses** the persisted records as `cached`; executes only if the corrective loop changed the tree (new commit or uncommitted edit → new digest).
+- `review-soft` (preflight `--soft`): executes `lint`/`test`, records the passing runs in the git-dir cache (ledger + tree untouched).
+- `terminal-gate` (hard preflight): recomputes the cache key (same tree → same `worktree_digest` → same id) → **reuses** the cached records as `cached`; executes only if the corrective loop changed the tree (new commit or uncommitted edit → new digest).

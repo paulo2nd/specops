@@ -49,7 +49,18 @@ All Technical Context items were resolvable from the existing codebase; there we
 
 **Decision**: Supersede by cache key/producer using the existing `append_record(supersede=True)`: retain the latest run per gate, mark the prior with `superseded_by`, never mutate history. Bounded growth, full audit trail. No new mechanism.
 
-## R7 — Narrowing the read-only contract (FR-004)
+## R6a — Storage location pivot: git-dir cache, not the ledger (2026-08-01)
+
+**Finding (blocker)**: Persisting gate evidence into `specs/<feature>/status.yaml` (a **committed** file — the tests `_commit_all` it; it is not gitignored) dirties the working tree. The `working-tree` gate (`review.py:233`) FAILs on **any** uncommitted change with no ledger exclusion (unlike the `drift` gate, which excludes `specs/**`). Since `terminal-gate` runs a fresh `evaluate` right after `review-soft` with no commit between them, the review-soft persistence would leave `status.yaml` dirty and the terminal-gate `working-tree` gate would REJECT — the cache activation would self-defeat.
+
+**Decision**: Store the gate-run cache **outside the working tree**, inside the git directory: `<git-dir>/specops/gate-cache/<feature>.yaml`. `snapshot_tree` (tests) excludes `.git`, and `git status`/`git diff` never surface git-dir contents, so the cache is invisible to the working-tree gate, to `worktree_digest`, and to the read-only snapshots. Consequences:
+- `preflight`/`review` stay **byte-for-byte read-only** on the committed repo → **Principle IV needs no amendment** and the existing read-only ledger/tree tests keep passing (only the determinism assertion changes — see R7).
+- Gate runs are **not** in the committed cross-clone audit trail (acceptable — reproducible; durable audit = verdict + `complete-task` task evidence).
+- The `worktree_digest`/cache-key/`append_record(supersede=True)` mechanics are unchanged; only the store moved.
+
+**Alternatives considered**: *persist in ledger + exclude ledger from the working-tree gate* — rejected: changes a gate's semantics and still needs the Principle IV amendment. *gitignored sidecar under `specs/<feature>/`* — rejected: the ignore file (or the cache file, until ignored) would itself dirty the tree; the git dir sidesteps this entirely.
+
+## R7 — Read-only contract stays intact; only determinism reframes (FR-004)
 
 **Finding**: `tests/integration/test_gate_readonly_determinism.py::test_review_and_gate_report_read_only` asserts `snapshot_tree(repo) == before` after `review --json`, and byte-identical output across two runs (`r1 == r2`). Activating self-persistence breaks both literally: the first run now appends an evidence record, and the second run legitimately reports the `test`/`lint` gate as `cached` (different disposition than the fresh `required`).
 
@@ -70,8 +81,8 @@ All Technical Context items were resolvable from the existing codebase; there we
 
 ## R9 — Ledger schema impact
 
-**Decision**: No schema migration. The `worktree_digest` lives only inside gate records' cache-key derivation (it affects the `id`, not a new stored top-level field beyond what evidence records already carry). Evidence records already carry `exit_code`, `superseded_by`, etc. If a stored marker for scope were needed it would be additive — but per the resolved spec, no scope field is required (all recorded test evidence now originates from full-suite gate runs). Schema stays **v7**.
+**Decision**: No schema migration and **no ledger write at all** from review. The gate cache is a separate git-dir YAML file holding evidence-shaped records (reusing `evidence.build_record`/`cache_key`/`append_record`). `worktree_digest` lives only inside the gate cache-key derivation (affecting the `id`). Ledger schema stays **v7**; `auto` record ids are unchanged for existing records (US2 only changes the `command` field for *new* closes).
 
 ## R10 — Constitution amendment (governance)
 
-**Decision**: Bump 1.10.0 → **1.11.0** (MINOR: broadening two non-removed principles). Update the Sync Impact Report comment, Principle III (drop the "runs `test_command` at close" clause; test verification is the gate's job), and Principle IV (preflight is read-only *except* append-only gate evidence). Because a Principle IV directive's *supporting behavior* changes, verify whether any `src/specops/templates/` directive text asserts "preflight is read-only" or "`--auto` runs the tests"; update those in the same change set (implement directive Ledger Loop wording at minimum).
+**Decision**: Bump 1.10.0 → **1.11.0** (MINOR: broadening **one** non-removed principle — III only). Update the Sync Impact Report comment and Principle III (drop the "runs `test_command` at close … including the `TEST_REPORT`" clause; test verification is the gate's job). **Principle IV is untouched** (the git-dir cache keeps preflight byte-for-byte read-only on the committed repo — see R6a). Update the implement directive Ledger Loop wording (`--auto` records diff/commit evidence, no test) in the same change set, and sweep docs/README/CLI-help for stale "`--auto` runs the tests" claims.

@@ -156,8 +156,9 @@ single-active-task rule.
 
 Marks the task `DONE` with exactly one evidence source:
 
-- `--auto`: runs `test_command`; on success, harvests `started_commit..HEAD`
-  commits + diff as `TEST_REPORT`/`CODE_DIFF` evidence.
+- `--auto`: harvests `started_commit..HEAD` commits + diff as `CODE_DIFF`
+  evidence. It runs **no** test (Feature 024) — test verification lives at the
+  review gate (`specops preflight`), not at task close.
 - `--evidence "CLASS:summary"`: caller-supplied, with `CLASS` in
   `CLI_LOG | TEST_REPORT | SCREENSHOT_PATH | CODE_DIFF`.
 

@@ -158,7 +158,7 @@ pergunta a um humano.)
 
 | Chave | Propósito | Padrão |
 |---|---|---|
-| `test_command` | Comando executado por `complete-task --auto` | `pytest` |
+| `test_command` | Comando executado pelo gate de review (`specops preflight`) | `pytest` |
 | `lint_command` | Gate de lint executado por `specops preflight` (vazio = pulado) | `""` |
 | `skills_dir` | Diretório de onde o prompt de review carrega skills | `.specify/skills` |
 
