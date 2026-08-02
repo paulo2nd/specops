@@ -92,6 +92,8 @@ Roadmap status uses four values:
 | 021 | Contract Freeze for 1.0 | MERGED | 018, 019, 020 | 1.0 Readiness |
 | 022 | Lifecycle Recording Coverage | MERGED | 006, 007, 010, 021 | Lifecycle Coverage |
 | 023 | Context Read-Set Consumption in IMPLEMENT | MERGED | 009 | Lifecycle Coverage |
+| 024 | Test Execution Only at the Review Gate | MERGED | 012, 021 | Review Integrity |
+| 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
 
 ### Build sequence (dependency review — 2026-07-23)
 
@@ -1383,3 +1385,12 @@ and the optional steps in both entry modes — has a defined, recorded SpecOps
 story with fail-closed handling of unrecorded task-list mutation, and the
 context map's minimal read set is consumed at implement time, not only at plan
 and review.
+
+### Review Integrity complete
+
+Features 024–025 are merged. Test execution is consolidated at the review gate —
+no redundant per-story runs, the terminal gate reuses the soft gate's result
+(024, released `0.9.0`) — and the multi-round semantic review is sound: every
+approval is anchored to a recorded full `baseline..HEAD` defect hunt, corrective
+rounds are scoped to their delta, and a configurable round cap halts to a human
+rather than looping unbounded (025, released `0.10.0`).
