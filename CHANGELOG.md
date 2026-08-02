@@ -13,6 +13,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-01
+
+Test execution moves entirely to the review gate (Feature 024). A full workflow
+run no longer executes the target project's test suite redundantly: from U+2
+full-suite runs (U = user stories) down to **1**.
+
+### Changed
+
+- **Tests run only at the review gate — no test at implementation time.**
+  `complete-task --auto` now records mechanical commit + `CODE_DIFF` evidence and
+  runs **no** test at close.
+  - **Why (token cost).** Running the suite at the end of every user story cost
+    tokens and wall-clock for no real benefit: the story's code is already written
+    and committed *before* the test would run, so a per-story test is purely
+    confirmatory on the happy path — and its output, plus any failure-driven fix
+    loop, needlessly entered the implement agent's context. Removing it keeps the
+    implement loop cheap. The review gate (`specops preflight`) remains the single,
+    complete correctness check that nothing bypasses.
+  - `test_command` is now consumed **only** by the gate: an unset `test_command`
+    no longer blocks `--auto`, and a failing one no longer blocks a task close
+    (the gate still fails closed on a failing required gate).
+- **The terminal gate reuses the soft gate's result** instead of re-running the
+  identical suite over the identical tree. Reuse is keyed by a working-tree digest
+  (any change, committed or not — including untracked-file content — invalidates
+  it) and limited to the command-executing gates (`lint`/`test`);
+  `reconcile`/`working-tree`/`drift` always recompute. The gate-run cache is
+  ephemeral and lives **inside the git directory**, so `specops preflight` stays
+  byte-for-byte read-only on the committed repo and never dirties the working tree.
+
+### Governance
+
+- Constitution amended to **1.11.0** (Principle III narrowed: `--auto` runs no
+  test at close; verification lives at the review gate). Principle IV unchanged.
+  The implement directive, `docs/commands.md`, and both READMEs are updated to
+  match.
+
 ## [0.8.1] - 2026-07-31
 
 ### Changed
@@ -826,7 +862,8 @@ honestly named `preflight`, and a single read-only diagnostic explains project h
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/paulo2nd/specops/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/paulo2nd/specops/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/paulo2nd/specops/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/paulo2nd/specops/compare/v0.7.0...v0.7.1

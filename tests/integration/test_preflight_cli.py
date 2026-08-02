@@ -2,11 +2,21 @@
 (Feature 004 behavior), plus the `specops review` deprecated-alias parity (Feature 017)."""
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 
 from tests.conftest import git
+
+
+def _counting_probe(counter: Path) -> str:
+    """A cross-platform gate command that appends one byte to *counter* each run.
+
+    Uses the test interpreter (no `sh`/`bash` dependency — Git-for-Windows mangles
+    Windows paths under `sh`), and *counter* lives outside the repo so executing it
+    never dirties the working tree; tests count real gate executions by its length."""
+    return f'"{sys.executable}" -c "open(r\'{counter}\', \'a\').write(\'x\')"'
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -167,6 +177,76 @@ class TestPreflightReadOnly:
         result = _run_preflight(fake_speckit_repo)
         assert result.returncode == 1
         assert ledger.read_bytes() == before
+
+
+# ---------------------------------------------------------------------------
+# Feature 024: gate-run cache reuse (terminal gate reuses the soft gate's result)
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightGateCacheReuse:
+    def _json_preflight(self, root: Path, *flags: str) -> dict:
+        r = subprocess.run(
+            ["specops", "preflight", "--json", *flags],
+            cwd=root, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
+        )
+        return json.loads(r.stdout)
+
+    def _disposition(self, obj: dict, name: str) -> str:
+        return next(g["disposition"] for g in obj["gates"] if g["name"] == name)
+
+    def test_reuse_on_unchanged_tree_and_invalidate_on_edit(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        root = fake_speckit_repo
+        # A test command whose every execution appends to a counter OUTSIDE the working
+        # tree (so it never dirties the repo), letting us count real executions.
+        counter = root.parent / "gate_runs.log"
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "scaffolding")
+        baseline = git(root, "rev-parse", "HEAD")
+        _write_config(root, test=_counting_probe(counter))
+        _write_ledger(root, baseline)
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "setup")
+
+        # 1) review-soft: executes the test gate once, records it in the git-dir cache.
+        soft1 = self._json_preflight(root, "--soft")
+        assert self._disposition(soft1, "test") == "required"
+        assert counter.read_text().count("x") == 1
+
+        # 2) terminal-gate over the unchanged tree: reused, not re-executed.
+        hard = self._json_preflight(root)
+        assert hard["verdict"] == "APPROVED"
+        assert self._disposition(hard, "test") == "cached"
+        assert counter.read_text().count("x") == 1  # command NOT run again
+
+        # 3) an uncommitted edit changes the working-tree digest → re-execution.
+        (root / "specs" / "001-demo" / "extra.txt").write_text("y\n")
+        soft2 = self._json_preflight(root, "--soft")
+        assert self._disposition(soft2, "test") == "required"
+        assert counter.read_text().count("x") == 2  # re-ran on the changed tree
+
+    def test_preflight_leaves_ledger_and_tree_byte_identical(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        """Even while caching, preflight writes nothing to the committed repo (SC-005)."""
+        from tests.conftest import snapshot_tree
+
+        root = fake_speckit_repo
+        counter = root.parent / "runs.log"
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "scaffolding")
+        baseline = git(root, "rev-parse", "HEAD")
+        _write_config(root, test=_counting_probe(counter))
+        _write_ledger(root, baseline)
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "setup")
+
+        before = snapshot_tree(root)
+        self._json_preflight(root, "--soft")  # executes + caches into .git
+        self._json_preflight(root)            # reuses
+        assert snapshot_tree(root) == before  # nothing in the working tree changed
 
 
 # ---------------------------------------------------------------------------

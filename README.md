@@ -26,7 +26,7 @@ SpecOps addresses each one:
 
 | Problem | Without SpecOps | With SpecOps |
 |---|---|---|
-| **Agents hallucinate progress** | "Done ✅" with no proof | Every task closes with typed evidence; `--auto` attaches test output, commit hashes, and diffs at the commit boundary |
+| **Agents hallucinate progress** | "Done ✅" with no proof | Every task closes with typed evidence; `--auto` attaches commit hashes and diffs at the commit boundary, and the review gate verifies the tests |
 | **State lives in the chat** | Lost on context reset; not auditable | State is a physical `status.yaml` ledger, Git-verifiable and recovery-safe |
 | **Reviews are slow and expensive** | Agent reads the whole repo | `/specops-review` rejects cheapest-first (reconcile → gate profiles (lint/test by default) → working tree/effective diff → drift) before reading any code |
 
@@ -38,9 +38,11 @@ SpecOps addresses each one:
   State changes are atomic and interruption-safe, guarded by optimistic
   concurrency (a monotonic `revision`) and a workspace-identity check
   (feature / branch / baseline); older ledgers migrate losslessly with a backup.
-- **🔬 Automated evidence collection.** `complete-task --auto` runs your test
-  command, harvests commits and diffs, and records them as typed evidence. A
-  task cannot be `DONE` without proof.
+- **🔬 Automated evidence collection.** `complete-task --auto` harvests commits
+  and diffs and records them as typed evidence — mechanically, never
+  agent-narrated. Test verification runs once at the review gate
+  (`specops preflight`), not per task, so the implement loop stays cheap. A task
+  cannot reach `DONE`, and no change is approved, without proof.
 - **🔁 A phase state machine wired into the prompts.** `specops init` injects
   directives into the specify, plan, tasks, and implement prompts so the ledger
   is created and phases advance automatically — the human never runs the
@@ -148,7 +150,7 @@ destructive actions — is *not* pierceable; there SpecOps halts and asks a huma
 
 | Key | Purpose | Default |
 |---|---|---|
-| `test_command` | Command run by `complete-task --auto` | `pytest` |
+| `test_command` | Command run by the review gate (`specops preflight`) | `pytest` |
 | `lint_command` | Lint gate run by `specops preflight` (empty = skipped) | `""` |
 | `skills_dir` | Directory the review prompt loads skills from | `.specify/skills` |
 

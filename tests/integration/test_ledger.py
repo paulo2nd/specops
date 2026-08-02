@@ -81,10 +81,16 @@ class TestScenarioB:
         t001 = next(t for t in data["tasks"] if t["id"] == "T001")
         assert t001["status"] == "DONE"
         assert t001["evidence"] is not None
-        assert "TEST_REPORT" in t001["evidence"]
+        # Feature 024: --auto records diff evidence only, no test run at close.
+        assert t001["evidence"].startswith("CODE_DIFF:")
+        assert "TEST_REPORT" not in t001["evidence"]
         assert len(t001["commits"]) > 0
 
-    def test_failing_test_command_blocks_completion(self, fake_speckit_repo: Path) -> None:
+    def test_failing_test_command_does_not_block_completion(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        """Feature 024: --auto runs no test, so even a failing `test_command` does not
+        block a close — test enforcement moved entirely to the review gate."""
         repo = fake_speckit_repo
         feature_dir = repo / "specs" / "001-demo"
 
@@ -98,11 +104,12 @@ class TestScenarioB:
         _commit(repo, "work")
 
         r = _run(repo, "status", "complete-task", "T001", "--auto")
-        assert r.returncode == 1, "Failing test_command should prevent completion"
+        assert r.returncode == 0, r.stderr
 
         data = yaml.safe_load((feature_dir / "status.yaml").read_text())
         t001 = next(t for t in data["tasks"] if t["id"] == "T001")
-        assert t001["status"] == "IN_PROGRESS"
+        assert t001["status"] == "DONE"
+        assert t001["evidence"].startswith("CODE_DIFF:")
 
     def test_manual_evidence_path(self, fake_speckit_repo: Path) -> None:
         repo = fake_speckit_repo

@@ -9,7 +9,7 @@ from typing import cast
 
 import yaml
 
-from specops import config, contextmap, fsutil, gitops, ledger, records, shell, speckit
+from specops import contextmap, fsutil, gitops, ledger, records, speckit
 from specops import evidence as evidence_mod
 from specops.errors import LedgerParseError, SpecopsError
 from specops.ledger import now_utc
@@ -603,22 +603,13 @@ def _require_in_progress(
 def _auto_evidence(
     root: Path, repo: gitops.Repository, task_id: str, started: str, changed_files: list[str]
 ) -> tuple[str, str, list[str]]:
-    """--auto: run the client's test_command and harvest commits + diff (§III).
+    """--auto: harvest commits + CODE_DIFF mechanically — no test run (Feature 024, §III).
 
+    Test verification lives entirely at the review gate; closing a user story records
+    only mechanical diff/commit provenance (evidence stays tooling-collected, never
+    agent-narrated). ``root``/``task_id`` are retained for call-site symmetry.
     Returns (evidence string, evidence command, commits).
     """
-    cfg = _load_config(root)
-    test_cmd = cfg.get("test_command", "")
-    if not test_cmd:
-        raise SpecopsError("test_command not set in specops.json; cannot use --auto.")
-
-    result = shell.run_client_command(test_cmd, root)
-    if result.returncode != 0:
-        raise SpecopsError(
-            f"test_command failed (exit {result.returncode}). "
-            f"Task '{task_id}' stays IN_PROGRESS."
-        )
-
     commits = gitops.commits_in_range(repo, started)
     if not commits:
         raise SpecopsError(
@@ -626,10 +617,8 @@ def _auto_evidence(
         )
 
     files = changed_files
-    test_summary = result.stdout.strip().splitlines()
-    test_line = test_summary[-1] if test_summary else "exit 0 (output not parseable)"
     code_diff = f"{len(files)} files across {len(commits)} commit(s): {', '.join(files[:5])}"
-    return f"TEST_REPORT:{test_line}; CODE_DIFF:{code_diff}", test_cmd, commits
+    return f"CODE_DIFF:{code_diff}", "(auto)", commits
 
 
 def _manual_evidence(
@@ -838,13 +827,6 @@ def cmd_show(root: Path) -> str:
         lines.append(cycle_str)
 
     return "\n".join(lines)
-
-
-def _load_config(root: Path) -> dict:
-    try:
-        return config.load(root)
-    except config.ConfigError:
-        return {}
 
 
 # ---------------------------------------------------------------------------

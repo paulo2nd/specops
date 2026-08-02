@@ -615,20 +615,38 @@ def _setup_in_progress(tmp_path: Path) -> tuple[Path, Path]:
     return root, feature_dir
 
 
-def test_complete_task_auto_no_test_command_fails(tmp_path: Path) -> None:
-    root, _ = _setup_in_progress(tmp_path)
+def _commit_work(root: Path) -> None:
+    (root / "work.txt").write_text("change")
+    subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "work"], cwd=root, check=True, capture_output=True)
+
+
+def test_complete_task_auto_no_test_command_succeeds(tmp_path: Path) -> None:
+    """Feature 024: --auto runs no test, so an unset test_command is fine."""
+    root, feature_dir = _setup_in_progress(tmp_path)
     import json as _json
     (root / "specops.json").write_text(_json.dumps({"test_command": ""}))
-    with pytest.raises(SpecopsError, match="test_command not set"):
-        s.cmd_complete_task(root, "T001", auto=True, evidence=None)
+    _commit_work(root)
+    s.cmd_complete_task(root, "T001", auto=True, evidence=None)
+    data = yaml.safe_load((feature_dir / "status.yaml").read_text())
+    t = next(t for t in data["tasks"] if t["id"] == "T001")
+    assert t["status"] == "DONE"
+    assert t["evidence"].startswith("CODE_DIFF:")
 
 
-def test_complete_task_auto_failing_test_command_raises(tmp_path: Path) -> None:
+def test_complete_task_auto_does_not_run_test_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Feature 024: --auto MUST NOT invoke any test command at close."""
     root, _ = _setup_in_progress(tmp_path)
     import json as _json
-    (root / "specops.json").write_text(_json.dumps({"test_command": "false"}))
-    with pytest.raises(SpecopsError, match="test_command failed"):
-        s.cmd_complete_task(root, "T001", auto=True, evidence=None)
+    (root / "specops.json").write_text(_json.dumps({"test_command": "echo hi"}))
+    _commit_work(root)
+    from specops import shell
+    calls: list = []
+    monkeypatch.setattr(shell, "run_client_command", lambda *a, **k: calls.append(a))
+    s.cmd_complete_task(root, "T001", auto=True, evidence=None)
+    assert calls == []  # no test command executed
 
 
 def test_complete_task_auto_no_commits_raises(tmp_path: Path) -> None:
@@ -647,43 +665,23 @@ def test_complete_task_auto_success(tmp_path: Path) -> None:
     root, feature_dir = _setup_in_progress(tmp_path)
     import json as _json
     (root / "specops.json").write_text(_json.dumps({"test_command": "true"}))
-    (root / "work.txt").write_text("change")
-    subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "work"], cwd=root, check=True, capture_output=True)
+    _commit_work(root)
 
     msg = s.cmd_complete_task(root, "T001", auto=True, evidence=None)
     assert "T001" in msg
     data = yaml.safe_load((feature_dir / "status.yaml").read_text())
     t = next(t for t in data["tasks"] if t["id"] == "T001")
     assert t["status"] == "DONE"
-    assert "TEST_REPORT" in t["evidence"]
+    # Feature 024: mechanical diff evidence only — no TEST_REPORT at close.
+    assert t["evidence"].startswith("CODE_DIFF:")
+    assert "TEST_REPORT" not in t["evidence"]
+    auto_recs = [r for r in data.get("evidence", []) if r.get("producer") == "auto"]
+    assert auto_recs and auto_recs[-1]["command"] == "(auto)"
 
 
 # ---------------------------------------------------------------------------
 # read_baseline (004: read-only accessor for the review working-tree gate)
 # ---------------------------------------------------------------------------
-
-def test_complete_task_auto_runs_test_command_from_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """--auto executes test_command with cwd=root (shared shell runner)."""
-    import json as _json
-    import sys as _sys
-    root, feature_dir = _setup_in_progress(tmp_path)
-    probe = (
-        f'"{_sys.executable}" -c '
-        '"import os, sys; sys.exit(0 if os.path.exists(\'specops.json\') else 7)"'
-    )
-    (root / "specops.json").write_text(_json.dumps({"test_command": probe}))
-    (root / "work.txt").write_text("change")
-    subprocess.run(["git", "add", "."], cwd=root, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "work"], cwd=root, check=True, capture_output=True
-    )
-    monkeypatch.chdir(tmp_path.parent)  # process cwd elsewhere on purpose
-    msg = s.cmd_complete_task(root, "T001", auto=True, evidence=None)
-    assert "T001" in msg
-
 
 def test_read_baseline_returns_ledger_value(tmp_path: Path) -> None:
     make_v1_ledger(tmp_path)

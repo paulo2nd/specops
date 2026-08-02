@@ -19,6 +19,7 @@ from specops import (
     config,
     contextmap,
     evidence,
+    gatecache,
     gateprofiles,
     gitops,
     ledger,
@@ -62,6 +63,9 @@ class GateResult:
     commit_range: str | None = None
     affected_paths: list[str] = field(default_factory=list)
     required: bool = True
+    # Feature 024: transient — set when a command gate executed-and-passed, so
+    # `profile_gates` can write it to the git-dir gate cache. Never serialized.
+    pending_record: records.EvidenceRecord | None = None
 
 
 @dataclass
@@ -114,12 +118,11 @@ def _cli_version() -> str:
 def existing_evidence(root: Path) -> list[records.EvidenceRecord]:
     """Read the active ledger's structured evidence list (read-only; [] when absent).
 
-    Used only for the cache-lookup: `specops preflight` never writes the ledger (the
-    Feature 004 read-only contract holds), so a `cached` disposition is reported when a
-    matching, non-superseded record already exists (recorded by a state-changing path).
-    NOTE: no production path currently persists a ``gate:<name>@<ver>`` record, so a
-    gate's *own* prior run never cache-hits end-to-end — persisting gate-run evidence
-    from review is deferred (see spec FR-009 + research.md R9a).
+    Consumed by the read-only `gate report` surface (evidence listing). NOTE: gate-run
+    caching does **not** use this — since Feature 024 a passing `lint`/`test` run is
+    recorded in the ephemeral git-dir cache (:mod:`specops.gatecache`), not the ledger,
+    so `specops preflight` stays byte-for-byte read-only on the committed repo (the
+    Feature 004 contract and Principle IV hold unchanged).
     """
     feature_dir = speckit.resolve_feature_dir(root)
     if feature_dir is None:
@@ -159,13 +162,17 @@ def _blocking_result(
 def _run_profile_gate(
     sel: gateprofiles.SelectedGate, root: Path, changed: list[str],
     commit_range: str, map_digest: str | None, existing: list[records.EvidenceRecord],
+    wt_digest: str | None = None,
 ) -> GateResult:
     """Evaluate one selected/skipped profile gate → GateResult with a disposition.
 
-    Reuses a matching evidence record as `cached` (no re-run, FR-009); runs otherwise
-    with the gate's timeout (FR-010) and maps the outcome to the taxonomy: an empty
-    command is a benign SKIP (as today), a missing tool (exit 127) is `unavailable`,
-    a timeout or non-zero exit is `failed`.
+    Reuses a matching **passing** cache record as `cached` (no re-run, FR-002); runs
+    otherwise with the gate's timeout (FR-010) and maps the outcome to the taxonomy: an
+    empty command is a benign SKIP (as today), a missing tool (exit 127) is
+    `unavailable`, a timeout or non-zero exit is `failed`. On a fresh pass it attaches a
+    ``pending_record`` for `profile_gates` to write to the git-dir gate cache (Feature
+    024). ``wt_digest`` (the working-tree digest) is folded into the cache key so any
+    uncommitted edit invalidates reuse even when the commit range is unchanged (FR-003).
     """
     p = sel.profile
     if not sel.selected:
@@ -177,10 +184,13 @@ def _run_profile_gate(
     producer = f"gate:{p.name}@{_cli_version()}"
     key = evidence.cache_key(
         producer=producer, command=p.command, commit_range=commit_range,
-        affected_paths=changed, context_map_digest=map_digest,
+        affected_paths=changed, context_map_digest=map_digest, worktree_digest=wt_digest,
     )
     eid = evidence.derive_id(key)
-    if _cached_record(existing, eid) is not None:
+    cached = _cached_record(existing, eid)
+    # Reuse only a *passing* cached run (FR-002); a non-zero record (defensive — the
+    # cache only ever stores passes) is ignored so a re-run reproduces the real outcome.
+    if cached is not None and cached.get("exit_code", 0) == 0:
         return GateResult(p.name, "PASS", [f"cached ({sel.reason})"], disposition="cached",
                           reason=sel.reason, evidence_id=eid, commit_range=commit_range,
                           affected_paths=changed, required=p.required)
@@ -193,9 +203,15 @@ def _run_profile_gate(
         return _blocking_result(p, sel.reason, detail, "unavailable", eid, commit_range, changed)
     if result.returncode == 0:
         disposition = "required" if p.required else "optional"
+        # A fresh pass is cacheable: record it so an identical later run reuses it.
+        rec = evidence.build_record(
+            producer=producer, command=p.command, exit_code=0, timestamp=status.now_utc(),
+            commit_range=commit_range, affected_paths=changed, summary=f"gate {p.name} PASS",
+            context_map_digest=map_digest, worktree_digest=wt_digest,
+        )
         return GateResult(p.name, "PASS", [], disposition=disposition,
                           reason=sel.reason, evidence_id=eid, commit_range=commit_range,
-                          affected_paths=changed, required=p.required)
+                          affected_paths=changed, required=p.required, pending_record=rec)
     combined = "\n".join(part for part in (result.stdout, result.stderr) if part)
     detail = [f"command: {p.command}", f"exit code: {result.returncode}", *_tail(combined)]
     return _blocking_result(p, sel.reason, detail, "failed", eid, commit_range, changed)
@@ -220,13 +236,29 @@ def profile_gates(root: Path, repo: gitops.Repository, baseline: str) -> list[Ga
     head = gitops.head_sha(repo)
     commit_range = f"{baseline}..{head}" if baseline else head
     map_digest = contextmap.map_digest(root)
-    existing = existing_evidence(root)
+    wt_digest = gitops.worktree_digest(repo)
+    # Gate-run cache lives in the git dir (Feature 024): read the current records for the
+    # cache-lookup; writing back happens once below. The committed ledger is untouched.
+    feature_dir = speckit.resolve_feature_dir(root)
+    cached_records = gatecache.load(repo, feature_dir) if feature_dir is not None else []
     results: list[GateResult] = []
     for sel in selection:
-        gr = _run_profile_gate(sel, root, changed, commit_range, map_digest, existing)
+        gr = _run_profile_gate(
+            sel, root, changed, commit_range, map_digest, cached_records, wt_digest
+        )
         results.append(gr)
         if gr.status == "FAIL":
             break  # blocking failure — do not execute later gates (early stop)
+    # Persist freshly-executed passes so an identical later run (the terminal gate)
+    # reuses them. Records are keyed by full tree state (id includes worktree_digest), so
+    # they are NOT superseded per producer — keeping each distinct state lets the tree
+    # oscillate back to a previously-cached state and still hit. Growth is bounded by
+    # gatecache.MAX_RECORDS. One write, git-dir only.
+    fresh = [gr.pending_record for gr in results if gr.pending_record is not None]
+    if fresh and feature_dir is not None:
+        for rec in fresh:
+            evidence.append_record(cached_records, rec)
+        gatecache.persist(repo, feature_dir, cached_records)
     return results
 
 

@@ -1,7 +1,23 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.9.3 → 1.10.0
+Version change: 1.10.0 → 1.11.0
+Rationale (1.11.0, 2026-08-01): MINOR amendment landed during /speckit-implement of
+specs/024-proportional-test-evidence (Test Execution Only at the Review Gate). Test
+execution moves out of the development phase to the review gate: `complete-task --auto`
+now records mechanical commit + `CODE_DIFF` evidence and runs **no** test (on the happy
+path the removed per-story test was purely confirmatory — the story's code is already
+written and committed before it would run — and the review gate remains the single,
+complete correctness check nothing bypasses). Principle III (Automated Evidence
+Collection) is broadened accordingly: `--auto` no longer runs the client's `test_command`
+at close. No principle is removed or redefined; the tooling-collected (never
+agent-narrated) evidence intent is preserved. Principle IV is untouched — the terminal
+gate reuses the soft gate's result via an ephemeral gate-run cache stored inside the git
+directory, so `specops preflight` stays byte-for-byte read-only on the committed repo.
+Templates updated in the same change set: `src/specops/templates/directives/implement.md`
+(Ledger Loop wording). No other Principle IV directive or scaffold asset changes.
+
+Previous entry (1.9.3 → 1.10.0):
 Rationale (1.10.0, 2026-07-31): MINOR amendment landed during /speckit-implement of
 specs/022-lifecycle-recording-coverage (Lifecycle Recording Coverage). Feature 022
 gives every Spec Kit lifecycle command a defined SpecOps story, and one existing
@@ -406,9 +422,11 @@ SpecOps adds to Speckit's file-based artifacts.
 
 Closing a task MUST NOT depend on agent narration. `specops status
 complete-task --auto` MUST orchestrate the collection of technical evidence
-mechanically: run the client's `test_command`, harvest commit hashes and the
-`CODE_DIFF` via Git, and record the evidence string in `status.yaml` in the
-`<CLASS>:<summary>` format (including the `TEST_REPORT`). Since Feature 012
+mechanically: harvest commit hashes and the `CODE_DIFF` via Git and record the
+evidence string in `status.yaml` in the `<CLASS>:<summary>` format. Since
+Feature 024, `--auto` runs **no** test at close — test verification lives entirely
+at the review gate (`specops preflight`), the single complete correctness check;
+closing a user story records only mechanical diff/commit provenance. Since Feature 012
 (Ledger v6) SpecOps ALSO records a **structured evidence record** alongside that
 string — a cache-key-derived id plus producer, command, exit code, timezone-aware
 timestamp, commit range, affected paths, summary, and an optional local-artifact
@@ -622,4 +640,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.10.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-07-31
+**Version**: 1.11.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-08-01

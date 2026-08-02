@@ -12,6 +12,7 @@ never here (Feature 019 US4, FR-009/FR-011).
 """
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -127,6 +128,18 @@ def is_git_repo(path: Path = Path(".")) -> bool:
     return find_repo(path) is not None
 
 
+def git_dir(repo: Repository) -> Path:
+    """Return the absolute git directory for *repo* (``git rev-parse --git-dir``).
+
+    For a normal repository this is ``<root>/.git``; for a linked worktree it is the
+    worktree's own git dir. Used to place ephemeral, never-committed local state (the
+    gate-run cache, Feature 024) outside the working tree — so it never shows in
+    ``git status``/``git diff`` and cannot dirty the tree."""
+    raw = _run_ok(repo.root, ["rev-parse", "--git-dir"]).strip()
+    p = Path(raw)
+    return p if p.is_absolute() else (repo.root / p).resolve()
+
+
 # ---------------------------------------------------------------------------
 # Refs, commits, ancestry
 # ---------------------------------------------------------------------------
@@ -227,6 +240,36 @@ def porcelain_status(repo: Repository, *, untracked_all: bool = False) -> list[s
     if untracked_all:
         args.append("-uall")
     return _run_ok(repo.root, args).splitlines()
+
+
+def worktree_digest(repo: Repository) -> str:
+    """Return ``sha256:<hex>`` of the *uncommitted* working-tree state (Feature 024).
+
+    Combines ``git diff HEAD`` (all tracked, un/staged modifications relative to HEAD)
+    with the ``-uall`` porcelain listing **and the content of each untracked file** — so
+    editing a newly-added file without ``git add`` still changes the digest. Deterministic
+    for identical tree state; a clean tree yields a stable digest of the empty diff + empty
+    status. Content inside the git directory (e.g. the gate-run cache) never appears, so the
+    digest is not perturbed by the cache it guards.
+
+    **Limitation**: gitignored paths are invisible to git (they appear in neither
+    ``git diff`` nor porcelain), so a gate whose command reads *mutable gitignored* state
+    (e.g. a local ``.env`` fixture) is not covered — its change will not invalidate the
+    cache. Such inputs are outside git's (and SpecOps's) view by construction."""
+    h = hashlib.sha256()
+    h.update(_git(repo.root, ["diff", "HEAD"]).stdout.encode("utf-8", "surrogateescape"))
+    for line in sorted(porcelain_status(repo, untracked_all=True)):
+        h.update(b"\0")
+        h.update(line.encode("utf-8", "surrogateescape"))
+        # Untracked entries (`?? path`) contribute their content, not just their name.
+        if line.startswith("?? "):
+            try:
+                content = (repo.root / line[3:]).read_bytes()
+            except OSError:
+                content = b""
+            h.update(b"\0")
+            h.update(content)
+    return "sha256:" + h.hexdigest()
 
 
 def ls_files(repo: Repository) -> list[str]:
