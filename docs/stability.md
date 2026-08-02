@@ -17,7 +17,7 @@ All surfaces below are **FROZEN** at 1.0.
 | Surface | What it is | Version field | Additive change | Breaking change |
 |---|---|---|---|---|
 | `specops.json` | project config | *(none; preserve-unknown)* | new optional key | remove/rename/retype an existing key |
-| `status.yaml` | execution ledger (schema **v7**) | `schema_version` | new optional field/record | remove/rename/retype a required field |
+| `status.yaml` | execution ledger (schema **v8**) | `schema_version` | new optional field/record | remove/rename/retype a required field |
 | `lane.yaml` | lightweight-lane state (schema **v1**) | `schema_version` | new optional field | change a top-level/sub-shape or the `state` enum |
 | `.specify/specops/gate-profiles.yaml` | gate-profile suite config | `output_version` (**1**) | new optional profile/`applies` key | change/rename a profile field or predicate key |
 | JSON output envelope | every `--json` command result | `output_version` (**1**) | new documented per-command key | remove/rename a base key or change a value enum |
