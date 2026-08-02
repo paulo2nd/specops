@@ -27,7 +27,7 @@ recorrentes. O SpecOps trata cada um deles:
 
 | Problema | Sem SpecOps | Com SpecOps |
 |---|---|---|
-| **Agentes alucinam progresso** | "Feito ✅" sem nenhuma prova | Toda tarefa fecha com evidência tipada; `--auto` anexa saída de testes, hashes de commit e diffs na fronteira do commit |
+| **Agentes alucinam progresso** | "Feito ✅" sem nenhuma prova | Toda tarefa fecha com evidência tipada; `--auto` anexa hashes de commit e diffs na fronteira do commit, e o gate de review verifica os testes |
 | **O estado vive no chat** | Perdido a cada reset de contexto; não auditável | O estado é um ledger físico `status.yaml`, verificável pelo Git e seguro para recuperação |
 | **Reviews são lentos e caros** | O agente lê o repositório inteiro | O `/specops-review` rejeita do mais barato para o mais caro (reconcile → perfis de gate (lint/test por padrão) → working tree/diff efetivo → drift) antes de ler qualquer código |
 
@@ -40,9 +40,11 @@ recorrentes. O SpecOps trata cada um deles:
   protegidas por concorrência otimista (um `revision` monotônico) e por uma
   checagem de identidade do workspace (feature / branch / baseline); ledgers
   antigos migram sem perdas, com backup.
-- **🔬 Coleta automatizada de evidências.** `complete-task --auto` executa seu
-  comando de testes, colhe commits e diffs e os registra como evidência tipada.
-  Uma tarefa não pode ficar `DONE` sem prova.
+- **🔬 Coleta automatizada de evidências.** `complete-task --auto` colhe commits
+  e diffs e os registra como evidência tipada — mecanicamente, nunca narrado pelo
+  agente. A verificação de testes acontece uma vez no gate de review
+  (`specops preflight`), não por tarefa, mantendo o loop de implementação barato.
+  Uma tarefa não pode ficar `DONE`, e nenhuma mudança é aprovada, sem prova.
 - **🔁 Uma máquina de estados de fases ligada aos prompts.** `specops init`
   injeta diretivas nos prompts de specify, plan, tasks e implement, de modo que
   o ledger é criado e as fases avançam automaticamente — o humano nunca faz a
