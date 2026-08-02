@@ -170,6 +170,76 @@ class TestPreflightReadOnly:
 
 
 # ---------------------------------------------------------------------------
+# Feature 024: gate-run cache reuse (terminal gate reuses the soft gate's result)
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightGateCacheReuse:
+    def _json_preflight(self, root: Path, *flags: str) -> dict:
+        r = subprocess.run(
+            ["specops", "preflight", "--json", *flags],
+            cwd=root, capture_output=True, encoding="utf-8", stdin=subprocess.DEVNULL,
+        )
+        return json.loads(r.stdout)
+
+    def _disposition(self, obj: dict, name: str) -> str:
+        return next(g["disposition"] for g in obj["gates"] if g["name"] == name)
+
+    def test_reuse_on_unchanged_tree_and_invalidate_on_edit(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        root = fake_speckit_repo
+        # A test command whose every execution appends to a counter OUTSIDE the working
+        # tree (so it never dirties the repo), letting us count real executions.
+        counter = root.parent / "gate_runs.log"
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "scaffolding")
+        baseline = git(root, "rev-parse", "HEAD")
+        _write_config(root, test=f'sh -c "echo x >> {counter}"')
+        _write_ledger(root, baseline)
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "setup")
+
+        # 1) review-soft: executes the test gate once, records it in the git-dir cache.
+        soft1 = self._json_preflight(root, "--soft")
+        assert self._disposition(soft1, "test") == "required"
+        assert counter.read_text().count("x") == 1
+
+        # 2) terminal-gate over the unchanged tree: reused, not re-executed.
+        hard = self._json_preflight(root)
+        assert hard["verdict"] == "APPROVED"
+        assert self._disposition(hard, "test") == "cached"
+        assert counter.read_text().count("x") == 1  # command NOT run again
+
+        # 3) an uncommitted edit changes the working-tree digest → re-execution.
+        (root / "specs" / "001-demo" / "extra.txt").write_text("y\n")
+        soft2 = self._json_preflight(root, "--soft")
+        assert self._disposition(soft2, "test") == "required"
+        assert counter.read_text().count("x") == 2  # re-ran on the changed tree
+
+    def test_preflight_leaves_ledger_and_tree_byte_identical(
+        self, fake_speckit_repo: Path
+    ) -> None:
+        """Even while caching, preflight writes nothing to the committed repo (SC-005)."""
+        from tests.conftest import snapshot_tree
+
+        root = fake_speckit_repo
+        counter = root.parent / "runs.log"
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "scaffolding")
+        baseline = git(root, "rev-parse", "HEAD")
+        _write_config(root, test=f'sh -c "echo x >> {counter}"')
+        _write_ledger(root, baseline)
+        git(root, "add", "-A")
+        git(root, "commit", "-m", "setup")
+
+        before = snapshot_tree(root)
+        self._json_preflight(root, "--soft")  # executes + caches into .git
+        self._json_preflight(root)            # reuses
+        assert snapshot_tree(root) == before  # nothing in the working tree changed
+
+
+# ---------------------------------------------------------------------------
 # CI gate invariants (US3): any phase, non-interactive
 # ---------------------------------------------------------------------------
 

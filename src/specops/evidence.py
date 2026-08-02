@@ -61,7 +61,7 @@ def validate_string(evidence: str) -> bool:
 def cache_key(
     *, producer: str, command: str, commit_range: str,
     affected_paths: list[str], context_map_digest: str | None,
-    subject: str | None = None,
+    subject: str | None = None, worktree_digest: str | None = None,
 ) -> dict[str, Any]:
     """The identity tuple (FR-009). Volatile fields (timestamp/exit code/summary/
     digest) are deliberately excluded so re-production yields a stable id.
@@ -70,8 +70,13 @@ def cache_key(
     already lives in ``producer`` — so gate caching keys match the documented tuple).
     It is set for ``auto`` records (a task id, a finding id, or a migrated legacy part)
     so two records sharing identical provenance but distinct content do not collide.
+
+    ``worktree_digest`` (Feature 024) is an optional gate-cache dimension: it is
+    included in the key **only when provided**, so ``auto``/legacy callers (which pass
+    None) keep byte-identical keys and ids — no migration. Gate-run cache records pass
+    a digest of the uncommitted tree so any edit (committed or not) invalidates reuse.
     """
-    return {
+    key: dict[str, Any] = {
         "producer": producer,
         "command": command,
         "commit_range": commit_range,
@@ -79,6 +84,9 @@ def cache_key(
         "context_map_digest": context_map_digest,
         "subject": subject,
     }
+    if worktree_digest is not None:
+        key["worktree_digest"] = worktree_digest
+    return key
 
 
 def derive_id(key: dict[str, Any]) -> str:
@@ -102,13 +110,17 @@ def build_record(
     *, producer: str, command: str, exit_code: int, timestamp: str,
     commit_range: str, affected_paths: list[str], summary: str,
     context_map_digest: str | None = None, artifact_digest: str | None = None,
-    subject: str | None = None,
+    subject: str | None = None, worktree_digest: str | None = None,
 ) -> EvidenceRecord:
-    """Build a structured evidence record dict with its cache-key-derived id (FR-006)."""
+    """Build a structured evidence record dict with its cache-key-derived id (FR-006).
+
+    ``worktree_digest`` (Feature 024) is threaded into the cache key for gate-run cache
+    records so the derived id matches the gate's own lookup key; None for all other
+    producers (id unchanged)."""
     key = cache_key(
         producer=producer, command=command, commit_range=commit_range,
         affected_paths=affected_paths, context_map_digest=context_map_digest,
-        subject=subject,
+        subject=subject, worktree_digest=worktree_digest,
     )
     rec: EvidenceRecord = {
         "id": derive_id(key),

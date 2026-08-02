@@ -80,3 +80,84 @@ def test_superseded_record_is_not_reused(monkeypatch: pytest.MonkeyPatch) -> Non
     ev[0]["superseded_by"] = "EV-newer"
     gr, calls = _run(monkeypatch, existing=ev)
     assert gr.disposition != "cached" and calls != []
+
+
+# ---------------------------------------------------------------------------
+# Feature 024: exit-code hardening, working-tree invalidation, git-dir round-trip
+# ---------------------------------------------------------------------------
+
+
+def _spy_shell(monkeypatch: pytest.MonkeyPatch, calls: list[str], rc: int = 0) -> None:
+    from specops.shell import ShellResult
+
+    def _s(cmd: str, cwd, timeout=None):  # noqa: ANN001
+        calls.append(cmd)
+        return ShellResult(rc, "", "", False)
+
+    monkeypatch.setattr(review.shell, "run_client_command", _s)
+
+
+def test_cache_hit_with_nonzero_exit_is_not_reused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Feature 024: a non-passing cached record must NOT be reported PASS (defensive)."""
+    ev = _matching_evidence()
+    ev[0]["exit_code"] = 1
+    gr, calls = _run(monkeypatch, existing=ev)
+    assert gr.disposition != "cached" and calls == [COMMAND]
+
+
+def test_worktree_digest_change_invalidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A changed working-tree digest yields a new id → cache miss (FR-003)."""
+    key = evidence.cache_key(
+        producer=f"gate:{NAME}@{review._cli_version()}", command=COMMAND,
+        commit_range=RANGE, affected_paths=PATHS, context_map_digest=DIGEST,
+        worktree_digest="w1",
+    )
+    ev = [{"id": evidence.derive_id(key), "producer": f"gate:{NAME}",
+           "superseded_by": None, "exit_code": 0}]
+    sel = SelectedGate(_profile(), True, "always")
+    calls: list[str] = []
+    _spy_shell(monkeypatch, calls)
+    hit = review._run_profile_gate(sel, Path("."), list(PATHS), RANGE, DIGEST, ev, "w1")
+    assert hit.disposition == "cached" and calls == []
+    miss = review._run_profile_gate(sel, Path("."), list(PATHS), RANGE, DIGEST, ev, "w2")
+    assert miss.disposition != "cached" and calls == [COMMAND]
+
+
+def test_fresh_pass_attaches_pending_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fresh pass carries a cacheable gate-run record for the caller to persist."""
+    sel = SelectedGate(_profile(), True, "always")
+    calls: list[str] = []
+    _spy_shell(monkeypatch, calls)
+    gr = review._run_profile_gate(sel, Path("."), list(PATHS), RANGE, DIGEST, [], "w1")
+    assert gr.disposition == "required" and gr.pending_record is not None
+    assert gr.pending_record["exit_code"] == 0
+    assert gr.pending_record["producer"].startswith(f"gate:{NAME}@")
+
+
+def test_evaluate_persists_and_reuses_across_runs(
+    fake_speckit_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end: review-soft records a passing test gate in the git-dir cache; a second
+    identical evaluation reuses it (`cached`, no re-run) and the committed repo is
+    byte-identical (cache lives in `.git`) — the terminal-gate reuse (US1/SC-005)."""
+    from tests.conftest import snapshot_tree
+    from tests.unit.test_review import _all_pass_setup
+
+    root = fake_speckit_repo
+    _all_pass_setup(root, test="true")
+    calls: list[str] = []
+    _spy_shell(monkeypatch, calls)
+
+    before = snapshot_tree(root)
+    r1 = review.evaluate(root)
+    t1 = next(g for g in r1.results if g.name == "test")
+    assert r1.passed and t1.disposition == "required" and calls == ["true"]
+
+    r2 = review.evaluate(root)
+    t2 = next(g for g in r2.results if g.name == "test")
+    assert t2.disposition == "cached" and calls == ["true"]  # not re-executed
+    assert snapshot_tree(root) == before  # committed ledger + working tree untouched
+    assert all(
+        g.disposition != "cached"
+        for g in r2.results if g.name in {"reconcile", "working-tree", "drift"}
+    )

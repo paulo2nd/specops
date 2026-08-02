@@ -88,6 +88,33 @@ def test_commit_exists_false_for_unknown_sha(tmp_git_repo: Path) -> None:
     assert not gitops.commit_exists(repo, "deadbeef" * 5)
 
 
+def test_git_dir_resolves_to_git_directory(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    assert repo is not None
+    gd = gitops.git_dir(repo)
+    assert gd.is_absolute() and gd.is_dir() and gd.name == ".git"
+
+
+def test_worktree_digest_deterministic_and_change_sensitive(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    assert repo is not None
+    (tmp_git_repo / "f.txt").write_text("a")
+    subprocess.run(["git", "add", "f.txt"], cwd=tmp_git_repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "f"], cwd=tmp_git_repo, check=True, capture_output=True)
+
+    clean = gitops.worktree_digest(repo)
+    assert clean == gitops.worktree_digest(repo)  # deterministic on identical state
+
+    (tmp_git_repo / "f.txt").write_text("b")  # tracked modification
+    assert gitops.worktree_digest(repo) != clean
+
+    (tmp_git_repo / "f.txt").write_text("a")  # revert → back to the committed state
+    assert gitops.worktree_digest(repo) == clean
+
+    (tmp_git_repo / "u.txt").write_text("new")  # untracked file
+    assert gitops.worktree_digest(repo) != clean
+
+
 def test_dirty_files_clean_tree_returns_empty(tmp_git_repo: Path) -> None:
     repo = gitops.find_repo(tmp_git_repo)
     assert gitops.dirty_files(repo) == []

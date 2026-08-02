@@ -12,6 +12,7 @@ never here (Feature 019 US4, FR-009/FR-011).
 """
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -127,6 +128,18 @@ def is_git_repo(path: Path = Path(".")) -> bool:
     return find_repo(path) is not None
 
 
+def git_dir(repo: Repository) -> Path:
+    """Return the absolute git directory for *repo* (``git rev-parse --git-dir``).
+
+    For a normal repository this is ``<root>/.git``; for a linked worktree it is the
+    worktree's own git dir. Used to place ephemeral, never-committed local state (the
+    gate-run cache, Feature 024) outside the working tree — so it never shows in
+    ``git status``/``git diff`` and cannot dirty the tree."""
+    raw = _run_ok(repo.root, ["rev-parse", "--git-dir"]).strip()
+    p = Path(raw)
+    return p if p.is_absolute() else (repo.root / p).resolve()
+
+
 # ---------------------------------------------------------------------------
 # Refs, commits, ancestry
 # ---------------------------------------------------------------------------
@@ -227,6 +240,25 @@ def porcelain_status(repo: Repository, *, untracked_all: bool = False) -> list[s
     if untracked_all:
         args.append("-uall")
     return _run_ok(repo.root, args).splitlines()
+
+
+def worktree_digest(repo: Repository) -> str:
+    """Return ``sha256:<hex>`` of the *uncommitted* working-tree state (Feature 024).
+
+    Combines ``git diff HEAD`` (all tracked, un/staged modifications relative to HEAD)
+    with the ``-uall`` porcelain listing (added/untracked files). Deterministic for
+    identical tree state; changes on any committed-or-uncommitted edit. A clean tree
+    yields a stable digest of the empty diff + empty status. Content inside the git
+    directory (e.g. the gate-run cache) never appears in either component, so the
+    digest is not perturbed by the cache it guards."""
+    diff = _git(repo.root, ["diff", "HEAD"]).stdout
+    status = porcelain_status(repo, untracked_all=True)
+    blob = (
+        diff.encode("utf-8", "surrogateescape")
+        + b"\0"
+        + "\n".join(sorted(status)).encode("utf-8", "surrogateescape")
+    )
+    return "sha256:" + hashlib.sha256(blob).hexdigest()
 
 
 def ls_files(repo: Repository) -> list[str]:

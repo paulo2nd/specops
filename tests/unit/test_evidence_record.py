@@ -52,6 +52,33 @@ def test_affected_paths_sorted_for_stable_id() -> None:
     assert a["affected_paths"] == ["a", "b"]
 
 
+def test_worktree_digest_included_only_when_provided() -> None:
+    """Feature 024: the gate-cache dimension is absent unless passed (id stays stable)."""
+    base = evidence.cache_key(
+        producer="gate:test@0.9.0", command="pytest", commit_range="a..b",
+        affected_paths=["x"], context_map_digest=None,
+    )
+    assert "worktree_digest" not in base
+    with_wt = evidence.cache_key(
+        producer="gate:test@0.9.0", command="pytest", commit_range="a..b",
+        affected_paths=["x"], context_map_digest=None, worktree_digest="w1",
+    )
+    assert with_wt["worktree_digest"] == "w1"
+    assert evidence.derive_id(base) != evidence.derive_id(with_wt)
+
+
+def test_auto_cache_key_shape_unchanged_no_migration() -> None:
+    """An `auto`-style key (no digest) keeps the exact pre-feature tuple → stable ids."""
+    key = evidence.cache_key(
+        producer="auto", command="(auto)", commit_range="a..b",
+        affected_paths=["x"], context_map_digest=None, subject="T001",
+    )
+    assert set(key) == {
+        "producer", "command", "commit_range", "affected_paths",
+        "context_map_digest", "subject",
+    }
+
+
 def test_artifact_digest(tmp_path: Path) -> None:
     f = tmp_path / "report.xml"
     f.write_bytes(b"hello")

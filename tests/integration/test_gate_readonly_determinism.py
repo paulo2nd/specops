@@ -50,3 +50,25 @@ def test_review_and_gate_report_read_only(fake_speckit_repo: Path) -> None:
     rep2 = _invoke(fake_speckit_repo, "gate", "report", "--json").stdout
     assert snapshot_tree(fake_speckit_repo) == before  # review + report never mutate state
     assert r1 == r2 and rep1 == rep2  # byte-for-byte deterministic
+
+
+def test_cached_gate_runs_are_byte_identical(fake_speckit_repo: Path) -> None:
+    """Feature 024: with a real passing gate, the first run executes (`required`) and
+    later runs reuse the git-dir cache (`cached`). The committed tree stays byte-identical
+    (cache lives in `.git`), and repeated *cached* runs are byte-for-byte deterministic."""
+    from tests.unit.test_review import _all_pass_setup as _setup_with_cmd
+
+    _setup_with_cmd(fake_speckit_repo, test="true")
+    before = snapshot_tree(fake_speckit_repo)
+
+    def _disp(stdout: str) -> str:
+        obj = json.loads(stdout)
+        return next(g["disposition"] for g in obj["gates"] if g["name"] == "test")
+
+    r1 = _invoke(fake_speckit_repo, "review", "--json").stdout  # fresh execution
+    r2 = _invoke(fake_speckit_repo, "review", "--json").stdout  # reused
+    r3 = _invoke(fake_speckit_repo, "review", "--json").stdout  # reused
+    assert _disp(r1) == "required"
+    assert _disp(r2) == "cached"
+    assert r2 == r3  # cached runs are deterministic
+    assert snapshot_tree(fake_speckit_repo) == before  # git-dir cache never touches the tree
