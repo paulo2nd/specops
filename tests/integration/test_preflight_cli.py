@@ -2,11 +2,21 @@
 (Feature 004 behavior), plus the `specops review` deprecated-alias parity (Feature 017)."""
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 
 from tests.conftest import git
+
+
+def _counting_probe(counter: Path) -> str:
+    """A cross-platform gate command that appends one byte to *counter* each run.
+
+    Uses the test interpreter (no `sh`/`bash` dependency — Git-for-Windows mangles
+    Windows paths under `sh`), and *counter* lives outside the repo so executing it
+    never dirties the working tree; tests count real gate executions by its length."""
+    return f'"{sys.executable}" -c "open(r\'{counter}\', \'a\').write(\'x\')"'
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -195,7 +205,7 @@ class TestPreflightGateCacheReuse:
         git(root, "add", "-A")
         git(root, "commit", "-m", "scaffolding")
         baseline = git(root, "rev-parse", "HEAD")
-        _write_config(root, test=f'sh -c "echo x >> {counter}"')
+        _write_config(root, test=_counting_probe(counter))
         _write_ledger(root, baseline)
         git(root, "add", "-A")
         git(root, "commit", "-m", "setup")
@@ -228,7 +238,7 @@ class TestPreflightGateCacheReuse:
         git(root, "add", "-A")
         git(root, "commit", "-m", "scaffolding")
         baseline = git(root, "rev-parse", "HEAD")
-        _write_config(root, test=f'sh -c "echo x >> {counter}"')
+        _write_config(root, test=_counting_probe(counter))
         _write_ledger(root, baseline)
         git(root, "add", "-A")
         git(root, "commit", "-m", "setup")
