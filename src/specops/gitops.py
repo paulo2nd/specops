@@ -246,19 +246,30 @@ def worktree_digest(repo: Repository) -> str:
     """Return ``sha256:<hex>`` of the *uncommitted* working-tree state (Feature 024).
 
     Combines ``git diff HEAD`` (all tracked, un/staged modifications relative to HEAD)
-    with the ``-uall`` porcelain listing (added/untracked files). Deterministic for
-    identical tree state; changes on any committed-or-uncommitted edit. A clean tree
-    yields a stable digest of the empty diff + empty status. Content inside the git
-    directory (e.g. the gate-run cache) never appears in either component, so the
-    digest is not perturbed by the cache it guards."""
-    diff = _git(repo.root, ["diff", "HEAD"]).stdout
-    status = porcelain_status(repo, untracked_all=True)
-    blob = (
-        diff.encode("utf-8", "surrogateescape")
-        + b"\0"
-        + "\n".join(sorted(status)).encode("utf-8", "surrogateescape")
-    )
-    return "sha256:" + hashlib.sha256(blob).hexdigest()
+    with the ``-uall`` porcelain listing **and the content of each untracked file** — so
+    editing a newly-added file without ``git add`` still changes the digest. Deterministic
+    for identical tree state; a clean tree yields a stable digest of the empty diff + empty
+    status. Content inside the git directory (e.g. the gate-run cache) never appears, so the
+    digest is not perturbed by the cache it guards.
+
+    **Limitation**: gitignored paths are invisible to git (they appear in neither
+    ``git diff`` nor porcelain), so a gate whose command reads *mutable gitignored* state
+    (e.g. a local ``.env`` fixture) is not covered — its change will not invalidate the
+    cache. Such inputs are outside git's (and SpecOps's) view by construction."""
+    h = hashlib.sha256()
+    h.update(_git(repo.root, ["diff", "HEAD"]).stdout.encode("utf-8", "surrogateescape"))
+    for line in sorted(porcelain_status(repo, untracked_all=True)):
+        h.update(b"\0")
+        h.update(line.encode("utf-8", "surrogateescape"))
+        # Untracked entries (`?? path`) contribute their content, not just their name.
+        if line.startswith("?? "):
+            try:
+                content = (repo.root / line[3:]).read_bytes()
+            except OSError:
+                content = b""
+            h.update(b"\0")
+            h.update(content)
+    return "sha256:" + h.hexdigest()
 
 
 def ls_files(repo: Repository) -> list[str]:

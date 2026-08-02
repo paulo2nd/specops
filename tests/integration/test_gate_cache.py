@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from specops import evidence, review
+from specops import evidence, gitops, review
 from specops.gateprofiles import ApplicabilityPredicate as AP
 from specops.gateprofiles import GateProfile, SelectedGate
 
@@ -161,3 +161,59 @@ def test_evaluate_persists_and_reuses_across_runs(
         g.disposition != "cached"
         for g in r2.results if g.name in {"reconcile", "working-tree", "drift"}
     )
+
+
+def test_oscillating_back_to_cached_state_rehits(
+    fake_speckit_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review fix: records are keyed by full tree state and not superseded per producer,
+    so returning to a previously-cached state hits the cache instead of re-running."""
+    from tests.unit.test_review import _all_pass_setup
+
+    root = fake_speckit_repo
+    _all_pass_setup(root, test="true")
+    calls: list[str] = []
+    _spy_shell(monkeypatch, calls)
+    edit = root / "specs" / "001-demo" / "edit.txt"
+
+    review.evaluate(root)          # state A → execute (1)
+    edit.write_text("x")           # state B (untracked change to the digest)
+    review.evaluate(root)          # state B → execute (2)
+    edit.unlink()                  # revert to state A
+    r = review.evaluate(root)      # state A again → must be cached, not re-run
+    t = next(g for g in r.results if g.name == "test")
+    assert t.disposition == "cached"
+    assert len(calls) == 2         # gate not re-executed for the returned-to state
+
+
+def test_load_ignores_non_dict_elements(fake_speckit_repo: Path) -> None:
+    """A malformed cache (scalar elements) degrades to a cold cache, never crashes."""
+    from specops import gatecache
+
+    root = fake_speckit_repo
+    repo = gitops.find_repo(root)
+    assert repo is not None
+    feature_dir = root / "specs" / "001-demo"
+    p = gatecache.cache_path(repo, feature_dir)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("- foo\n- bar\n")  # a list of scalars
+    assert gatecache.load(repo, feature_dir) == []
+
+
+def test_persist_swallows_io_error(
+    fake_speckit_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cache write failure (read-only .git, full disk) must not crash a passing run."""
+    from specops import gatecache
+
+    root = fake_speckit_repo
+    repo = gitops.find_repo(root)
+    assert repo is not None
+    feature_dir = root / "specs" / "001-demo"
+
+    def _boom(*_a: object, **_k: object) -> None:
+        raise OSError("read-only filesystem")
+
+    monkeypatch.setattr(gatecache.os, "replace", _boom)
+    # Must return normally (swallowed), not raise.
+    gatecache.persist(repo, feature_dir, [{"id": "EV-1", "producer": "gate:test@x"}])

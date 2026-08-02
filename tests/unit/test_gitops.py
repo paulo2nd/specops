@@ -115,6 +115,17 @@ def test_worktree_digest_deterministic_and_change_sensitive(tmp_git_repo: Path) 
     assert gitops.worktree_digest(repo) != clean
 
 
+def test_worktree_digest_reflects_untracked_content_edit(tmp_git_repo: Path) -> None:
+    """An untracked file edited in place (no `git add`) must change the digest — its
+    content is hashed, not just its porcelain name (Feature 024 review fix)."""
+    repo = gitops.find_repo(tmp_git_repo)
+    assert repo is not None
+    (tmp_git_repo / "u.txt").write_text("one")
+    d1 = gitops.worktree_digest(repo)
+    (tmp_git_repo / "u.txt").write_text("two")  # same name, different content
+    assert gitops.worktree_digest(repo) != d1
+
+
 def test_dirty_files_clean_tree_returns_empty(tmp_git_repo: Path) -> None:
     repo = gitops.find_repo(tmp_git_repo)
     assert gitops.dirty_files(repo) == []

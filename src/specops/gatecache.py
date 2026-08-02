@@ -21,13 +21,21 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import cast
 
 import yaml
 
 from specops import gitops
+from specops.errors import SpecopsError
 from specops.records import EvidenceRecord
 
 CACHE_DIRNAME = "gate-cache"
+
+# Bound the ephemeral cache so a long-lived feature with many edit/preflight cycles
+# does not accumulate one record per distinct tree state forever. Each retained record
+# is one (gate × tree-state) pass; the most recent are kept. Eviction only costs a
+# re-run of an old state — never correctness.
+MAX_RECORDS = 64
 
 
 def cache_path(repo: gitops.Repository, feature_dir: Path) -> Path:
@@ -36,29 +44,41 @@ def cache_path(repo: gitops.Repository, feature_dir: Path) -> Path:
 
 
 def load(repo: gitops.Repository, feature_dir: Path) -> list[EvidenceRecord]:
-    """Return the cached gate-run records, or ``[]`` when the cache is absent/unreadable."""
-    path = cache_path(repo, feature_dir)
-    if not path.is_file():
-        return []
+    """Return the cached gate-run records, or ``[]`` when the cache is absent/unreadable.
+
+    Only mapping elements are returned — a malformed cache (scalars, partial write, hand
+    edit) degrades to a cold cache (re-run) rather than crashing a later write-back."""
     try:
+        path = cache_path(repo, feature_dir)
+        if not path.is_file():
+            return []
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
+    except (OSError, yaml.YAMLError, SpecopsError):
         return []
-    return data if isinstance(data, list) else []
+    if not isinstance(data, list):
+        return []
+    return [cast(EvidenceRecord, r) for r in data if isinstance(r, dict)]
 
 
 def persist(
     repo: gitops.Repository, feature_dir: Path, records: list[EvidenceRecord]
 ) -> None:
-    """Atomically write *records* to the git-dir cache (creating parent dirs).
+    """Best-effort atomic write of *records* to the git-dir cache (creating parent dirs).
 
-    Never touches the working tree. A ``.tmp`` sidecar is written then ``os.replace``d
-    so a concurrent reader never sees a partial file."""
-    path = cache_path(repo, feature_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(
-        yaml.safe_dump(list(records), default_flow_style=False, allow_unicode=True),
-        encoding="utf-8",
-    )
-    os.replace(tmp, path)
+    Never touches the working tree; keeps only the most recent :data:`MAX_RECORDS`. Any
+    I/O failure (read-only ``.git``, full disk, missing permission) is swallowed — the
+    gates already ran and passed, so a failed cache write must never turn success into a
+    crash (the cache is a pure optimization; the next run simply re-executes)."""
+    try:
+        path = cache_path(repo, feature_dir)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(
+            yaml.safe_dump(
+                list(records)[-MAX_RECORDS:], default_flow_style=False, allow_unicode=True
+            ),
+            encoding="utf-8",
+        )
+        os.replace(tmp, path)
+    except (OSError, SpecopsError):
+        return

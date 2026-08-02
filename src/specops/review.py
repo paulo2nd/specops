@@ -250,11 +250,14 @@ def profile_gates(root: Path, repo: gitops.Repository, baseline: str) -> list[Ga
         if gr.status == "FAIL":
             break  # blocking failure — do not execute later gates (early stop)
     # Persist freshly-executed passes so an identical later run (the terminal gate)
-    # reuses them; supersede the prior record per gate. One write, git-dir only.
+    # reuses them. Records are keyed by full tree state (id includes worktree_digest), so
+    # they are NOT superseded per producer — keeping each distinct state lets the tree
+    # oscillate back to a previously-cached state and still hit. Growth is bounded by
+    # gatecache.MAX_RECORDS. One write, git-dir only.
     fresh = [gr.pending_record for gr in results if gr.pending_record is not None]
     if fresh and feature_dir is not None:
         for rec in fresh:
-            evidence.append_record(cached_records, rec, supersede=True)
+            evidence.append_record(cached_records, rec)
         gatecache.persist(repo, feature_dir, cached_records)
     return results
 
