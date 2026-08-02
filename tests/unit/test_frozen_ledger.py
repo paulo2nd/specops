@@ -1,8 +1,12 @@
-"""Frozen-shape contract test — status.yaml ledger, schema v7 (Feature 021). [SC-002][SC-007]
+"""Frozen-shape contract test — status.yaml ledger, schema v8 (Feature 021/025). [SC-002][SC-007]
 
 Locks the required-field set of each ledger record and pins the schema baseline at
-CURRENT_SCHEMA == 7 (the migrated, written shape — NOT the template literal). A removal,
+CURRENT_SCHEMA == 8 (the migrated, written shape — NOT the template literal). A removal,
 rename, or retype of a required field, or an unversioned schema bump, fails here.
+
+Feature 025 (v8) added optional-only fields (``reviewed_range``/``review_role`` on a
+review cycle, ``review_halt`` on the document) — additive, so no required-key set below
+changes; only the pinned schema version moves 7 → 8.
 """
 from __future__ import annotations
 
@@ -22,8 +26,8 @@ _EVIDENCE_REQUIRED = {
 
 
 def test_ledger_schema_baseline_pinned() -> None:
-    """SC-007: the frozen baseline is v7; no schema bump is forced by this feature."""
-    assert ledger.CURRENT_SCHEMA == 7
+    """SC-007: the frozen baseline is v8 (Feature 025 additive-only schema bump)."""
+    assert ledger.CURRENT_SCHEMA == 8
     assert ledger.OLDEST_SUPPORTED == 1
 
 

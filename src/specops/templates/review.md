@@ -43,7 +43,12 @@ When no map is present, skip this step (supported no-op).
 
 This step **is a code review**. A passing gate suite says nothing about whether the implemented code is correct — finding defects in it is your job here.
 
-Read only the files listed by the working-tree gate in the `specops preflight` output — that list is the effective diff against the ledger baseline. Do not review anything outside it.
+**Scope this round with `specops handoff record-scope`.** Run it now (the gates have passed). It records the round's reviewed scope in the ledger — git-derived, never hand-picked — and prints the exact files to read. Do **not** improvise the scope from the gate output or from a `git diff` against the previous round.
+
+- On the **anchor round** (the first round to reach this step) it prints the **full** `baseline..HEAD` effective diff — review all of it. Every feature MUST receive one complete anchor hunt; approval fails closed (`Cannot enter DONE: the review did not cover the whole feature`) until the recorded scopes cover `baseline..HEAD`.
+- On a **corrective round** it prints `prev_to..HEAD` (the change since the last review) plus the files of any still-open findings. Review those in **full file context** — not just the diff hunk — to catch a regression a fix introduces, and verify each `FIXED` finding (Step 4). Do **not** re-hunt unchanged, already-reviewed code: it is out of scope for a corrective round and only invites re-flagging clean code.
+
+Read exactly the files it lists. Do not review anything outside them.
 
 **3a — Code review of the diff (mandatory).** Review the changed code for genuine defects:
 
@@ -111,6 +116,8 @@ Execute the outcome:
 - REJECTED → `specops status transition-phase IMPLEMENT -r REJECTED`
 
 `specops status transition-phase DONE` fails closed while any blocking finding is unverified — approval cannot bypass the corrective handoff. A repository with no structured findings (legacy) degrades to the prior cycle-result gate.
+
+**Round cap (Feature 025).** If rejecting a round would exceed the configured `review_round_cap` (`specops.json`, default 10), `transition-phase IMPLEMENT -r REJECTED` halts and asks a human instead of opening another round: it records the rejection and a `review_halt` marker, then exits non-zero. This is a stop, not a verdict — resume by raising `review_round_cap`, approving if coverage is complete, or rebaselining. Do not work around it silently.
 
 ### Active Learning
 

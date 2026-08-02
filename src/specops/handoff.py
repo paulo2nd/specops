@@ -26,7 +26,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ParamSpec, cast
 
-from specops import contextmap, gitops, ingestion, ledger, outcome, records, speckit, status, trace
+from specops import (
+    contextmap,
+    gitops,
+    ingestion,
+    ledger,
+    outcome,
+    records,
+    reviewscope,
+    speckit,
+    status,
+    trace,
+)
 from specops import evidence as evidence_mod
 from specops import findings as findings_mod
 from specops.errors import SpecopsError
@@ -44,6 +55,8 @@ FINDINGS_IMPORTED = "findings_imported"  # Feature 015 — external ingestion
 FINDING_PROMOTED = "finding_promoted"    # Feature 015 — advisory -> blocking triage
 HANDOFF_CLOSED = "handoff_closed"
 HANDOFF_ALREADY_CLOSED = "handoff_already_closed"
+SCOPE_RECORDED = "scope_recorded"          # Feature 025 — reviewed scope recorded
+SCOPE_UNRESOLVABLE = "scope_unresolvable"  # Feature 025 — baseline/HEAD fail-closed
 VALIDATE_OK = "validate_ok"
 REPORT_OK = "report_ok"
 RENDER_OK = "render_ok"
@@ -73,6 +86,8 @@ _CLASS_FOR_STATUS = {
     FINDING_PROMOTED: outcome.PASS,
     HANDOFF_CLOSED: outcome.PASS,
     HANDOFF_ALREADY_CLOSED: outcome.PASS,
+    SCOPE_RECORDED: outcome.PASS,
+    SCOPE_UNRESOLVABLE: outcome.GATE_REJECTION,
     VALIDATE_OK: outcome.PASS,
     REPORT_OK: outcome.PASS,
     RENDER_OK: outcome.PASS,
@@ -482,6 +497,72 @@ def cmd_finding_dismiss(root: Path, fid: str, *, reason: str) -> HandoffResult:
                     "verified_at": ledger.now_utc()})
     status.finalize(feature_dir, data, base_rev, base_violations)
     return HandoffResult(cmd, FINDING_DISMISSED, f"{cmd}: {fid} -> DISMISSED", {"id": fid})
+
+
+@_handoff_command("handoff record-scope")
+def cmd_record_scope(root: Path) -> HandoffResult:
+    """Record the current review round's git-derived reviewed scope and print the
+    files to read (Feature 025). Called at the start of Step-3, after the gates
+    pass: an *anchor* round covers the full ``baseline..HEAD``; a *corrective*
+    round covers ``prev_scoped_to..HEAD`` plus prior non-terminal findings' files.
+    Idempotent per round; the range is derived from git, never reviewer-supplied.
+    """
+    cmd = current_command()
+    loaded = _load_write(root)
+    feature_dir, data, repo = loaded.feature_dir, loaded.data, loaded.repo
+    base_rev, base_violations = loaded.base_revision, loaded.base_violations
+
+    cycle = _current_cycle(data)
+    if cycle is None or cycle.get("result") is not None:
+        return HandoffResult(cmd, BAD_ARGS, f"{cmd}: no open review round to record scope for")
+
+    baseline = str(data.get("baseline") or "")
+    head = gitops.head_sha(repo)
+    dr = reviewscope.derive_range(baseline, head, _cycles(data))
+
+    if not dr.from_commit or not gitops.commit_exists(repo, dr.from_commit):
+        return HandoffResult(
+            cmd, SCOPE_UNRESOLVABLE,
+            f"{cmd}: cannot resolve the review baseline commit "
+            f"'{(dr.from_commit or '')[:7]}' (missing baseline, shallow clone, or rewritten "
+            "history); fetch full history or rebaseline",
+        )
+    if not head or not gitops.commit_exists(repo, head):
+        return HandoffResult(cmd, SCOPE_UNRESOLVABLE, f"{cmd}: cannot resolve HEAD")
+
+    feature_name = str(data.get("feature") or "") or None
+    changed = reviewscope.product_paths(
+        gitops.name_only_diff(repo, dr.from_commit, head), feature_name
+    )
+    if not changed and dr.review_role == reviewscope.ANCHOR:
+        return HandoffResult(
+            cmd, BAD_ARGS, f"{cmd}: no effective diff since baseline — nothing to review"
+        )
+
+    scope_paths = list(changed)
+    if dr.review_role == reviewscope.CORRECTIVE:
+        # Regression surface: files of prior findings not yet VERIFIED/DISMISSED.
+        for _c, f in _iter_findings(data):
+            if f.get("state") not in ("VERIFIED", "DISMISSED"):
+                fp = f.get("file")
+                if isinstance(fp, str) and fp and fp not in scope_paths:
+                    scope_paths.append(fp)
+
+    cycle["reviewed_range"] = dr.range_str
+    cycle["review_role"] = dr.review_role
+    status.finalize(feature_dir, data, base_rev, base_violations)
+
+    header = (
+        f"review scope: {dr.review_role} round {cycle.get('round')} — "
+        f"{len(scope_paths)} file(s) over {dr.range_str}"
+    )
+    human = "\n".join([header, *scope_paths])
+    return HandoffResult(cmd, SCOPE_RECORDED, human, {
+        "round": cycle.get("round"),
+        "review_role": dr.review_role,
+        "reviewed_range": dr.range_str,
+        "scope_paths": scope_paths,
+    })
 
 
 @_handoff_command("handoff close")

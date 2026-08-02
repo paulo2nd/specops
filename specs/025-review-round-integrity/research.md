@@ -87,7 +87,11 @@ makes the guard correct after a rebase: a stored range whose endpoint no longer
 union, so a moved baseline drops the old anchor and leaves `missing` non-empty →
 a fresh anchor round is required (spec Edge Case). No new gitops primitive is
 needed — `name_only_diff` + `commit_exists` suffice; a 2-arg ancestry helper is
-**not** required for the path-set cover approach.
+**not** required for the path-set cover approach. Both `target` and `covered` are
+filtered to **product paths** (the drift gate's `trace.is_managed` exclusion of
+`.specify/**`, `specops.json`, and the active `specs/<feature>/**`): the ledger
+rewrites `status.yaml` every round, so counting managed artifacts would let a
+post-review bookkeeping write leave `target` uncovered and wrongly block approval.
 
 **Alternatives considered**: *Store the derived path set per round instead of the
 commit range* — rejected: paths are re-derivable from the range and storing them

@@ -38,6 +38,12 @@ and before reading code.
    - `corrective` → every path in `name_only_diff(from, HEAD)` (review in full
      file context) **plus** the `file` of each finding in a non-terminal state
      from prior rounds (regression surface), de-duplicated.
+   - In both roles the list is **product paths only**: SpecOps/Speckit-managed
+     artifacts (`.specify/**`, `specops.json`, the active `specs/<feature>/**`) are
+     excluded, reusing the drift gate's `trace.is_managed` filter. The ledger
+     rewrites `status.yaml` every round, so without this the reviewer's list — and
+     the coverage guard — would be polluted by (and could block on) methodology
+     bookkeeping rather than code.
 7. Persist via `status.finalize` (revision-CAS + atomic write).
 
 ## Output

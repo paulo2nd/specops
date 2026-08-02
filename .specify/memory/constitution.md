@@ -1,7 +1,30 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.10.0 → 1.11.0
+Version change: 1.11.0 → 1.12.0
+Rationale (1.12.0, 2026-08-02): MINOR amendment landed during /speckit-implement of
+specs/025-review-round-integrity (Review Round Integrity). Feature 025 hardens the
+multi-round semantic review; TWO principles are touched, both additively:
+- Principle IV (Token-Optimized Review) is BROADENED: the review agent records each
+  Step-3 round's git-derived reviewed scope (`specops handoff record-scope`; anchor =
+  baseline..HEAD, corrective = prev_to..HEAD), approval fails closed unless the union
+  of recorded scopes covers baseline..HEAD (the coverage guard — record, do not
+  validate; it never judges a finding's merit), and a configurable round cap
+  (`review_round_cap`, default 10) turns an over-long loop into a Stop-and-Ask halt.
+- Principle II is NARROWED (a documented carve-out, not a removal): the "every
+  registered commit MUST exist / reconcile blocks on divergence" invariant is scoped
+  to work/task commits and the baseline; the review-round `reviewed_range` endpoints
+  are deliberately exempt (like the `(human)` sentinel) because an ordinary rebase can
+  orphan a historical review HEAD and SpecOps must not block on that benign rewrite.
+Ledger v7→v8 (additive optional `reviewed_range`/`review_role` on a review cycle and
+`review_halt` on the document; pure version bump, no backfill). `specops preflight`
+stays byte-for-byte read-only (the new writes are `handoff`/`status` mutations). MINOR
+bump: additive guidance plus a narrowed-but-not-removed invariant; the additive/
+never-destructive intent is preserved. Templates updated in the same change set:
+src/specops/templates/review.md (Step 3 anchor/corrective scoping + round-cap note).
+Verified by the feature's own fixtures, never against this repository (No Self-Application).
+
+Previous entry (1.10.0 → 1.11.0):
 Rationale (1.11.0, 2026-08-01): MINOR amendment landed during /speckit-implement of
 specs/024-proportional-test-evidence (Test Execution Only at the Review Gate). Test
 execution moves out of the development phase to the review gate: `complete-task --auto`
@@ -410,9 +433,15 @@ SpecOps MUST control the physical state of execution inside the repository
 through the structured ledger `status.yaml`, manipulated exclusively by CLI
 commands (`specops status init-spec | start-task | complete-task |
 transition-phase`) — never by hand-editing and never held in agent memory or
-chat context. Every commit hash registered in the ledger MUST exist in the
-Git tree of the active branch; `specops reconcile` verifies this and MUST
-block execution (exit code 1) on any divergence.
+chat context. Every **work** commit hash registered in the ledger — task
+commits and the feature baseline — MUST exist in the Git tree of the active
+branch; `specops reconcile` verifies this and MUST block execution (exit code 1)
+on any divergence. A single narrow, documented exception (Feature 025): a review
+round's `reviewed_range` endpoints are historical review HEADs that an ordinary
+rebase or squash can orphan, so — like the `(human)` sentinel — they are
+deliberately NOT verified by `reconcile`; the review coverage guard tolerates an
+unresolvable endpoint by re-deriving against the current baseline/HEAD, so SpecOps
+never blocks on a benign history rewrite.
 
 **Rationale**: agents hallucinate state; a Git-verifiable ledger is what
 makes progress auditable and recovery deterministic — the core advantage
@@ -490,10 +519,18 @@ sourced identically from the SpecOps templates. The directives are:
   and supporting evidence id; a required failure/unavailability blocks, an optional
   one does not. `specops preflight` stays byte-for-byte read-only; the read-only
   `specops gate list`/`validate`/`report` surfaces inspect the profiles, selection,
-  and evidence.
+  and evidence. Since Feature 025 the review agent also records each round's
+  git-derived **reviewed scope** (`specops handoff record-scope` — an *anchor* round
+  covers `baseline..HEAD`, a *corrective* round `prev_to..HEAD` plus open findings'
+  files), and approval (`status transition-phase DONE`) fails closed unless the union
+  of recorded scopes covers `baseline..HEAD`. The coverage guard **records and checks
+  scope only — it never judges a finding's merit** (record, do not validate). A
+  configurable `review_round_cap` (default 10) bounds the loop: exceeding it is a
+  Stop-and-Ask halt recorded as a `review_halt` marker, never a fabricated verdict.
 - **Stop-and-Ask Gates (§8.2)**: agents halt and ask the human on persisted
-  schema changes (migrations), secrets, public contract breaks, or technical
-  ambiguities.
+  schema changes (migrations), secrets, public contract breaks, technical
+  ambiguities, or when the review round cap is reached (Feature 025 — the loop
+  hands control back to a human rather than cycling unbounded).
 - **Lightweight Lane Recognition (Feature 013)**: at the lifecycle entry the agent
   assesses whether a request is a small, reversible change and, if so, **proposes** the
   lightweight lane (`specops-lite`) through a human-confirmed gate — never auto-classifying
@@ -640,4 +677,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.11.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-08-01
+**Version**: 1.12.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-08-02

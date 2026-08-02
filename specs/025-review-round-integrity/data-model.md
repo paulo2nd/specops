@@ -89,8 +89,8 @@ computed on demand at approval time:
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `target_paths` | `set[str]` | `name_only_diff(baseline, head)` — the current effective diff. |
-| `covered_paths` | `set[str]` | Union of `name_only_diff(from, to)` over each scoped cycle whose endpoints both `commit_exists`. |
+| `target_paths` | `set[str]` | `name_only_diff(baseline, head)` — the current effective diff, **product paths only** (managed artifacts excluded via `trace.is_managed`). |
+| `covered_paths` | `set[str]` | Union of `name_only_diff(from, to)` (product paths only) over each scoped cycle whose endpoints both `commit_exists`. |
 | `missing_paths` | `list[str]` | `sorted(target_paths − covered_paths)`; empty ⇒ complete. |
 | `has_scope_records` | `bool` | Whether any cycle carries a `reviewed_range` (the degradation switch, R5). |
 

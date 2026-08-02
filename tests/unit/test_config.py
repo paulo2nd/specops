@@ -101,7 +101,7 @@ def test_create_or_merge_preserves_user_formatting_when_complete(tmp_path: Path)
     original = (
         '{"test_command": "mytest", "lint_command": "ruff", '
         '"skills_dir": ".specify/skills", "min_cli_version": "0.3.0", '
-        '"custom": "keep"}'
+        '"review_round_cap": 10, "custom": "keep"}'
     )
     path.write_text(original, encoding="utf-8")
     cfg, created = config.create_or_merge(tmp_path)

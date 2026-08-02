@@ -9,7 +9,7 @@ from typing import cast
 
 import yaml
 
-from specops import contextmap, fsutil, gitops, ledger, records, speckit
+from specops import config, contextmap, fsutil, gitops, ledger, records, reviewscope, speckit
 from specops import evidence as evidence_mod
 from specops.errors import LedgerParseError, SpecopsError
 from specops.ledger import now_utc
@@ -933,8 +933,38 @@ def _require_approved_cycle(cycles: list[records.ReviewCycleRecord]) -> None:
         )
 
 
+def _gate_review_coverage(data: records.LedgerDocument, repo: gitops.Repository) -> None:
+    """Feature 025: block approval unless the recorded reviewed scopes cover the
+    full ``baseline..HEAD`` effective diff.
+
+    Degrades to a no-op when no round recorded a reviewed scope (legacy ledger /
+    review conducted by an older CLI — FR-008). Fails closed when scope records
+    exist but the baseline cannot be resolved (Principle VI). Reads only reviewed
+    ranges and git diffs — never a finding's merit (FR-004; record, do not validate).
+    """
+    cycles = data.get("review_cycles") or []
+    if not reviewscope.has_any_scope(cycles):
+        return
+    baseline = str(data.get("baseline") or "")
+    if not baseline or not gitops.commit_exists(repo, baseline):
+        raise SpecopsError(
+            "Cannot enter DONE: reviewed-scope records exist but the baseline commit "
+            "cannot be resolved (shallow clone or rewritten history). Fetch full history "
+            "or rebaseline before approving."
+        )
+    feature_name = str(data.get("feature") or "") or None
+    cov = reviewscope.coverage(repo, baseline, "HEAD", cycles, feature_name)
+    if cov.missing_paths:
+        raise SpecopsError(
+            "Cannot enter DONE: the review did not cover the whole feature. "
+            f"Uncovered path(s): {', '.join(cov.missing_paths)}. "
+            "Run an anchor review round over the full baseline..HEAD before approving."
+        )
+
+
 def _gate_done(
-    data: records.LedgerDocument, current: str, normalized_result: str | None
+    data: records.LedgerDocument, current: str, normalized_result: str | None,
+    repo: gitops.Repository,
 ) -> None:
     """The ordered DONE gates (Feature 011 findings gate, then Feature 006 cycle gate).
 
@@ -964,7 +994,17 @@ def _gate_done(
         if normalized_result == "APPROVED" and cycles and cycles[-1]["result"] is None:
             cycles[-1]["result"] = "APPROVED"
             cycles[-1]["completed_at"] = now_utc()
+    _gate_review_coverage(data, repo)
     _require_approved_cycle(cycles)
+
+
+def _safe_config(root: Path) -> dict:
+    """Load ``specops.json`` for a read, degrading to ``{}`` when it is absent
+    (the round-cap read must not itself fail the transition)."""
+    try:
+        return config.load(root)
+    except config.ConfigError:
+        return {}
 
 
 def cmd_transition_phase(
@@ -1003,9 +1043,28 @@ def cmd_transition_phase(
     if target == "REVIEW":
         _enter_review(data, root, repo)
     if current == "REVIEW" and target == "IMPLEMENT" and normalized_result == "REJECTED":
+        cap = config.review_round_cap(_safe_config(root))
+        cycles = data.get("review_cycles", [])
+        if len(cycles) >= cap:
+            # Feature 025 round cap: record the rejection + the halt marker, persist,
+            # and stop to ask a human. Do NOT open round N+1 or change the phase
+            # (stay in REVIEW). The cap is re-read from live config each attempt, so
+            # raising it resumes the loop (research R8).
+            if cycles:
+                cycles[-1]["result"] = "REJECTED"
+                cycles[-1]["completed_at"] = now_utc()
+            data["review_halt"] = {
+                "at_round": len(cycles), "cap": cap, "recorded_at": now_utc(),
+            }
+            finalize(feature_dir, data, base_rev, base_violations)
+            raise SpecopsError(
+                f"Review round cap reached ({cap} rounds). SpecOps halted and is asking "
+                "for a human decision: raise 'review_round_cap' in specops.json, approve if "
+                "coverage is complete, or rebaseline. No verdict was fabricated."
+            )
         _close_rejected_review(data)
     if target == "DONE":
-        _gate_done(data, current, normalized_result)
+        _gate_done(data, current, normalized_result, repo)
 
     data["current_phase"] = target
     data["active_artifact"] = ledger.artifact_for_phase(target)

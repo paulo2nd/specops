@@ -40,7 +40,7 @@ def _v6_ledger() -> dict:
 def test_v6_is_migratable_to_v7() -> None:
     assert ledger.classify(_v6_ledger()) == ledger.MIGRATABLE
     out = ledger.migrate_to_current(_v6_ledger())
-    assert out["schema_version"] == 7 == ledger.CURRENT_SCHEMA
+    assert out["schema_version"] == ledger.CURRENT_SCHEMA
 
 
 def test_v6_findings_survive_migration_lossless() -> None:
@@ -62,7 +62,7 @@ def test_v6_to_v7_migration_idempotent() -> None:
     once = ledger.migrate_to_current(_v6_ledger())
     twice = ledger.migrate_to_current(once)
     assert twice["review_cycles"] == once["review_cycles"]
-    assert twice["schema_version"] == once["schema_version"] == 7
+    assert twice["schema_version"] == once["schema_version"] == ledger.CURRENT_SCHEMA
 
 
 def test_v6_finding_without_new_fields_has_no_structural_defect() -> None:
