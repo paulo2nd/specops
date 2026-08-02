@@ -494,7 +494,7 @@ The ledger migrates **v5 → v6** automatically on the next state-changing comma
 legacy evidence strings are back-filled into structured records without loss (idempotent;
 prior valid ledger preserved on failure).
 
-### `specops handoff finding … | authorize | close | validate | report | import | render`
+### `specops handoff record-scope | finding … | authorize | close | validate | report | import | render`
 
 **Structured corrective handoffs** (Feature 011) make review findings and
 correction authorization first-class, versioned ledger state — so a rejected
@@ -513,6 +513,9 @@ any **blocking** finding is unverified.
 - `specops handoff finding dismiss <id> --reason "…"` — withdraw a false-positive
   or superseded finding to a terminal `DISMISSED` state (audited reason) so it no
   longer gates approval, without fabricating a fix.
+- `specops handoff record-scope [--json]` — record this review round's git-derived
+  reviewed scope and print the files to read (Feature 025; see below). Takes no range
+  argument — the scope is derived, never reviewer-supplied.
 - `specops handoff authorize --path <p> …` — record the round's authorized
   corrective paths (a change outside them surfaces as `unexplained` via `trace`).
 - `specops handoff close` — close the handoff once every blocking finding is
@@ -559,6 +562,39 @@ never duplicates, and never demotes a promotion). Withdrawal reuses `handoff fin
 dismiss`. Promotion attaches the closure criteria + expected evidence a blocking
 finding needs, so the finding is verifiable through the unchanged Feature 011
 lifecycle. Ledger schema **v7**, migrated forward automatically.
+
+### Review round integrity (Feature 025)
+
+Hardens the multi-round semantic review so no approval can rest on an incomplete
+defect hunt and the loop cannot cycle unbounded — all **recording, never judging a
+finding's merit**.
+
+- **`specops handoff record-scope [--json]`** — run it at the start of Step 3 (once
+  the gates pass). It records the round's reviewed range in the ledger, derived from
+  git: an **anchor** round (the first to reach Step 3) covers the full
+  `baseline..HEAD`; a **corrective** round covers `prev_to..HEAD` plus the files of
+  any still-open findings. It prints the exact files to read — replacing the older,
+  ambiguous "read the working-tree gate list" instruction. Idempotent per round; if
+  the prior round's HEAD was rewritten (rebase/squash) it re-anchors over the full
+  diff rather than failing. `--json` adds `round`, `review_role`, `reviewed_range`,
+  and `scope_paths` to the outcome envelope.
+- **Coverage guard** — `specops status transition-phase DONE -r APPROVED` fails
+  closed (exit `1`) unless the recorded rounds cover the whole feature, judged by
+  commit reach: an anchor from the current baseline **and** no product change after
+  the last reviewed HEAD (`frontier..HEAD`). It reports the specific reason (no
+  anchor, an unresolvable frontier → re-run `record-scope`, or the unreviewed tail
+  paths). Only product paths count — a `status.yaml` bookkeeping write can neither
+  pollute nor block. A ledger with no reviewed-scope records (legacy) degrades to the
+  prior cycle-result gate. `reviewed_range` endpoints are exempt from `reconcile` (a
+  rebased-away review HEAD never blocks it).
+- **Round cap** — `review_round_cap` in `specops.json` (default `10`) bounds the
+  loop. When rejecting a round would exceed it, `transition-phase IMPLEMENT -r
+  REJECTED` halts and asks a human instead of opening another round: it records a
+  `review_halt` marker, leaves the round open (no fabricated verdict), and exits
+  `1`. Resume by raising the cap, resolving the open findings and approving, or
+  rebaselining (which clears stale reviewed-scope records).
+
+Ledger schema **v8**, migrated forward automatically.
 
 ### `specops --version`
 
