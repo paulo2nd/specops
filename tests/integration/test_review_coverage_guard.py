@@ -97,6 +97,32 @@ def test_record_scope_takes_no_range_argument(handoff_repo) -> None:
     assert r.returncode != 0  # Typer rejects the unexpected extra argument
 
 
+def test_unreviewed_commit_after_frontier_blocks(handoff_repo) -> None:
+    """[5]: a commit that lands after the recorded review (even re-touching an
+    already-reviewed file) is caught by the frontier..HEAD tail, not falsely passed."""
+    root = handoff_repo(review_cycles=[make_cycle(round=1)])
+    _commit(root, "src/a.py", "v1")
+    assert cli(root, "handoff", "record-scope").returncode == 0  # anchor frontier = HEAD
+    _commit(root, "src/a.py", "v2")  # re-touch the SAME already-reviewed file
+    r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert r.returncode == 1
+    assert "src/a.py" in (r.stdout + r.stderr)
+    assert _ledger(root)["current_phase"] == "REVIEW"
+
+
+def test_rebaseline_clears_stale_reviewed_scope(handoff_repo) -> None:
+    """[7]: rebaseline drops stale reviewed_range records so the coverage guard cannot
+    pass vacuously against an empty baseline..HEAD."""
+    root = handoff_repo(review_cycles=[make_cycle(round=1)])
+    _commit(root, "src/a.py")
+    assert cli(root, "handoff", "record-scope").returncode == 0
+    assert _ledger(root)["review_cycles"][0].get("reviewed_range")  # present before
+    r = cli(root, "status", "rebaseline")
+    assert r.returncode == 0, r.stderr
+    cyc = _ledger(root)["review_cycles"][0]
+    assert "reviewed_range" not in cyc and "review_role" not in cyc
+
+
 def test_unresolvable_baseline_fails_closed(tmp_git_repo: Path) -> None:
     """Scenario 7 (unit): scope records + an unresolvable baseline → the guard raises
     (never a silent approval)."""

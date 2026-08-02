@@ -76,44 +76,60 @@ def _linear_repo(root: Path) -> tuple[str, str, str]:
     return base, h1, h2
 
 
-def test_coverage_complete_with_anchor(tmp_git_repo: Path) -> None:
+def test_assess_anchor_reaching_head_is_complete(tmp_git_repo: Path) -> None:
     base, _h1, h2 = _linear_repo(tmp_git_repo)
     repo = gitops.find_repo(tmp_git_repo)
-    cov = reviewscope.coverage(repo, base, "HEAD", [{"reviewed_range": f"{base}..{h2}"}])
-    assert cov.has_scope_records and cov.complete
-    assert cov.target_paths == frozenset({"a.py", "b.py"})
+    a = reviewscope.assess(repo, base, "HEAD", [{"reviewed_range": f"{base}..{h2}"}])
+    assert a.has_scope_records and a.has_anchor and a.frontier_resolves
+    assert not a.target_empty and a.unreviewed_tail == []
 
 
-def test_coverage_missing_when_partial(tmp_git_repo: Path) -> None:
+def test_assess_unreviewed_tail_after_frontier(tmp_git_repo: Path) -> None:
+    # [5]: a commit lands (b.py) after the frontier (anchor stopped at h1) — the tail
+    # catches the unreviewed change even though b.py is a "new" path, and would catch a
+    # re-touch of an already-reviewed file too.
     base, h1, _h2 = _linear_repo(tmp_git_repo)
     repo = gitops.find_repo(tmp_git_repo)
-    cov = reviewscope.coverage(repo, base, "HEAD", [{"reviewed_range": f"{base}..{h1}"}])
-    assert not cov.complete
-    assert cov.missing_paths == ["b.py"]
+    a = reviewscope.assess(repo, base, "HEAD", [{"reviewed_range": f"{base}..{h1}"}])
+    assert a.has_anchor and a.frontier_resolves
+    assert a.unreviewed_tail == ["b.py"]
 
 
-def test_coverage_union_across_rounds(tmp_git_repo: Path) -> None:
+def test_assess_pruned_intermediate_endpoint_does_not_block(tmp_git_repo: Path) -> None:
+    # [2]: an earlier round's (non-frontier) endpoint is unresolvable, but the frontier
+    # reaches HEAD — the middle range is never re-diffed, so no false block.
+    base, _h1, h2 = _linear_repo(tmp_git_repo)
+    repo = gitops.find_repo(tmp_git_repo)
+    a = reviewscope.assess(
+        repo, base, "HEAD",
+        [{"reviewed_range": f"{base}..{'0' * 40}"}, {"reviewed_range": f"{base}..{h2}"}],
+    )
+    assert a.has_anchor and a.frontier_resolves and a.unreviewed_tail == []
+
+
+def test_assess_no_anchor_when_no_range_starts_at_baseline(tmp_git_repo: Path) -> None:
     base, h1, h2 = _linear_repo(tmp_git_repo)
     repo = gitops.find_repo(tmp_git_repo)
-    cov = reviewscope.coverage(
-        repo, base, "HEAD",
-        [{"reviewed_range": f"{base}..{h1}"}, {"reviewed_range": f"{h1}..{h2}"}],
-    )
-    assert cov.complete
+    a = reviewscope.assess(repo, base, "HEAD", [{"reviewed_range": f"{h1}..{h2}"}])
+    assert a.has_scope_records and not a.has_anchor
 
 
-def test_coverage_drops_unresolvable_range_rebase_tolerance(tmp_git_repo: Path) -> None:
+def test_assess_frontier_unresolvable(tmp_git_repo: Path) -> None:
     base, _h1, _h2 = _linear_repo(tmp_git_repo)
     repo = gitops.find_repo(tmp_git_repo)
-    # A range with a rebased-away endpoint is dropped (not an error) — R7.
-    cov = reviewscope.coverage(repo, base, "HEAD", [{"reviewed_range": f"{base}..{'0' * 40}"}])
-    assert cov.has_scope_records          # the record exists...
-    assert not cov.complete               # ...but contributes no coverage
-    assert cov.covered_paths == frozenset()
+    a = reviewscope.assess(repo, base, "HEAD", [{"reviewed_range": f"{base}..{'0' * 40}"}])
+    assert a.has_scope_records and a.has_anchor and not a.frontier_resolves
 
 
-def test_coverage_no_scope_records(tmp_git_repo: Path) -> None:
+def test_assess_target_empty_when_baseline_is_head(tmp_git_repo: Path) -> None:
+    _base, _h1, h2 = _linear_repo(tmp_git_repo)
+    repo = gitops.find_repo(tmp_git_repo)
+    a = reviewscope.assess(repo, h2, "HEAD", [{"reviewed_range": f"{h2}..{h2}"}])
+    assert a.target_empty
+
+
+def test_assess_no_scope_records(tmp_git_repo: Path) -> None:
     base, _h1, _h2 = _linear_repo(tmp_git_repo)
     repo = gitops.find_repo(tmp_git_repo)
-    cov = reviewscope.coverage(repo, base, "HEAD", [{"round": 1}])
-    assert not cov.has_scope_records
+    a = reviewscope.assess(repo, base, "HEAD", [{"round": 1}])
+    assert not a.has_scope_records

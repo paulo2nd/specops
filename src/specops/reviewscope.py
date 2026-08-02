@@ -91,52 +91,55 @@ def derive_range(
 
 
 @dataclass(frozen=True)
-class Coverage:
-    """Derived (never persisted) coverage of ``baseline..HEAD`` by recorded ranges."""
+class Assessment:
+    """Derived (never persisted) verdict on whether the recorded review rounds
+    cover the whole feature at HEAD."""
 
-    target_paths: frozenset[str]
-    covered_paths: frozenset[str]
-    has_scope_records: bool
-
-    @property
-    def missing_paths(self) -> list[str]:
-        return sorted(self.target_paths - self.covered_paths)
-
-    @property
-    def complete(self) -> bool:
-        return not self.missing_paths
+    has_scope_records: bool     # any round recorded a well-formed reviewed_range
+    target_empty: bool          # no product change in baseline..HEAD (nothing to review)
+    has_anchor: bool            # some recorded range starts at the current baseline
+    frontier: str | None        # the last recorded round's `to` endpoint
+    frontier_resolves: bool     # that endpoint still exists in this clone
+    unreviewed_tail: list[str]  # product paths changed after the frontier (frontier..HEAD)
 
 
-def coverage(
+def assess(
     repo: gitops.Repository,
     baseline: str,
     head: str,
     cycles: list[records.ReviewCycleRecord],
     feature_name: str | None = None,
-) -> Coverage:
-    """Union path-set coverage of ``baseline..head`` by the recorded reviewed ranges.
+) -> Assessment:
+    """Assess whole-feature review coverage by COMMIT reach, not by path names.
 
-    Only **product** paths count on both sides (managed methodology artifacts are
-    excluded — :func:`product_paths`), so a ``status.yaml`` change can never block
-    approval. A range whose endpoints do not both resolve in this clone is
-    **dropped** (not an error) — rebase tolerance (research R7). The caller (the
-    approval guard) fail-closes separately when the baseline itself is unresolvable
-    while scope records exist.
+    Each round reviews the full effective diff of its ``from..to`` range, and the
+    rounds chain (an anchor's ``from`` = the baseline; a corrective's ``from`` =
+    the prior round's ``to``), so the recorded rounds jointly cover
+    ``baseline..frontier`` where ``frontier`` is the **last** recorded ``to``. The
+    feature is fully reviewed iff an anchor exists (the chain starts at the current
+    baseline) and no product change lands after the frontier (``frontier..HEAD`` is
+    empty). Only product paths count (managed methodology artifacts excluded via
+    :func:`product_paths`).
+
+    This is robust both ways — the two defects a path-set union had: a pruned
+    INTERMEDIATE review HEAD is never re-diffed (no false block on a benign rewrite),
+    and a commit landing on an already-reviewed file *after* the last review is
+    caught by the tail (no false pass on unreviewed code).
     """
+    recorded = [
+        ep for c in cycles
+        if isinstance(c, dict) and (ep := _endpoints(c.get("reviewed_range"))) is not None
+    ]
+    has = bool(recorded)
     target = (
-        frozenset(product_paths(gitops.name_only_diff(repo, baseline, head), feature_name))
-        if baseline else frozenset()
+        product_paths(gitops.name_only_diff(repo, baseline, head), feature_name)
+        if baseline else []
     )
-    covered: set[str] = set()
-    has = False
-    for cycle in cycles:
-        if not isinstance(cycle, dict):
-            continue
-        ep = _endpoints(cycle.get("reviewed_range"))
-        if ep is None:
-            continue
-        has = True
-        frm, to = ep
-        if gitops.commit_exists(repo, frm) and gitops.commit_exists(repo, to):
-            covered.update(product_paths(gitops.name_only_diff(repo, frm, to), feature_name))
-    return Coverage(target, frozenset(covered), has)
+    has_anchor = bool(baseline) and any(frm == baseline for frm, _to in recorded)
+    frontier = recorded[-1][1] if recorded else None
+    frontier_resolves = frontier is not None and gitops.commit_exists(repo, frontier)
+    tail = (
+        product_paths(gitops.name_only_diff(repo, frontier, head), feature_name)
+        if frontier_resolves and frontier is not None else []
+    )
+    return Assessment(has, not target, has_anchor, frontier, frontier_resolves, tail)

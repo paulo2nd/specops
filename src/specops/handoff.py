@@ -520,6 +520,12 @@ def cmd_record_scope(root: Path) -> HandoffResult:
     head = gitops.head_sha(repo)
     dr = reviewscope.derive_range(baseline, head, _cycles(data))
 
+    # Rebase tolerance: if a corrective round's `from` (the prior round's HEAD) was
+    # rewritten away, re-anchor over the full baseline..HEAD rather than fail closed —
+    # a full re-review is the safe fallback, and it keeps the loop moving.
+    if dr.review_role == reviewscope.CORRECTIVE and not gitops.commit_exists(repo, dr.from_commit):
+        dr = reviewscope.DerivedRange(reviewscope.ANCHOR, baseline, head)
+
     if not dr.from_commit or not gitops.commit_exists(repo, dr.from_commit):
         return HandoffResult(
             cmd, SCOPE_UNRESOLVABLE,

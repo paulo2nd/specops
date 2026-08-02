@@ -953,12 +953,26 @@ def _gate_review_coverage(data: records.LedgerDocument, repo: gitops.Repository)
             "or rebaseline before approving."
         )
     feature_name = str(data.get("feature") or "") or None
-    cov = reviewscope.coverage(repo, baseline, "HEAD", cycles, feature_name)
-    if cov.missing_paths:
+    a = reviewscope.assess(repo, baseline, "HEAD", cycles, feature_name)
+    if a.target_empty:
+        return  # nothing changed since the baseline — no review scope required
+    if not a.has_anchor:
         raise SpecopsError(
-            "Cannot enter DONE: the review did not cover the whole feature. "
-            f"Uncovered path(s): {', '.join(cov.missing_paths)}. "
-            "Run an anchor review round over the full baseline..HEAD before approving."
+            "Cannot enter DONE: no review round covered the full baseline..HEAD defect "
+            "hunt. Run an anchor 'specops handoff record-scope' over the whole feature "
+            "before approving."
+        )
+    if not a.frontier_resolves:
+        raise SpecopsError(
+            "Cannot enter DONE: the last reviewed range is unresolvable (history was "
+            "rewritten since the review). Re-run 'specops handoff record-scope' to "
+            "re-anchor against the current HEAD before approving."
+        )
+    if a.unreviewed_tail:
+        raise SpecopsError(
+            "Cannot enter DONE: changes since the last review round are unreviewed: "
+            f"{', '.join(a.unreviewed_tail)}. Record and review them "
+            "('specops handoff record-scope') before approving."
         )
 
 
@@ -1046,21 +1060,20 @@ def cmd_transition_phase(
         cap = config.review_round_cap(_safe_config(root))
         cycles = data.get("review_cycles", [])
         if len(cycles) >= cap:
-            # Feature 025 round cap: record the rejection + the halt marker, persist,
-            # and stop to ask a human. Do NOT open round N+1 or change the phase
-            # (stay in REVIEW). The cap is re-read from live config each attempt, so
-            # raising it resumes the loop (research R8).
-            if cycles:
-                cycles[-1]["result"] = "REJECTED"
-                cycles[-1]["completed_at"] = now_utc()
+            # Feature 025 round cap: record the halt marker, persist, and stop to ask a
+            # human. The current round is left OPEN (never stamped REJECTED) so the human
+            # can still resolve its findings and approve; round N+1 is not opened and the
+            # phase stays REVIEW. The cap is re-read from live config each attempt, so
+            # raising it resumes the loop (research R8). No verdict is fabricated.
             data["review_halt"] = {
                 "at_round": len(cycles), "cap": cap, "recorded_at": now_utc(),
             }
             finalize(feature_dir, data, base_rev, base_violations)
             raise SpecopsError(
                 f"Review round cap reached ({cap} rounds). SpecOps halted and is asking "
-                "for a human decision: raise 'review_round_cap' in specops.json, approve if "
-                "coverage is complete, or rebaseline. No verdict was fabricated."
+                "for a human decision: raise 'review_round_cap' in specops.json to allow "
+                "another round, resolve the open findings and approve if coverage is "
+                "complete, or rebaseline. No verdict was fabricated."
             )
         _close_rejected_review(data)
     if target == "DONE":
@@ -1147,6 +1160,16 @@ def cmd_rebaseline(root: Path) -> str:
     new_baseline = gitops.head_sha(repo)
     data["branch"] = new_branch
     data["baseline"] = new_baseline
+
+    # Feature 025: a fresh baseline invalidates every prior round's reviewed scope
+    # (each was derived against the old baseline). Clear them and any halt so the
+    # coverage guard requires a fresh anchor review rather than passing vacuously
+    # against an empty baseline..HEAD diff.
+    for cycle in data.get("review_cycles") or []:
+        if isinstance(cycle, dict):
+            cycle.pop("reviewed_range", None)
+            cycle.pop("review_role", None)
+    data.pop("review_halt", None)
 
     finalize(feature_dir, data, base_rev, base_violations)
     return f"Rebaselined to branch '{new_branch}' at {new_baseline[:7]}."

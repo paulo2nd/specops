@@ -64,34 +64,40 @@ self-reporting" (FR-001/SC-006); the range must be git-derived.
   `reviewed_range.to`, `to = HEAD`.
 
 The range is stored as the existing `"<from>..<to>"` convention (evidence
-`commit_range`, `status.py:661`, `review.py:237`). The union-coverage guard
-(`reviewscope.coverage`, pure) computes:
+`commit_range`, `status.py:661`, `review.py:237`). Coverage is judged by
+**commit reach, not a path-set union** (`reviewscope.assess`, pure):
 
 ```
-target  = set(gitops.name_only_diff(repo, baseline, HEAD))          # current
-covered = ∪ over recorded ranges r where both endpoints resolve:
-              set(gitops.name_only_diff(repo, r.from, r.to))
-missing = target − covered
+frontier = the last recorded round's `to`   # rounds chain: baseline → to₁ → … → frontier
+has_anchor = some recorded range's `from` == the current baseline
+tail = product paths in name_only_diff(frontier, HEAD)   # commits after the last review
+full coverage ⟺ has_anchor AND frontier resolves AND tail is empty
 ```
 
-Approval is blocked iff `missing` is non-empty (and at least one scope record
-exists — see R5). The guard reports `missing` in the error.
+Approval is blocked (with ≥1 scope record — see R5) unless there is nothing to
+review (`baseline..HEAD` empty). The guard reports the specific reason (no anchor,
+unresolvable frontier, or the unreviewed tail paths).
 
-**Rationale**: For a linear history the union of consecutive diffs
-(`baseline..HEAD₁ ∪ HEAD₁..HEAD₂ ∪ …`) covers `baseline..HEADₙ`: any path in the
-target differs between baseline and HEAD, hence was touched in at least one
-sub-range. A path touched then reverted nets out of the target and needs no
-coverage. Evaluating against the **current** baseline/HEAD (not stored snapshots)
-makes the guard correct after a rebase: a stored range whose endpoint no longer
-`commit_exists` (`gitops.commit_exists`, `gitops.py:203`) is dropped from the
-union, so a moved baseline drops the old anchor and leaves `missing` non-empty →
-a fresh anchor round is required (spec Edge Case). No new gitops primitive is
-needed — `name_only_diff` + `commit_exists` suffice; a 2-arg ancestry helper is
-**not** required for the path-set cover approach. Both `target` and `covered` are
-filtered to **product paths** (the drift gate's `trace.is_managed` exclusion of
-`.specify/**`, `specops.json`, and the active `specs/<feature>/**`): the ledger
-rewrites `status.yaml` every round, so counting managed artifacts would let a
-post-review bookkeeping write leave `target` uncovered and wrongly block approval.
+**Rationale**: each round reviews the *full* effective diff of its `from..to`, and
+the rounds chain (anchor `from` = baseline; corrective `from` = prior `to`), so the
+recorded rounds jointly cover `baseline..frontier`. The feature is fully reviewed
+iff the chain starts at the current baseline (an anchor) and nothing product-level
+lands after the frontier. All diffs are filtered to **product paths** (the drift
+gate's `trace.is_managed` exclusion of `.specify/**`, `specops.json`, the active
+`specs/<feature>/**`) so per-round `status.yaml` writes can neither pollute nor
+block. No new gitops primitive is needed (`name_only_diff` + `commit_exists`).
+
+**Correction (post code-review):** the first implementation unioned *path names*
+across ranges. A high-effort review found two real defects: (a) **false pass** — a
+commit re-touching an already-reviewed file after the last recorded round still
+counted as "covered" by the frozen anchor range, letting unreviewed code reach
+DONE; (b) **false block** — a range whose *intermediate* endpoint was pruned got
+dropped from the union, blocking a fully-reviewed feature. The commit-reach
+invariant above fixes both: the `frontier..HEAD` tail catches (a), and only the
+anchor `from` (string) and the frontier are git-queried, so a pruned intermediate
+endpoint is never re-diffed (b). A rewritten *frontier* is the one case the guard
+cannot verify — it asks for a fresh `record-scope` (which re-anchors) rather than
+hard-failing.
 
 **Alternatives considered**: *Store the derived path set per round instead of the
 commit range* — rejected: paths are re-derivable from the range and storing them
@@ -109,9 +115,17 @@ default **10**, read with an `isinstance(int)`/`> 0` guard at the consumer
 (`status.py:903-914`) appends the next-round placeholder as `len(cycles)+1`;
 before appending, if opening the next round would exceed the cap, **do not open
 it** — record a `review_halt` marker on the ledger document and raise
-`SpecopsError` (exit 1) with a human-directed message. The round-N REJECTED
-verdict for the just-finished round is still recorded (the halt replaces only the
-*opening of round N+1*).
+`SpecopsError` (exit 1) with a human-directed message. The current round is **left
+open** (never stamped `REJECTED`): the halt refuses only the *opening of round
+N+1* and keeps the phase at REVIEW.
+
+**Correction (post code-review):** the first implementation stamped the halted
+round `REJECTED`. A review found that this makes the halt message's own offered
+"approve if coverage is complete" remedy structurally impossible —
+`_require_approved_cycle` demands an APPROVED cycle, and `_gate_done` only stamps
+APPROVED when the cycle's result is still `None`. Leaving the round open restores
+all three offered remedies (raise the cap, resolve findings + approve, or
+rebaseline).
 
 **Rationale**: This is the non-pierceable-core "halt and ask a human" pattern
 (Constitution Principle IV Stop-and-Ask; ROADMAP philosophy) — SpecOps stops

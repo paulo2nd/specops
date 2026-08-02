@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from tests.conftest import cli, make_cycle
+from tests.conftest import cli, git, make_cycle
 
 
 def _ledger(root: Path) -> dict:
@@ -40,8 +40,8 @@ def test_round_cap_halts_and_asks(handoff_repo) -> None:
     assert data["current_phase"] == "REVIEW"                 # not transitioned
     assert data["review_halt"]["at_round"] == 2
     assert data["review_halt"]["cap"] == 2
-    assert data["review_cycles"][-1]["result"] == "REJECTED"  # round 2 verdict recorded
-    assert len(data["review_cycles"]) == 2                    # no round 3 opened
+    assert data["review_cycles"][-1]["result"] is None  # round 2 left OPEN — no verdict fabricated
+    assert len(data["review_cycles"]) == 2              # no round 3 opened
 
 
 def test_default_cap_allows_normal_cycles(handoff_repo) -> None:
@@ -53,6 +53,23 @@ def test_default_cap_allows_normal_cycles(handoff_repo) -> None:
     assert data["current_phase"] == "IMPLEMENT"
     assert len(data["review_cycles"]) == 3
     assert "review_halt" not in data
+
+
+def test_approve_after_halt_when_coverage_complete(handoff_repo) -> None:
+    # The halt leaves the round OPEN, so the offered "approve if coverage is complete"
+    # remedy is actually reachable (no blocking findings here).
+    root = _two_round_repo(handoff_repo)
+    _set_cap(root, 2)
+    (root / "src" / "a.py").parent.mkdir(parents=True, exist_ok=True)
+    (root / "src" / "a.py").write_text("code")
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "feature work")
+    assert cli(root, "status", "transition-phase", "IMPLEMENT", "-r", "REJECTED").returncode == 1
+    # Record the (anchor) scope for the still-open round, then approve.
+    assert cli(root, "handoff", "record-scope").returncode == 0
+    r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert r.returncode == 0, r.stderr
+    assert _ledger(root)["current_phase"] == "DONE"
 
 
 def test_resume_after_halt_by_raising_cap(handoff_repo) -> None:

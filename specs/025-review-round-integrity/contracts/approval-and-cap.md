@@ -10,28 +10,33 @@ Two behavioral guards added to the existing approval path
 **Where**: inside `_gate_done` (`status.py:936-967`), **after** the Feature 011
 blocking-findings gate and the Feature 006 cycle-result gate.
 
-**Rule**:
+**Rule** — coverage is judged by **commit reach, not path names**
+(`reviewscope.assess`): the rounds chain (anchor `from` = baseline; corrective
+`from` = prior `to`), so they jointly cover `baseline..frontier` (the last
+recorded `to`). Full coverage ⟺ an anchor exists AND `frontier..HEAD` has no
+product change:
 
 ```
-cov = reviewscope.coverage(repo, baseline, HEAD, review_cycles)
-if cov.has_scope_records and cov.missing_paths:
-    raise SpecopsError(
-        "Cannot enter DONE: the review did not cover the whole feature. "
-        "Uncovered path(s): <missing>. Run an anchor review round over the "
-        "full baseline..HEAD before approving."
-    )
+a = reviewscope.assess(repo, baseline, HEAD, review_cycles, feature)
+if not has_any_scope(cycles):          return              # legacy → prior behavior
+if baseline unresolvable:              raise (fail closed)  # Principle VI
+if a.target_empty:                     return              # nothing changed since baseline
+if not a.has_anchor:                   raise               # no full baseline..HEAD hunt
+if not a.frontier_resolves:            raise               # last review HEAD rewritten → re-record
+if a.unreviewed_tail:                  raise               # commits after the last review
 ```
 
-- `has_scope_records == False` (legacy / no scope recorded) → **no-op**; approval
+- `has_any_scope == False` (legacy / no scope recorded) → **no-op**; approval
   proceeds on the prior cycle-result behavior (FR-008 / SC-005).
-- Baseline unresolvable while `has_scope_records` → **fail closed** (exit 1),
-  never silent pass (Principle VI).
+- **Robust both ways** (the two defects a naive path-set union had): a pruned
+  *intermediate* review HEAD is never re-diffed (no false block on a benign
+  rewrite — R7), and a commit landing on an already-reviewed file *after* the last
+  review is caught by the `frontier..HEAD` tail (no false pass on unreviewed code).
 - The guard reads only `reviewed_range` endpoints and git diffs — it **never**
-  inspects a finding's merit (FR-004). A stored range whose endpoint no longer
-  resolves (rebase/squash) is dropped, not an error: `reviewed_range` endpoints
-  are exempt from the `reconcile` registered-commit invariant (research R7), so
-  the guard re-derives against the current baseline/HEAD and, if that leaves paths
-  uncovered, asks for a fresh anchor round rather than hard-failing.
+  inspects a finding's merit (FR-004). Only product paths count (managed
+  methodology artifacts excluded), so a `status.yaml` write can neither pollute
+  nor block. When the *frontier* itself was rewritten away, the guard asks for a
+  fresh `handoff record-scope` (which re-anchors) rather than hard-failing.
 
 **Ordering rationale**: coverage is evaluated only on an otherwise-approvable
 review (all blocking findings verified, cycle result APPROVED), so the message a
@@ -39,8 +44,8 @@ user sees is specifically about scope, not tangled with findings state.
 
 | Code | Condition |
 |------|-----------|
-| 0 | Coverage complete (or no scope records → degrade) and all prior gates pass. |
-| 1 | `has_scope_records and missing_paths`; or baseline unresolvable with scope records. |
+| 0 | Coverage complete (anchor + no unreviewed tail), or no scope records → degrade, or nothing changed since baseline. |
+| 1 | No anchor, unresolvable frontier, unreviewed tail, or unresolvable baseline while scope records exist. |
 | 2 | Corrupt ledger / infrastructure error. |
 
 ## B. Round cap (halt-and-ask)
@@ -53,21 +58,25 @@ transition, at the round-opening site (`_close_rejected_review`,
 
 ```
 cap = review_round_cap from config (default 10, isinstance-int & >0 guarded)
-# round N just got REJECTED; opening round N+1 would exceed the cap:
+# opening round N+1 would exceed the cap:
 if len(cycles) >= cap:
     record review_halt = {at_round: len(cycles), cap, recorded_at: now}
-    persist the round-N REJECTED verdict + the halt marker
+    persist the halt marker; DO NOT stamp the round or open round N+1
     raise SpecopsError(  # exit 1
         "Review round cap reached (<cap> rounds). SpecOps halted and is asking "
-        "for a human decision: rebaseline, approve, or abandon. No verdict was "
-        "fabricated."
+        "for a human decision: raise 'review_round_cap' to allow another round, "
+        "resolve the open findings and approve if coverage is complete, or "
+        "rebaseline. No verdict was fabricated."
     )
 ```
 
-- The just-finished round's `REJECTED` result IS recorded; only the **opening of
-  the next round** is refused.
+- The current round is **left OPEN** — never stamped `REJECTED`. Stamping it would
+  make the offered "approve" remedy structurally impossible (`_require_approved_cycle`
+  demands an APPROVED cycle), so the halt records only `review_halt` and refuses to
+  open round N+1; the phase stays REVIEW.
 - `review_halt` is audit state, distinct from any verdict; it does not itself gate
-  later transitions once a human intervenes.
+  later transitions. The human resumes by raising the cap (re-read from live config
+  each attempt), resolving findings + approving, or rebaselining.
 - The cap counts **all** rounds (gate-rejected and reviewed alike) — total churn
   is what is bounded.
 

@@ -82,21 +82,28 @@ coverage is complete and blocking findings verified), or by `rebaseline`. The
 `review_halt` record is never cleared automatically — it stays for audit — and it
 carries **no** verdict on any finding (FR-006).
 
-## 3. Coverage evaluation — derived, not persisted
+## 3. Coverage assessment — derived, not persisted
 
-`reviewscope.coverage(repo, baseline, head, cycles) -> Coverage` is pure and
-computed on demand at approval time:
+`reviewscope.assess(repo, baseline, head, cycles, feature) -> Assessment` is pure
+and computed on demand at approval time. Coverage is judged by **commit reach**
+(the rounds chain from the baseline to the last recorded `to` = the *frontier*),
+not by unioning path names — which false-passes an already-reviewed file re-touched
+after the last review and false-blocks a pruned intermediate HEAD.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `target_paths` | `set[str]` | `name_only_diff(baseline, head)` — the current effective diff, **product paths only** (managed artifacts excluded via `trace.is_managed`). |
-| `covered_paths` | `set[str]` | Union of `name_only_diff(from, to)` (product paths only) over each scoped cycle whose endpoints both `commit_exists`. |
-| `missing_paths` | `list[str]` | `sorted(target_paths − covered_paths)`; empty ⇒ complete. |
-| `has_scope_records` | `bool` | Whether any cycle carries a `reviewed_range` (the degradation switch, R5). |
+| `has_scope_records` | `bool` | Any cycle carries a well-formed `reviewed_range` (the degradation switch, R5). |
+| `target_empty` | `bool` | `name_only_diff(baseline, head)` (product paths) is empty — nothing changed since the baseline. |
+| `has_anchor` | `bool` | Some recorded range's `from` equals the **current** baseline (the chain starts at a full hunt). |
+| `frontier` | `str \| None` | The **last** recorded round's `to` endpoint. |
+| `frontier_resolves` | `bool` | That endpoint still `commit_exists` in this clone. |
+| `unreviewed_tail` | `list[str]` | Product paths in `frontier..HEAD` — changes landed after the last review. |
 
-Consumed by the `_gate_done` guard: block iff `has_scope_records and missing_paths`.
-When `not has_scope_records` → no-op (legacy degradation). When the baseline is
-unresolvable while scope records exist → fail closed (exit 1), never silent pass.
+Consumed by the `_gate_done` guard, in order: no scope records → no-op (legacy);
+baseline unresolvable → fail closed (exit 1); `target_empty` → pass; no
+`has_anchor` → block; `not frontier_resolves` → block (re-record to re-anchor);
+`unreviewed_tail` non-empty → block. All product paths only (managed artifacts
+excluded via `trace.is_managed`).
 
 ## 4. Configuration — new optional `review_round_cap`
 

@@ -54,11 +54,12 @@ recorded `baseline`, and the CLI installed editable (`pip install -e .`).
 
 1. Fixture `specops.json` sets `review_round_cap: 3` (or rely on the default and
    drive 10 rounds).
-2. Drive REVIEW→IMPLEMENT `-r REJECTED` until round 3 is rejected and round 4
-   would open.
+2. Drive REVIEW→IMPLEMENT `-r REJECTED` until round 3 is open and round 4 would open.
 3. **Expect**: exit 1, a human-directed halt message; `status.yaml` records
-   `review_halt {at_round: 3, cap: 3, recorded_at: …}`; round 3's `result` is
-   `REJECTED`; **no** round 4 cycle was appended; no approve/reject fabricated.
+   `review_halt {at_round: 3, cap: 3, recorded_at: …}`; round 3 is **left open**
+   (`result: null` — no verdict fabricated); **no** round 4 cycle was appended.
+   Because the round stays open, the human can resolve findings and approve
+   directly (Scenario 8), raise the cap, or rebaseline.
 
 ## Scenario 6 — Legacy ledger degrades (US1 / SC-005)
 

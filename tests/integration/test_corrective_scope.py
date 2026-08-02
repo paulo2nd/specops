@@ -67,6 +67,23 @@ def test_corrective_scope_includes_prior_nonterminal_finding_file(handoff_repo) 
     assert set(obj["scope_paths"]) == {"src/c.py", "src/a.py"}
 
 
+def test_corrective_reanchors_when_prior_endpoint_rewritten(handoff_repo) -> None:
+    # [6]: the prior round's `to` was rewritten away (rebase/squash). record-scope
+    # re-anchors over the full baseline..HEAD instead of failing closed.
+    root, _h = _anchored_corrective_repo(handoff_repo)
+    fp = root / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(fp.read_text())
+    baseline = data["baseline"]
+    data["review_cycles"][0]["reviewed_range"] = f"{baseline}..{'0' * 40}"  # dead prior `to`
+    fp.write_text(yaml.dump(data))
+    _commit(root, "src/c.py", "fixed")
+    r = cli(root, "handoff", "record-scope", "--json")
+    assert r.returncode == 0, r.stderr
+    obj = json.loads(r.stdout)
+    assert obj["review_role"] == "anchor"                  # re-anchored, not fail-closed
+    assert obj["reviewed_range"].startswith(baseline)
+
+
 def test_corrective_record_scope_idempotent(handoff_repo) -> None:
     root, _h = _anchored_corrective_repo(handoff_repo)
     _commit(root, "src/c.py", "fixed")

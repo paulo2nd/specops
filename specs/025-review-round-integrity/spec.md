@@ -163,10 +163,12 @@ and that no automatic approval or rejection is fabricated.
   round-opening attempt; the recorded halt is kept for audit and never fabricates
   a verdict.
 - **Rebased-away review HEAD**: a reviewed-range endpoint made unreachable by a
-  rebase/squash does not fail `reconcile` (those endpoints are exempt from the
-  registered-commit invariant); the coverage guard simply drops the stale range
-  and requires a fresh anchor round — SpecOps does not block on ordinary history
-  rewrites.
+  rebase/squash never fails `reconcile` (those endpoints are exempt from the
+  registered-commit invariant). A rewritten *intermediate* review HEAD does not
+  block approval (it is never re-examined); a rewritten *last-reviewed* HEAD, or a
+  corrective round whose prior endpoint was rewritten, prompts a quick re-record —
+  `record-scope` re-anchors over the full `baseline..HEAD`. SpecOps does not
+  hard-block on ordinary history rewrites.
 
 ## Requirements *(mandatory)*
 
