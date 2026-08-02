@@ -329,8 +329,8 @@ def test_write_new_creates_ledger(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_current_schema_is_v7() -> None:
-    assert ledger.CURRENT_SCHEMA == 7
+def test_current_schema_is_v8() -> None:
+    assert ledger.CURRENT_SCHEMA == 8
 
 
 def _cycle_with_findings(findings: list) -> dict:

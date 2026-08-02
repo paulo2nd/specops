@@ -9,7 +9,7 @@ from typing import cast
 
 import yaml
 
-from specops import contextmap, fsutil, gitops, ledger, records, speckit
+from specops import config, contextmap, fsutil, gitops, ledger, records, reviewscope, speckit
 from specops import evidence as evidence_mod
 from specops.errors import LedgerParseError, SpecopsError
 from specops.ledger import now_utc
@@ -933,8 +933,52 @@ def _require_approved_cycle(cycles: list[records.ReviewCycleRecord]) -> None:
         )
 
 
+def _gate_review_coverage(data: records.LedgerDocument, repo: gitops.Repository) -> None:
+    """Feature 025: block approval unless the recorded reviewed scopes cover the
+    full ``baseline..HEAD`` effective diff.
+
+    Degrades to a no-op when no round recorded a reviewed scope (legacy ledger /
+    review conducted by an older CLI — FR-008). Fails closed when scope records
+    exist but the baseline cannot be resolved (Principle VI). Reads only reviewed
+    ranges and git diffs — never a finding's merit (FR-004; record, do not validate).
+    """
+    cycles = data.get("review_cycles") or []
+    if not reviewscope.has_any_scope(cycles):
+        return
+    baseline = str(data.get("baseline") or "")
+    if not baseline or not gitops.commit_exists(repo, baseline):
+        raise SpecopsError(
+            "Cannot enter DONE: reviewed-scope records exist but the baseline commit "
+            "cannot be resolved (shallow clone or rewritten history). Fetch full history "
+            "or rebaseline before approving."
+        )
+    feature_name = str(data.get("feature") or "") or None
+    a = reviewscope.assess(repo, baseline, "HEAD", cycles, feature_name)
+    if a.target_empty:
+        return  # nothing changed since the baseline — no review scope required
+    if not a.has_anchor:
+        raise SpecopsError(
+            "Cannot enter DONE: no review round covered the full baseline..HEAD defect "
+            "hunt. Run an anchor 'specops handoff record-scope' over the whole feature "
+            "before approving."
+        )
+    if not a.frontier_resolves:
+        raise SpecopsError(
+            "Cannot enter DONE: the last reviewed range is unresolvable (history was "
+            "rewritten since the review). Re-run 'specops handoff record-scope' to "
+            "re-anchor against the current HEAD before approving."
+        )
+    if a.unreviewed_tail:
+        raise SpecopsError(
+            "Cannot enter DONE: changes since the last review round are unreviewed: "
+            f"{', '.join(a.unreviewed_tail)}. Record and review them "
+            "('specops handoff record-scope') before approving."
+        )
+
+
 def _gate_done(
-    data: records.LedgerDocument, current: str, normalized_result: str | None
+    data: records.LedgerDocument, current: str, normalized_result: str | None,
+    repo: gitops.Repository,
 ) -> None:
     """The ordered DONE gates (Feature 011 findings gate, then Feature 006 cycle gate).
 
@@ -964,7 +1008,17 @@ def _gate_done(
         if normalized_result == "APPROVED" and cycles and cycles[-1]["result"] is None:
             cycles[-1]["result"] = "APPROVED"
             cycles[-1]["completed_at"] = now_utc()
+    _gate_review_coverage(data, repo)
     _require_approved_cycle(cycles)
+
+
+def _safe_config(root: Path) -> dict:
+    """Load ``specops.json`` for a read, degrading to ``{}`` when it is absent
+    (the round-cap read must not itself fail the transition)."""
+    try:
+        return config.load(root)
+    except config.ConfigError:
+        return {}
 
 
 def cmd_transition_phase(
@@ -1003,9 +1057,27 @@ def cmd_transition_phase(
     if target == "REVIEW":
         _enter_review(data, root, repo)
     if current == "REVIEW" and target == "IMPLEMENT" and normalized_result == "REJECTED":
+        cap = config.review_round_cap(_safe_config(root))
+        cycles = data.get("review_cycles", [])
+        if len(cycles) >= cap:
+            # Feature 025 round cap: record the halt marker, persist, and stop to ask a
+            # human. The current round is left OPEN (never stamped REJECTED) so the human
+            # can still resolve its findings and approve; round N+1 is not opened and the
+            # phase stays REVIEW. The cap is re-read from live config each attempt, so
+            # raising it resumes the loop (research R8). No verdict is fabricated.
+            data["review_halt"] = {
+                "at_round": len(cycles), "cap": cap, "recorded_at": now_utc(),
+            }
+            finalize(feature_dir, data, base_rev, base_violations)
+            raise SpecopsError(
+                f"Review round cap reached ({cap} rounds). SpecOps halted and is asking "
+                "for a human decision: raise 'review_round_cap' in specops.json to allow "
+                "another round, resolve the open findings and approve if coverage is "
+                "complete, or rebaseline. No verdict was fabricated."
+            )
         _close_rejected_review(data)
     if target == "DONE":
-        _gate_done(data, current, normalized_result)
+        _gate_done(data, current, normalized_result, repo)
 
     data["current_phase"] = target
     data["active_artifact"] = ledger.artifact_for_phase(target)
@@ -1088,6 +1160,16 @@ def cmd_rebaseline(root: Path) -> str:
     new_baseline = gitops.head_sha(repo)
     data["branch"] = new_branch
     data["baseline"] = new_baseline
+
+    # Feature 025: a fresh baseline invalidates every prior round's reviewed scope
+    # (each was derived against the old baseline). Clear them and any halt so the
+    # coverage guard requires a fresh anchor review rather than passing vacuously
+    # against an empty baseline..HEAD diff.
+    for cycle in data.get("review_cycles") or []:
+        if isinstance(cycle, dict):
+            cycle.pop("reviewed_range", None)
+            cycle.pop("review_role", None)
+    data.pop("review_halt", None)
 
     finalize(feature_dir, data, base_rev, base_violations)
     return f"Rebaselined to branch '{new_branch}' at {new_baseline[:7]}."

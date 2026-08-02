@@ -9,11 +9,16 @@ from specops.errors import SpecopsError
 
 CONFIG_FILENAME = "specops.json"
 
+# Feature 025 — the maximum number of semantic review rounds before SpecOps halts
+# and asks a human (the non-pierceable core; never a fabricated verdict).
+DEFAULT_REVIEW_ROUND_CAP = 10
+
 _DEFAULTS: dict[str, Any] = {
     "test_command": "pytest",
     "lint_command": "",
     "skills_dir": ".specify/skills",
     "min_cli_version": "0.3.0",
+    "review_round_cap": DEFAULT_REVIEW_ROUND_CAP,
 }
 
 
@@ -55,6 +60,19 @@ def merge_preserve(existing: dict[str, Any], template: dict[str, Any]) -> dict[s
         if key not in result:
             result[key] = value
     return result
+
+
+def review_round_cap(cfg: dict[str, Any]) -> int:
+    """Return the configured review round cap (Feature 025).
+
+    Defensively coerced at the read site (there is no central config validator):
+    a non-integer or non-positive value falls back to
+    :data:`DEFAULT_REVIEW_ROUND_CAP`, mirroring :func:`lane_safety_overrides`.
+    """
+    raw = cfg.get("review_round_cap")
+    if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0:
+        return raw
+    return DEFAULT_REVIEW_ROUND_CAP
 
 
 def lane_safety_overrides(cfg: dict[str, Any]) -> dict[str, list[str]]:

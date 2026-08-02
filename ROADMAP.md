@@ -92,6 +92,8 @@ Roadmap status uses four values:
 | 021 | Contract Freeze for 1.0 | MERGED | 018, 019, 020 | 1.0 Readiness |
 | 022 | Lifecycle Recording Coverage | MERGED | 006, 007, 010, 021 | Lifecycle Coverage |
 | 023 | Context Read-Set Consumption in IMPLEMENT | MERGED | 009 | Lifecycle Coverage |
+| 024 | Test Execution Only at the Review Gate | MERGED | 012, 021 | Review Integrity |
+| 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
 
 ### Build sequence (dependency review — 2026-07-23)
 
@@ -1203,6 +1205,130 @@ behaves exactly as today.
 > through the existing acknowledgement path, behavior degrades to a no-op
 > without a map, and no new gate or resolution engine is introduced.
 
+## Feature 024 — Test Execution Only at the Review Gate
+
+### Objective
+
+Stop the SpecOps workflow from running the target project's test suite
+redundantly within a single feature run. Today a full run executes the suite
+`U+2` times (once per user story via `complete-task --auto`, once in the soft
+review gate, once again in the terminal gate). Move all test execution to the
+review gate: closing a user story records only diff/commit evidence and runs no
+test, and the terminal gate reuses the soft gate's already-computed full-suite
+result instead of re-running it. On the happy path a per-story test is purely
+confirmatory — the story's code is already written and committed before it would
+run — so it only adds cost; the gate remains the single point of test enforcement.
+
+### Required outcomes
+
+- Closing a user story's final task with `--auto` runs no test command; it still
+  records commit and code-diff evidence mechanically (development-phase provenance
+  preserved).
+- The terminal gate reuses the soft review gate's full-suite result within the
+  same corrective-loop iteration when nothing relevant changed, so the full suite
+  executes at most once per iteration — activating Feature 012's latent gate-run
+  evidence reuse.
+- Only command-executing gates (`lint`, `test`) participate in reuse; the
+  state-derived gates (`reconcile`, `working-tree`, `drift`) always recompute. The
+  cache key includes a working-tree digest so any change — committed or not —
+  invalidates reuse; a new run supersedes the prior record for its key.
+- The gate-run cache is ephemeral, git-directory-local state
+  (`<git-dir>/specops/gate-cache/<feature>.yaml`), never the committed ledger, so
+  `preflight` stays byte-for-byte read-only with respect to the ledger and the
+  working tree (Principle IV needs no amendment; Principle III narrows so `--auto`
+  runs no test).
+- The review gate remains the single point of test enforcement — no change reaches
+  DONE without a passing full-suite gate result. Existing ledgers and evidence
+  records remain readable.
+
+### Explicit non-goals
+
+- No targeted/impacted per-story testing or framework-specific test selection —
+  SpecOps stays agnostic to test frameworks and result formats (deferred as YAGNI;
+  reintroducible later as an optional client-provided command).
+- No change to correctness-enforcement strength; only the *location* and
+  *redundancy* of test execution change.
+- No persisted cross-clone audit trail for gate runs — they are reproducible; the
+  durable audit remains the review verdict plus `complete-task` task evidence.
+
+### Acceptance gate
+
+On the happy path for a `U`-user-story feature the full suite executes exactly
+once (down from `U+2`) with zero per-story runs; running the gate suite twice over
+an unchanged tree executes each command once and reports the second as reused; a
+tree change invalidates reuse; closing a story with `--auto` invokes no test but
+still records commit/diff evidence; and the committed ledger and working tree are
+byte-identical before and after any `preflight` run.
+
+### `/speckit.specify` brief
+
+> Move all test execution to the review gate: closing a user story records only
+> commit/diff evidence and runs no test, and the terminal gate reuses the soft
+> gate's already-computed full-suite result (via an ephemeral git-directory-local
+> gate-run cache keyed on command, commit range, paths, context digest, and
+> working-tree digest) so the suite runs at most once per corrective iteration —
+> the gate stays the single point of test enforcement, `preflight` stays
+> byte-for-byte read-only, and existing ledgers remain readable.
+
+## Feature 025 — Review Round Integrity
+
+### Objective
+
+Harden the multi-round semantic review loop (Feature 016 + `templates/review.md`)
+so no approval can rest on an incomplete defect hunt and reviewer non-determinism
+cannot spin the loop without bound. Today a rejected round that fails at the
+deterministic gates (Step 2) never reaches the semantic review (Step 3); when a
+round finally passes the gates, the reviewer's incremental instinct can approve a
+small delta that no full `baseline..HEAD` hunt ever covered — and nothing caps
+the round count. Close both holes deterministically, recording not validating.
+
+### Required outcomes
+
+- Each Step-3 round records a `reviewed_range` derived deterministically from
+  commit ranges — the anchor round covers `baseline..HEAD`; a corrective round
+  covers `prev_to..HEAD`. The range is computed from the ledger baseline and
+  round HEADs, never self-reported by the reviewer.
+- Approval fails closed unless the union of recorded `reviewed_range`s covers the
+  full `baseline..HEAD` (at least one anchor round exists). A legacy ledger with
+  no reviewed-scope records degrades to the current cycle-result behavior.
+- `templates/review.md` Step 3 distinguishes the anchor round (review the full
+  effective diff) from a corrective round (review `prev_to..HEAD` in full file
+  context for regression, plus verify each `FIXED` finding); re-hunting unchanged,
+  already-reviewed code is an explicit non-goal.
+- A configurable round cap halts and asks a human when exceeded — the
+  non-pierceable core, recorded as ledger state, never a judgment on a finding.
+- Ledger schema bump with forward migration; English and Portuguese documentation
+  updated equivalently.
+
+### Explicit non-goals
+
+- No judgment of whether a finding is legitimate or a reason is good (Principle IV
+  / "record, do not validate").
+- No change to the deterministic `preflight` gate suite (Features 004/012/024) —
+  this feature hardens the semantic review loop, not the gates.
+- No auto-fixing, auto-dismissing, or auto-verifying of findings.
+- No new resolution engine — reviewed scope reuses the existing gitops name-only
+  diff against the ledger baseline.
+
+### Acceptance gate
+
+A REJECTED(gates) → REJECTED(anchor Step-3) → APPROVED(corrective) sequence
+records a union `reviewed_range` covering `baseline..HEAD`; an APPROVE attempt with
+no anchor full pass fails closed; a run exceeding the round cap halts and asks; and
+a legacy repository with no reviewed-scope records still closes through the prior
+cycle-result path.
+
+### `/speckit.specify` brief
+
+> Harden the multi-round semantic review so approval requires a recorded anchor
+> round covering the full `baseline..HEAD` defect hunt, corrective rounds are
+> scoped to `prev_to..HEAD` (full file context for regression) plus `FIXED`-finding
+> verification, each round's reviewed range is derived deterministically from commit
+> ranges (no self-reporting), a union-coverage guard fails approval closed when no
+> anchor pass exists, and a configurable round cap halts and asks a human — all
+> recording, never judging a finding's merit, and degrading to today's behavior on
+> legacy ledgers.
+
 ## Dependency and Replanning Policy
 
 - A feature may be split when `/speckit.clarify` or `/speckit.plan` proves that
@@ -1259,3 +1385,12 @@ and the optional steps in both entry modes — has a defined, recorded SpecOps
 story with fail-closed handling of unrecorded task-list mutation, and the
 context map's minimal read set is consumed at implement time, not only at plan
 and review.
+
+### Review Integrity complete
+
+Features 024–025 are merged. Test execution is consolidated at the review gate —
+no redundant per-story runs, the terminal gate reuses the soft gate's result
+(024, released `0.9.0`) — and the multi-round semantic review is sound: every
+approval is anchored to a recorded full `baseline..HEAD` defect hunt, corrective
+rounds are scoped to their delta, and a configurable round cap halts to a human
+rather than looping unbounded (025, released `0.10.0`).

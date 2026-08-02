@@ -32,8 +32,18 @@ from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 LEDGER_FILENAME = "status.yaml"
 
-CURRENT_SCHEMA = 7
+CURRENT_SCHEMA = 8
 OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
+
+# Feature 025 (v8) — review round integrity. A review cycle may carry a
+# git-derived `reviewed_range` ("<from>..<to>") + `review_role` ("anchor" |
+# "corrective") recording the scope that round's Step-3 review covered, and the
+# ledger may carry a top-level `review_halt` marker when the round cap is hit.
+# All fields are optional — a pre-v8 cycle/ledger simply lacks them, so the
+# migration is a pure version bump with no backfill (parity with v6→v7). The
+# reviewed-range endpoints are deliberately exempt from the reconcile
+# registered-commit invariant (see reconcile.history_checks). See reviewscope.
+_REVIEW_ROLES = ("anchor", "corrective")
 
 # Feature 009 — the no-map context-provenance marker backfilled onto records
 # that predate the map-provenance schema (v3). See contextmap.provenance_for.
@@ -407,8 +417,38 @@ def validate_invariants(data: records.LedgerLike) -> list[str]:
     violations.extend(_acknowledgement_violations(data))
     violations.extend(_finding_violations(data))
     violations.extend(_evidence_violations(data))
+    violations.extend(_reviewed_scope_violations(data))
 
     return violations
+
+
+def _reviewed_scope_violations(data: records.LedgerLike) -> list[str]:
+    """Structural checks on the optional v8 reviewed-scope fields (Feature 025).
+
+    When a cycle carries a ``reviewed_range``/``review_role`` it MUST be a
+    well-formed ``"<from>..<to>"`` string with non-empty endpoints and a valid
+    role; a ``corrective`` role MUST have an earlier scoped round. These are
+    string-shape checks only — never a git round-trip (resolvability is checked
+    lazily by the coverage guard, so a rebased-away endpoint is not a violation).
+    """
+    out: list[str] = []
+    seen_scope = False
+    for cycle in data.get("review_cycles") or []:
+        if not isinstance(cycle, dict):
+            continue
+        rng = cycle.get("reviewed_range")
+        role = cycle.get("review_role")
+        if rng is None and role is None:
+            continue
+        rnd = cycle.get("round")
+        if not isinstance(rng, str) or rng.count("..") != 1 or not all(rng.split("..")):
+            out.append(f"review cycle {rnd} reviewed_range is malformed: {rng!r}")
+        if role not in _REVIEW_ROLES:
+            out.append(f"review cycle {rnd} review_role is invalid: {role!r}")
+        elif role == "corrective" and not seen_scope:
+            out.append(f"review cycle {rnd} is corrective but no earlier scoped round exists")
+        seen_scope = True
+    return out
 
 
 # Finding structural-defect kinds — the single source of truth shared by the

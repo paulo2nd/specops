@@ -95,6 +95,11 @@ class ReviewCycleRecord(TypedDict, total=False):
     result: str | None
     context_provenance: ContextProvenance
     handoff: HandoffRecord
+    # Feature 025 (v8) — the git-derived scope this round's Step-3 review covered.
+    # Absent on rounds that never reached Step-3 (gate-rejected) and on pre-v8
+    # cycles; ``review_role`` is "anchor" | "corrective". See specops.reviewscope.
+    reviewed_range: str
+    review_role: str
 
 
 class _EvidenceRequired(TypedDict):
@@ -138,8 +143,18 @@ class WorkflowBlock(TypedDict, total=False):
     skipped_steps: list[dict[str, Any]]
 
 
+class ReviewHalt(TypedDict, total=False):
+    """Feature 025 (v8) — the round-cap halt marker: the review loop reached its
+    configured bound and handed control to a human. Audit-only, distinct from any
+    review verdict; written only when the cap is hit."""
+
+    at_round: int
+    cap: int
+    recorded_at: str
+
+
 class LedgerDocument(TypedDict, total=False):
-    """The top-level ``status.yaml`` mapping (schema v7; all keys additive-optional
+    """The top-level ``status.yaml`` mapping (schema v8; all keys additive-optional
     because supported legacy schemas may lack any of the later ones)."""
 
     schema_version: int
@@ -160,6 +175,8 @@ class LedgerDocument(TypedDict, total=False):
     workflow: WorkflowBlock
     promoted_from_lane: bool
     lane_provenance: dict[str, Any]
+    # Feature 025 (v8) — round-cap halt marker (see ReviewHalt).
+    review_halt: ReviewHalt
 
 
 # Boundary alias: functions that deliberately accept untrusted/raw documents
@@ -176,6 +193,7 @@ __all__ = [
     "LedgerLike",
     "RecoveryBlock",
     "ReviewCycleRecord",
+    "ReviewHalt",
     "TaskRecord",
     "WorkflowBlock",
 ]

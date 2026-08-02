@@ -941,6 +941,19 @@ def handoff_authorize(
     output_version=handoff.OUTPUT_VERSION)
 
 
+@handoff_app.command("record-scope")
+@_handle_errors
+def handoff_record_scope(
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Record (git-derived) the current review round's reviewed scope and print the
+    files to read: the full baseline..HEAD on an anchor round, prev_to..HEAD plus
+    prior findings' files on a corrective round. Takes no range argument — the
+    scope is derived, never reviewer-supplied (Feature 025)."""
+    from specops import handoff
+    _emit(handoff.cmd_record_scope(Path(".")), json_out, output_version=handoff.OUTPUT_VERSION)
+
+
 @handoff_app.command("close")
 @_handle_errors
 def handoff_close(

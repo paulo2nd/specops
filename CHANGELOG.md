@@ -13,6 +13,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-02
+
+### Added
+
+- **Review round integrity (Feature 025).** The multi-round semantic review is
+  now sound: no approval can rest on an incomplete defect hunt, and the loop
+  cannot cycle unbounded.
+  - **Reviewed scope on the record.** `specops handoff record-scope` records each
+    Step-3 round's git-derived reviewed range — an *anchor* round covers
+    `baseline..HEAD`, a *corrective* round `prev_to..HEAD` plus open findings'
+    files — and prints the exact files to read (replacing the ambiguous
+    "working-tree gate list" instruction). The range is derived, never
+    reviewer-supplied.
+  - **Union-coverage approval guard.** `status transition-phase DONE` fails closed
+    unless the union of recorded reviewed ranges covers the whole `baseline..HEAD`
+    effective diff, naming any uncovered path. It checks coverage only — never a
+    finding's merit (record, do not validate). Ledgers with no reviewed-scope
+    records degrade to the prior cycle-result behavior.
+  - **Configurable round cap.** `review_round_cap` (`specops.json`, default 10)
+    turns an over-long review loop into a Stop-and-Ask halt: SpecOps records a
+    `review_halt` marker and asks a human instead of opening another round.
+    Resume by raising the cap, approving, or rebaselining.
+  - **Ledger v7 → v8** (additive: optional `reviewed_range`/`review_role` on a
+    review cycle, `review_halt` on the document; pure version bump, no backfill).
+  - **`reviewed_range` endpoints are exempt from `reconcile`** — a rebased-away
+    review HEAD never blocks reconciliation (Principle II narrowed; constitution
+    v1.12.0). `specops preflight` stays byte-for-byte read-only.
+
 ## [0.9.0] - 2026-08-01
 
 Test execution moves entirely to the review gate (Feature 024). A full workflow

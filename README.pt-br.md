@@ -119,7 +119,7 @@ sozinhos — as diretivas degradam para no-ops.
 | `specops context …` | Mapa de contexto: ownership, read sets por fase, impacto, staleness |
 | `specops trace …` | Rastreabilidade ponta a ponta; classifica e reconhece drift do diff efetivo |
 | `specops gate …` | Suíte de gate-profiles e inspeção de evidências estruturadas |
-| `specops handoff …` | Handoffs corretivos estruturados; importa findings externos (JSON/SARIF) |
+| `specops handoff …` | Handoffs corretivos estruturados; registra o escopo revisado de cada round; importa findings externos (JSON/SARIF) |
 | `specops lane …` | Lane leve para mudanças pequenas e reversíveis |
 
 A referência completa — flags, códigos de saída, contratos JSON, exemplos e o
@@ -163,8 +163,20 @@ pergunta a um humano.)
 | `test_command` | Comando executado pelo gate de review (`specops preflight`) | `pytest` |
 | `lint_command` | Gate de lint executado por `specops preflight` (vazio = pulado) | `""` |
 | `skills_dir` | Diretório de onde o prompt de review carrega skills | `.specify/skills` |
+| `review_round_cap` | Máximo de rounds de review semântico antes de o SpecOps parar e pedir a um humano | `10` |
 
 Chaves desconhecidas são preservadas em um novo `init`.
+
+### Integridade dos rounds de review
+
+Cada round de review registra o escopo de código que cobriu — um round **âncora** o
+`baseline..HEAD` completo, um round **corretivo** apenas o delta desde o último review —
+derivado do git, nunca escolhido à mão (`specops handoff record-scope`). A aprovação
+falha fechada a menos que os escopos registrados, juntos, cubram a feature inteira, então
+nenhum `APPROVED` se apoia em um hunt parcial. Se o review continuar ciclando além de
+`review_round_cap`, o SpecOps para e pede a um humano em vez de rodar sem limite (suba o
+cap, aprove, ou refaça o baseline para retomar). Ledgers anteriores a esse comportamento
+degradam para o caminho de aprovação anterior.
 
 ## Política de idiomas
 

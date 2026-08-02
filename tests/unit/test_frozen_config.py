@@ -11,8 +11,11 @@ from pathlib import Path
 from specops import config
 
 # Enumerated frozen baseline (data-model.md Entity 1) — NOT derived from the module,
-# so a silent removal/rename in config._DEFAULTS is caught.
-_FROZEN_CONFIG_KEYS = {"test_command", "lint_command", "skills_dir", "min_cli_version"}
+# so a silent removal/rename in config._DEFAULTS is caught. ``review_round_cap`` is the
+# Feature 025 additive default (a new optional key an older consumer ignores).
+_FROZEN_CONFIG_KEYS = {
+    "test_command", "lint_command", "skills_dir", "min_cli_version", "review_round_cap",
+}
 
 
 def test_config_frozen_default_keys() -> None:

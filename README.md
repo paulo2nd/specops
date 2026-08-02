@@ -114,7 +114,7 @@ directives degrade to no-ops.
 | `specops context …` | Context map: ownership, phase read sets, impact, staleness |
 | `specops trace …` | End-to-end traceability; classify and acknowledge effective-diff drift |
 | `specops gate …` | Gate-profile suite and structured-evidence inspection |
-| `specops handoff …` | Structured corrective handoffs; import external findings (JSON/SARIF) |
+| `specops handoff …` | Structured corrective handoffs; record each review round's reviewed scope; import external findings (JSON/SARIF) |
 | `specops lane …` | Lightweight lane for small, reversible changes |
 
 The full reference — flags, exit codes, JSON contracts, examples, and the
@@ -153,8 +153,19 @@ destructive actions — is *not* pierceable; there SpecOps halts and asks a huma
 | `test_command` | Command run by the review gate (`specops preflight`) | `pytest` |
 | `lint_command` | Lint gate run by `specops preflight` (empty = skipped) | `""` |
 | `skills_dir` | Directory the review prompt loads skills from | `.specify/skills` |
+| `review_round_cap` | Max semantic review rounds before SpecOps halts and asks a human | `10` |
 
 Unknown keys are preserved on re-init.
+
+### Review round integrity
+
+Each review round records the code scope it covered — an **anchor** round the full
+`baseline..HEAD`, a **corrective** round the change since the last review — derived from
+git, never hand-picked (`specops handoff record-scope`). Approval fails closed unless the
+recorded scopes together cover the whole feature, so no `APPROVED` can rest on a partial
+hunt. If the review keeps cycling past `review_round_cap`, SpecOps halts and asks a human
+rather than looping unbounded (raise the cap, approve, or rebaseline to resume). Ledgers
+that predate this behavior degrade to the prior approval path.
 
 ## Language policy
 
