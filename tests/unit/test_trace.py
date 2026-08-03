@@ -383,7 +383,8 @@ def test_link_resolves_short_sha_to_full(trace_repo) -> None:
 
 
 def test_link_union_preserves_existing(trace_repo) -> None:
-    # task already carries one (prior) sha; linking a new one appends, never replaces
+    # task already carries a prior (here unresolvable/legacy) sha; linking a new one
+    # unions — the existing binding is preserved (tolerated, kept last), never dropped
     root = trace_repo(
         spec_scs=["SC-001"], plan_paths=["src/x.py"],
         tasks_md_tasks=["- [ ] T001 [US1] do it [SC-001]"],
@@ -393,8 +394,38 @@ def test_link_union_preserves_existing(trace_repo) -> None:
     sha = _work_head(root)
     r = trace.cmd_link(root, task="T001", commits=[sha])
     assert r.status == trace.LINK_RECORDED
-    assert r.extra["commits"] == ["a" * 40, sha]
     assert r.extra["added"] == [sha]
+    assert set(r.extra["commits"]) == {"a" * 40, sha}   # existing preserved
+    assert r.extra["commits"][0] == sha                 # resolvable sorted ahead of dangling
+
+
+def test_link_dedups_within_invocation(trace_repo) -> None:
+    # the same commit supplied twice (as short + full spellings) is stored once
+    root = _seed_missing_link(trace_repo)
+    sha = _work_head(root)
+    r = trace.cmd_link(root, task="T001", commits=[sha, sha[:8]])
+    assert r.status == trace.LINK_RECORDED
+    assert r.extra["commits"] == [sha]
+
+
+def test_link_stores_union_newest_first(trace_repo) -> None:
+    # supplied oldest-first, persisted newest-first (commits[0] is HEAD-most)
+    from tests.conftest import git
+    root = _seed_missing_link(trace_repo)
+    head = _work_head(root)
+    baseline = git(root, "rev-parse", "HEAD~1")
+    r = trace.cmd_link(root, task="T001", commits=[baseline, head])
+    assert r.status == trace.LINK_RECORDED
+    assert r.extra["commits"] == [head, baseline]
+
+
+def test_link_idempotent_message_reports_total_bindings(trace_repo) -> None:
+    root = _seed_missing_link(trace_repo)
+    sha = _work_head(root)
+    trace.cmd_link(root, task="T001", commits=[sha])
+    r = trace.cmd_link(root, task="T001", commits=[sha])
+    assert r.status == trace.LINK_IDEMPOTENT
+    assert "1 binding(s) total" in r.human
 
 
 def test_link_unknown_task(trace_repo) -> None:

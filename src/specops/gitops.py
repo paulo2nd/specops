@@ -220,6 +220,37 @@ def resolve_commit(repo: Repository, rev: str) -> str | None:
     return proc.stdout.strip() or None
 
 
+def sort_commits_newest_first(repo: Repository, shas: list[str]) -> list[str]:
+    """Return *shas* deduplicated and ordered newest-commit-first.
+
+    Normalizes an arbitrary set of commit ids to descendant-first (newest-first)
+    *topological* order, so a task's stored ``commits`` upholds the "``commits[0]``
+    is the HEAD-most commit, ``commits[-1]`` the oldest" contract that evidence-range
+    derivation (``handoff``/``ledger``) relies on regardless of the order a caller
+    supplied them (e.g. ``trace link`` with user-ordered ``--commit`` flags).
+    Topological — not date — order: it is graph-derived (never an ancestor before a
+    descendant) so it is deterministic under same-timestamp or rewritten-date commits
+    where a date sort is ambiguous or wrong. Shas that do not resolve (a rebased-away
+    or hand-edited/legacy commit already in the ledger) are tolerated: they cannot be
+    ordered, so they are kept after the resolvable ones rather than crashing rev-list
+    or being silently dropped."""
+    uniq = list(dict.fromkeys(shas))
+    if len(uniq) <= 1:
+        return uniq
+    resolvable = {s for s in uniq if commit_exists(repo, s)}
+    unresolvable = [s for s in uniq if s not in resolvable]
+    if len(resolvable) <= 1:
+        return [s for s in uniq if s in resolvable] + unresolvable
+    # rev-list walks the given commits' combined ancestry newest-first; filtering to
+    # the requested set yields their relative topological order.
+    ordered = [
+        line for line in
+        _run_ok(repo.root, ["rev-list", "--topo-order", *resolvable]).splitlines()
+        if line in resolvable
+    ]
+    return ordered + unresolvable
+
+
 def blob_sha(repo: Repository, rev: str, path: str) -> str | None:
     """Return the git blob SHA of *path* at *rev*, or None when it does not resolve.
 

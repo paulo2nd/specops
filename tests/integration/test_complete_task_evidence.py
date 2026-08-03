@@ -37,6 +37,28 @@ def test_manual_evidence_records_structured_record(tmp_path: Path) -> None:
     assert "superseded_by" in rec
 
 
+def test_complete_task_preserves_trace_linked_out_of_range_commit(tmp_path: Path) -> None:
+    """`complete-task` must union, not overwrite: a commit bound via `trace link`
+    that falls outside the harvested started..HEAD range survives completion."""
+    import subprocess as sp
+
+    from specops import trace
+    root, feature_dir, started = _in_progress_task_setup(tmp_path)
+    # `started` is an ancestor of HEAD but outside the exclusive started..HEAD range
+    assert trace.cmd_link(root, task="T001", commits=[started]).status == trace.LINK_RECORDED
+    # advance HEAD so the auto-harvest range is non-empty
+    (root / "f.py").write_text("x\n")
+    sp.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    sp.run(["git", "commit", "-m", "work"], cwd=root, check=True, capture_output=True)
+
+    s.cmd_complete_task(root, "T001", auto=True, evidence=None)
+
+    task = next(t for t in _ledger(feature_dir)["tasks"] if t["id"] == "T001")
+    assert started in task["commits"]        # the linked commit was not clobbered
+    assert len(task["commits"]) >= 2         # harvested range + the linked commit
+    assert task["commits"][0] != started     # harvest head stays newest-first
+
+
 def test_evidence_id_is_deterministic_and_ledger_valid(tmp_path: Path) -> None:
     from specops import ledger
 

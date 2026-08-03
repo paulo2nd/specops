@@ -748,14 +748,17 @@ def cmd_link(root: Path, *, task: str, commits: list[str]) -> TraceResult:
         resolved.append(full)
 
     existing = list(rec.get("commits") or [])
-    added = [s for s in resolved if s not in existing]
+    added = [s for s in dict.fromkeys(resolved) if s not in existing]
     if not added:
         return TraceResult("trace link", LINK_IDEMPOTENT,
-                           f"trace link: task '{task}' already linked to "
-                           f"{len(resolved)} commit(s) (idempotent)",
+                           f"trace link: task '{task}' already carries the supplied "
+                           f"commit(s); {len(existing)} binding(s) total (idempotent)",
                            {"task": task, "commits": existing})
 
-    rec["commits"] = existing + added
+    # Store the union deduplicated and newest-first so the task upholds the
+    # `commits[0] == HEAD-most` contract evidence-range derivation assumes,
+    # regardless of the order the shas were supplied in.
+    rec["commits"] = gitops.sort_commits_newest_first(repo, existing + added)
     status.finalize(feature_dir, data, base_rev, base_violations)
     return TraceResult("trace link", LINK_RECORDED,
                        f"trace link: linked {len(added)} commit(s) to task '{task}'",
