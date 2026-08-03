@@ -468,7 +468,8 @@ def build_graph(root: Path) -> dict[str, Any]:
         "review_cycles": cycles,
         "findings": _findings(fd, data),
         "acknowledgements": [
-            {"path": a.get("path"), "task": a.get("task"), "reason": a.get("reason")}
+            {"path": a.get("path"), "task": a.get("task"), "reason": a.get("reason"),
+             "out_of_feature": bool(a.get("out_of_feature"))}
             for a in data.get("acknowledgements") or [] if isinstance(a, dict)
         ],
     }
@@ -664,7 +665,13 @@ def cmd_acknowledge(
                            "trace acknowledge: --task is required "
                            "(or --out-of-feature for a tooling path with no task)")
     path = norm_path(path)  # store normalized so classification matches Git-reported paths
-    extra = {"path": path, "task": task, "out_of_feature": out_of_feature}
+    # Mirror the record shape so the --json payload stays byte-compatible per mode:
+    # a task-bound ack keeps its prior {path, task}; an out-of-feature ack omits task.
+    extra: dict[str, Any] = {"path": path}
+    if out_of_feature:
+        extra["out_of_feature"] = True
+    else:
+        extra["task"] = task
 
     repo = gitops.find_repo(root)
     if repo is None:

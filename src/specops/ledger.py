@@ -571,6 +571,12 @@ def _acknowledgement_violations(data: records.LedgerLike) -> list[str]:
             need = "path/reason" if oof else "path/task/reason"
             out.append(f"acknowledgement {i} is malformed ({need} required)")
             continue
+        if oof and rec.get("task"):
+            out.append(
+                f"acknowledgement {i} is malformed "
+                "(out_of_feature record must not carry a task)"
+            )
+            continue
         if not oof and rec["task"] not in known:
             out.append(
                 f"acknowledgement {i} references unknown task '{rec['task']}'"

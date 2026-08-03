@@ -244,6 +244,26 @@ def test_acknowledge_out_of_feature_records_without_task(trace_repo) -> None:
     assert _classify(root, ["skills/foo.md"])["skills/foo.md"] == trace.DISCOVERED
 
 
+def test_acknowledge_extra_shape_is_mode_specific(trace_repo) -> None:
+    # task-bound ack keeps {path, task} (no out_of_feature key); out-of-feature omits task
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")])
+    tb = trace.cmd_acknowledge(root, "src/d.py", task="T001", reason="r")
+    assert "out_of_feature" not in tb.extra and tb.extra["task"] == "T001"
+    oof = trace.cmd_acknowledge(root, "skills/y.md", reason="r", out_of_feature=True)
+    assert oof.extra["out_of_feature"] is True and "task" not in oof.extra
+
+
+def test_report_labels_out_of_feature_discovery(trace_repo) -> None:
+    root = trace_repo(spec_scs=["SC-001"], plan_paths=[],
+                      tasks=[make_task("T001", status="IN_PROGRESS")])
+    trace.cmd_acknowledge(root, "skills/tool.md", reason="supports dev", out_of_feature=True)
+    r = trace.cmd_report(root)
+    assert "out-of-feature: supports dev" in r.human
+    assert "task None" not in r.human  # the field survives build_graph, so no dead label
+    ack = next(a for a in r.extra["graph"]["acknowledgements"] if a["path"] == "skills/tool.md")
+    assert ack["out_of_feature"] is True
+
+
 def test_acknowledge_out_of_feature_rejects_task(trace_repo) -> None:
     root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")])
     r = trace.cmd_acknowledge(root, "skills/foo.md", task="T001", reason="r", out_of_feature=True)
