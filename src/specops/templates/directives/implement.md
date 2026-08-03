@@ -125,6 +125,18 @@ Before starting the first task of a session:
 - Exit code ≠ 0 → stop immediately and signal the human.
   Do not proceed until the divergence is resolved.
 
+### Repairing a `missing-link`
+
+If `specops trace validate` (or a review) reports a `missing-link` "user story
+'USn' has no commit" — commits landed out of task order, or the story's tasks are
+already `DONE` so `complete-task` can no longer harvest them — bind the commits
+directly instead of hand-editing the ledger:
+
+`specops trace link --task <task-id> --commit <sha> [--commit <sha> …]`
+
+It runs on `DONE` tasks, is idempotent, and rejects any sha not reachable from
+`HEAD`. Bind at least one commit per affected story; `trace validate` then passes.
+
 ### Phase Transitions
 
 - At session start, before the first `start-task`, advance the ledger to the

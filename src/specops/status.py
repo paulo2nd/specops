@@ -640,9 +640,15 @@ def _record_completion(
     commits: list[str],
 ) -> None:
     """Mutate the ledger: task DONE + provenance + the v6 structured evidence record."""
-    task["commits"] = commits
-    if commits:
-        data["recovery"]["last_commit"] = commits[0]
+    # Union the harvested range with any commits bound out-of-band via `trace link`
+    # (e.g. an ancestor of HEAD before the task's start), preserving the harvest's
+    # newest-first order so `commits[0]` stays HEAD-most. A plain overwrite would
+    # silently drop a surgically-linked commit that falls outside started..HEAD.
+    prior = [c for c in (task.get("commits") or []) if c not in commits]
+    merged = list(commits) + prior
+    task["commits"] = merged
+    if merged:
+        data["recovery"]["last_commit"] = merged[0]
 
     # Feature 009: snapshot context provenance (resolved context ids + map digest,
     # or an explicit no-map/invalid marker) for the task's effective changed paths.

@@ -417,7 +417,7 @@ literal prefix → fewer wildcards → more segments), and a genuine tie is repo
 as ambiguous ownership. Consumption by planning and review arrives in a later
 feature; this ships the deterministic foundation.
 
-### `specops trace classify | validate | report | acknowledge`
+### `specops trace classify | validate | report | acknowledge | link`
 
 **End-to-end traceability** (Feature 010) connects each spec Success Criterion
 forward through its tasks, contexts/paths, commits, evidence, and review findings,
@@ -440,8 +440,16 @@ drift without rejecting legitimate discoveries.
   one-time, path-level acknowledgement of a genuine discovery so it stops being
   `unexplained`. Idempotent for an identical record; fails closed (exit `2`) on a
   conflicting or unknown-task acknowledgement; a no-op for an already-planned path.
+- `specops trace link --task <id> --commit <sha> [--commit <sha> …]` — bind
+  explicit commit shas to a task's `commits`, clearing a `missing-link` (user story
+  with no commit) that `complete-task`'s range harvest could not record — commits
+  made out of task order, or a binding known only after the task was `DONE`. Runs
+  regardless of task status; idempotent with union semantics (never drops an
+  existing binding); resolves short shas to full form; fails closed (exit `2`) on an
+  unknown task or a sha not reachable from `HEAD` (so it can never create a
+  `dangling-reference`). Replaces the former hand-edit of `status.yaml`.
 
-Acknowledgements live in the ledger (schema **v4**, migrated forward
+Acknowledgements and links live in the ledger (schema **v4**, migrated forward
 automatically). All commands accept `--json` for a stable, versioned surface, and
 map onto the `0`/`1`/`2` exit-code taxonomy with a `status` field.
 

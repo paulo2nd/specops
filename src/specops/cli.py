@@ -820,6 +820,20 @@ def trace_acknowledge(
     output_version=trace.OUTPUT_VERSION)
 
 
+@trace_app.command("link")
+@_handle_errors
+def trace_link(
+    task: str = typer.Option(..., "--task", help="Task id to bind the commit(s) to."),
+    commit: list[str] = typer.Option(
+        ..., "--commit", help="Commit sha to link (repeatable). Short shas are resolved."),
+    json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
+) -> None:
+    """Bind explicit commit shas to a task's commits (surgical; runs on DONE tasks)."""
+    from specops import trace
+    _emit(trace.cmd_link(Path("."), task=task, commits=list(commit)), json_out,
+    output_version=trace.OUTPUT_VERSION)
+
+
 # ---------------------------------------------------------------------------
 # handoff — structured corrective handoffs (Feature 011)
 # ---------------------------------------------------------------------------

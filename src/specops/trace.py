@@ -40,6 +40,10 @@ ACK_IDEMPOTENT = "ack_idempotent"
 ACK_ALREADY_PLANNED = "ack_already_planned"
 ACK_CONFLICT = "ack_conflict"
 ACK_UNKNOWN_TASK = "ack_unknown_task"
+LINK_RECORDED = "link_recorded"
+LINK_IDEMPOTENT = "link_idempotent"
+LINK_UNKNOWN_TASK = "link_unknown_task"
+LINK_BAD_COMMIT = "link_bad_commit"
 USAGE_ERROR = "usage_error"
 
 # outcome class per status: pass(0) / gate-rejection(1) / infra-error(2)
@@ -51,11 +55,15 @@ _CLASS_FOR_STATUS = {
     ACK_RECORDED: outcome.PASS,
     ACK_IDEMPOTENT: outcome.PASS,
     ACK_ALREADY_PLANNED: outcome.PASS,
+    LINK_RECORDED: outcome.PASS,
+    LINK_IDEMPOTENT: outcome.PASS,
     DRIFT_BLOCKED: outcome.GATE_REJECTION,
     TRACE_INCOMPLETE: outcome.GATE_REJECTION,
     USAGE_ERROR: outcome.INFRA_ERROR,
     ACK_CONFLICT: outcome.INFRA_ERROR,
     ACK_UNKNOWN_TASK: outcome.INFRA_ERROR,
+    LINK_UNKNOWN_TASK: outcome.INFRA_ERROR,
+    LINK_BAD_COMMIT: outcome.INFRA_ERROR,
 }
 
 # SpecOps/Speckit-managed artifact paths are methodology state, not product drift.
@@ -685,3 +693,73 @@ def cmd_acknowledge(root: Path, path: str, *, task: str, reason: str) -> TraceRe
     return TraceResult("trace acknowledge", ACK_RECORDED,
                        f"trace acknowledge: recorded '{path}' (task {task})",
                        {"path": path, "task": task})
+
+
+# ---------------------------------------------------------------------------
+# Commit linkage (surgical sha → task binding; issue #62)
+# ---------------------------------------------------------------------------
+
+
+def cmd_link(root: Path, *, task: str, commits: list[str]) -> TraceResult:
+    """Bind explicit commit shas to a task's ``commits`` field (state-changing).
+
+    The surgical companion to ``complete-task``'s range harvest: where
+    ``complete-task`` sweeps ``started_commit..HEAD`` (and only while the task is
+    IN_PROGRESS), this writes caller-named shas into a specific task regardless of
+    its status. Union semantics — shas already present are a no-op — so the call is
+    idempotent and never drops an existing binding. Each sha is resolved to its
+    full form and required to be reachable from HEAD, so a link can never introduce
+    the ``dangling-reference`` (``commit_exists``) or ``reconcile`` (``is_ancestor``)
+    defect it exists to clear.
+
+    Precondition failures (not-a-repo, identity mismatch, stale write) raise
+    SpecopsError for the CLI error boundary; semantic outcomes return a
+    :class:`TraceResult`.
+    """
+    shas = [c.strip() for c in (commits or []) if c and c.strip()]
+    if not task or not shas:
+        return TraceResult("trace link", USAGE_ERROR,
+                           "trace link: --task and at least one --commit are required")
+
+    repo = gitops.find_repo(root)
+    if repo is None:
+        return TraceResult("trace link", USAGE_ERROR,
+                           "trace link: not a Git repository")
+
+    feature_dir = status.get_feature_dir(root)
+    data, base_rev, base_violations, _repo = status.load_for_write(root, feature_dir)
+
+    tasks_by_id = {
+        t["id"]: t for t in data.get("tasks") or []
+        if isinstance(t, dict) and isinstance(t.get("id"), str)
+    }
+    rec = tasks_by_id.get(task)
+    if rec is None or rec.get("orphaned"):
+        return TraceResult("trace link", LINK_UNKNOWN_TASK,
+                           f"trace link: unknown task '{task}'", {"task": task})
+
+    resolved: list[str] = []
+    for c in shas:
+        full = gitops.resolve_commit(repo, c)
+        if full is None or not gitops.is_ancestor(repo, full):
+            return TraceResult("trace link", LINK_BAD_COMMIT,
+                               f"trace link: commit '{c}' is not in branch history",
+                               {"task": task, "commit": c})
+        resolved.append(full)
+
+    existing = list(rec.get("commits") or [])
+    added = [s for s in dict.fromkeys(resolved) if s not in existing]
+    if not added:
+        return TraceResult("trace link", LINK_IDEMPOTENT,
+                           f"trace link: task '{task}' already carries the supplied "
+                           f"commit(s); {len(existing)} binding(s) total (idempotent)",
+                           {"task": task, "commits": existing})
+
+    # Store the union deduplicated and newest-first so the task upholds the
+    # `commits[0] == HEAD-most` contract evidence-range derivation assumes,
+    # regardless of the order the shas were supplied in.
+    rec["commits"] = gitops.sort_commits_newest_first(repo, existing + added)
+    status.finalize(feature_dir, data, base_rev, base_violations)
+    return TraceResult("trace link", LINK_RECORDED,
+                       f"trace link: linked {len(added)} commit(s) to task '{task}'",
+                       {"task": task, "commits": rec["commits"], "added": added})

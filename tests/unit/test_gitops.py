@@ -88,6 +88,17 @@ def test_commit_exists_false_for_unknown_sha(tmp_git_repo: Path) -> None:
     assert not gitops.commit_exists(repo, "deadbeef" * 5)
 
 
+def test_resolve_commit_expands_short_sha_to_full(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    full = gitops.head_sha(repo)
+    assert gitops.resolve_commit(repo, full[:7]) == full
+
+
+def test_resolve_commit_none_for_unknown_sha(tmp_git_repo: Path) -> None:
+    repo = gitops.find_repo(tmp_git_repo)
+    assert gitops.resolve_commit(repo, "deadbeef" * 5) is None
+
+
 def test_git_dir_resolves_to_git_directory(tmp_git_repo: Path) -> None:
     repo = gitops.find_repo(tmp_git_repo)
     assert repo is not None

@@ -111,6 +111,37 @@ def test_acknowledge_unknown_task_exit_two(trace_repo) -> None:
 
 
 # ---------------------------------------------------------------------------
+# link (issue #62)
+# ---------------------------------------------------------------------------
+
+
+def test_link_writes_commit_and_clears_missing_link(trace_repo) -> None:
+    root = trace_repo(
+        spec_scs=["SC-001"], plan_paths=["src/x.py"],
+        tasks_md_tasks=["- [ ] T001 [US1] do it [SC-001]"],
+        tasks=[make_task("T001", status="DONE", evidence="CLI_LOG:ok", commits=[])],
+        changed={"src/x.py": "print()\n"},
+    )
+    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True,
+                         capture_output=True, text=True).stdout.strip()
+    r = _run(root, "trace", "link", "--task", "T001", "--commit", sha[:8], "--json")
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["status"] == "link_recorded"
+    task = next(t for t in _ledger(root)["tasks"] if t["id"] == "T001")
+    assert task["commits"] == [sha]  # stored full form
+    # validate no longer reports the story's missing-link (src/x.py is planned)
+    v = json.loads(_run(root, "trace", "validate", "--json").stdout)
+    assert not any(d["kind"] == "missing-link" for d in v["defects"])
+
+
+def test_link_bad_commit_exit_two(trace_repo) -> None:
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="DONE")])
+    r = _run(root, "trace", "link", "--task", "T001", "--commit", "deadbeef" * 5)
+    assert r.returncode == 2
+    assert (_ledger(root)["tasks"][0].get("commits") or []) == []
+
+
+# ---------------------------------------------------------------------------
 # report + drift gate inside `specops review` (T008/T018)
 # ---------------------------------------------------------------------------
 
