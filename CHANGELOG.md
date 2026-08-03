@@ -13,6 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`specops trace link` — surgical commit→task binding ([#62](https://github.com/paulo2nd/specops/issues/62)).**
+  `trace validate`'s `missing-link` defect requires each DONE user story to carry
+  at least one bound commit, but the only writer of `tasks[].commits` was
+  `complete-task`, which harvests the whole `started_commit..HEAD` range and only
+  while the task is `IN_PROGRESS`. When commits landed out of task order — or the
+  correct binding was known only after a task was `DONE` — no CLI could record it
+  and a hand-edit of `status.yaml` was the only route. `trace link --task <T>
+  --commit <sha> [--commit …]` writes explicit shas into a specific task's
+  `commits`: it runs regardless of task status, is idempotent with union semantics
+  (never dropping an existing binding), resolves short shas to full form, and
+  requires each sha to be reachable from `HEAD` so a link can never introduce the
+  `dangling-reference`/`reconcile` defect it exists to clear.
+  - `gitops.resolve_commit` — resolve a short sha/ref to its full commit sha.
+
 ## [0.10.0] - 2026-08-02
 
 ### Added

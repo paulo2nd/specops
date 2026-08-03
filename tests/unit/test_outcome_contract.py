@@ -135,9 +135,10 @@ def test_render_mirrors_invoked_command_name() -> None:
 # drops or remaps a status is caught (SC-003, T007).
 _TRACE_EXIT = {
     "trace_ok": 0, "drift_clean": 0, "ack_recorded": 0, "ack_idempotent": 0,
-    "ack_already_planned": 0,
+    "ack_already_planned": 0, "link_recorded": 0, "link_idempotent": 0,
     "drift_blocked": 1, "trace_incomplete": 1,
     "usage_error": 2, "ack_conflict": 2, "ack_unknown_task": 2,
+    "link_unknown_task": 2, "link_bad_commit": 2,
 }
 _HANDOFF_EXIT = {
     "finding_recorded": 0, "handoff_authorized": 0, "finding_fixed": 0,

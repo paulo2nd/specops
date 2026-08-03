@@ -207,6 +207,19 @@ def commit_exists(repo: Repository, sha: str) -> bool:
     ).returncode == 0
 
 
+def resolve_commit(repo: Repository, rev: str) -> str | None:
+    """Resolve *rev* (short sha, ref, …) to its full 40-char commit sha, or None.
+
+    The sha-returning companion to :func:`commit_exists`: callers that must
+    persist a canonical, unambiguous commit id (e.g. ``trace link`` writing into
+    ``tasks[].commits``) resolve here so a user-supplied abbreviation is stored in
+    the same full form ``complete-task`` harvests."""
+    proc = _git(repo.root, ["rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}"])
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
 def blob_sha(repo: Repository, rev: str, path: str) -> str | None:
     """Return the git blob SHA of *path* at *rev*, or None when it does not resolve.
 

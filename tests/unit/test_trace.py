@@ -322,3 +322,95 @@ def test_validate_dangling_acknowledgement_reference(trace_repo) -> None:
     )
     defects = trace.validate_trace(root)
     assert any(d["kind"] == "dangling-reference" and "T404" in d["detail"] for d in defects)
+
+
+# ---------------------------------------------------------------------------
+# Commit linkage — `trace link` (issue #62)
+# ---------------------------------------------------------------------------
+
+
+def _work_head(root: Path) -> str:
+    """Full sha of the fixture's `changed` "work" commit (current HEAD)."""
+    from tests.conftest import git
+    return git(root, "rev-parse", "HEAD")
+
+
+def _seed_missing_link(trace_repo):
+    """A DONE story with no bound commit (the #62 gap) plus a real commit to link."""
+    return trace_repo(
+        spec_scs=["SC-001"], plan_paths=["src/x.py"],
+        tasks_md_tasks=["- [ ] T001 [US1] do it [SC-001]"],
+        tasks=[make_task("T001", status="DONE", evidence="CLI_LOG:ok", commits=[])],
+        changed={"src/x.py": "print()\n"},
+    )
+
+
+def test_link_records_and_clears_missing_link(trace_repo) -> None:
+    root = _seed_missing_link(trace_repo)
+    sha = _work_head(root)
+    # gap present before linking
+    assert any(d["kind"] == "missing-link" and d["ref"] == "US1"
+               for d in trace.validate_trace(root))
+
+    r = trace.cmd_link(root, task="T001", commits=[sha])
+    assert r.status == trace.LINK_RECORDED
+    assert r.extra["commits"] == [sha]
+    # gap cleared, and the linked sha does not introduce a dangling-reference
+    kinds = {d["kind"] for d in trace.validate_trace(root)}
+    assert "missing-link" not in kinds
+    assert "dangling-reference" not in kinds
+
+
+def test_link_runs_on_done_task_and_persists(trace_repo) -> None:
+    import yaml
+    root = _seed_missing_link(trace_repo)  # task is DONE — complete-task would refuse it
+    sha = _work_head(root)
+    assert trace.cmd_link(root, task="T001", commits=[sha]).status == trace.LINK_RECORDED
+    # durable on disk in full-sha form
+    ledger = yaml.safe_load((root / "specs" / "001-demo" / "status.yaml").read_text())
+    task = next(t for t in ledger["tasks"] if t["id"] == "T001")
+    assert task["commits"] == [sha]
+    # a second call re-reads that state and is a no-op
+    assert trace.cmd_link(root, task="T001", commits=[sha]).status == trace.LINK_IDEMPOTENT
+
+
+def test_link_resolves_short_sha_to_full(trace_repo) -> None:
+    root = _seed_missing_link(trace_repo)
+    sha = _work_head(root)
+    r = trace.cmd_link(root, task="T001", commits=[sha[:8]])
+    assert r.status == trace.LINK_RECORDED
+    assert r.extra["commits"] == [sha]  # stored full, not the abbreviation
+
+
+def test_link_union_preserves_existing(trace_repo) -> None:
+    # task already carries one (prior) sha; linking a new one appends, never replaces
+    root = trace_repo(
+        spec_scs=["SC-001"], plan_paths=["src/x.py"],
+        tasks_md_tasks=["- [ ] T001 [US1] do it [SC-001]"],
+        tasks=[make_task("T001", status="DONE", commits=["a" * 40])],
+        changed={"src/x.py": "print()\n"},
+    )
+    sha = _work_head(root)
+    r = trace.cmd_link(root, task="T001", commits=[sha])
+    assert r.status == trace.LINK_RECORDED
+    assert r.extra["commits"] == ["a" * 40, sha]
+    assert r.extra["added"] == [sha]
+
+
+def test_link_unknown_task(trace_repo) -> None:
+    root = _seed_missing_link(trace_repo)
+    sha = _work_head(root)
+    r = trace.cmd_link(root, task="T999", commits=[sha])
+    assert r.status == trace.LINK_UNKNOWN_TASK
+
+
+def test_link_bad_commit_rejected(trace_repo) -> None:
+    root = _seed_missing_link(trace_repo)
+    r = trace.cmd_link(root, task="T001", commits=["deadbeef" * 5])
+    assert r.status == trace.LINK_BAD_COMMIT
+
+
+def test_link_requires_task_and_commit(trace_repo) -> None:
+    root = _seed_missing_link(trace_repo)
+    assert trace.cmd_link(root, task="T001", commits=[]).status == trace.USAGE_ERROR
+    assert trace.cmd_link(root, task="", commits=["a" * 40]).status == trace.USAGE_ERROR
