@@ -33,6 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `gitops.resolve_commit` — resolve a short sha/ref to its full commit sha.
   - `gitops.sort_commits_newest_first` — dedup + descendant-first topological order,
     tolerating unresolvable (rebased-away/legacy) shas already in the ledger.
+- **`trace acknowledge --out-of-feature` — acknowledge tooling paths with no task
+  ([#63](https://github.com/paulo2nd/specops/issues/63)).** The drift gate exempts
+  only SpecOps/Speckit-managed paths (`.specify/`, `specops.json`, the active
+  feature's `specs/<feature>/`); a tooling or methodology path outside that — a
+  top-level `skills/`, `agents/`, or `.claude/` file touched to support the
+  feature's development — classified as `unexplained` and blocked the review, and
+  the existing `trace acknowledge` escape hatch forced a `--task` that no such
+  change owns. `--out-of-feature` records a taskless acknowledgement (marked
+  `out_of_feature: true`, no `task` key) so the path becomes
+  `discovered-and-acknowledged` and the gate passes, while the reason stays audited
+  and distinguishable from in-feature discovered scope. The ledger invariant and
+  the `dangling-reference` check are relaxed to allow a taskless out-of-feature
+  record; `--out-of-feature` cannot be combined with `--task`.
 
 ### Fixed
 

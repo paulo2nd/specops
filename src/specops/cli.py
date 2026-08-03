@@ -810,13 +810,18 @@ def trace_report(
 @_handle_errors
 def trace_acknowledge(
     path: str = typer.Argument(..., help="Repo-relative path to acknowledge."),
-    task: str = typer.Option(..., "--task", help="Task id the discovery belongs to."),
+    task: str = typer.Option(
+        None, "--task", help="Task id the discovery belongs to (omit with --out-of-feature)."),
     reason: str = typer.Option(..., "--reason", help="Concise reason for the discovery."),
+    out_of_feature: bool = typer.Option(
+        False, "--out-of-feature",
+        help="Acknowledge a tooling/methodology path that belongs to no task (no --task)."),
     json_out: bool = typer.Option(False, "--json", help="Emit the stable outcome JSON."),
 ) -> None:
     """Record a one-time path-level acknowledgement of a discovered path."""
     from specops import trace
-    _emit(trace.cmd_acknowledge(Path("."), path, task=task, reason=reason), json_out,
+    _emit(trace.cmd_acknowledge(Path("."), path, task=task, reason=reason,
+                                out_of_feature=out_of_feature), json_out,
     output_version=trace.OUTPUT_VERSION)
 
 

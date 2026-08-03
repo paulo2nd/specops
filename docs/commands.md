@@ -440,6 +440,11 @@ drift without rejecting legitimate discoveries.
   one-time, path-level acknowledgement of a genuine discovery so it stops being
   `unexplained`. Idempotent for an identical record; fails closed (exit `2`) on a
   conflicting or unknown-task acknowledgement; a no-op for an already-planned path.
+  Use `--out-of-feature` (no `--task`) instead for a tooling/methodology path that
+  belongs to no task — a skill, agent, or `.claude/` file touched to support the
+  feature's development. The record is marked `out_of_feature` (carries no task) so
+  audits can tell tooling changes apart from in-feature discovered scope; the drift
+  gate treats it as `discovered-and-acknowledged` all the same.
 - `specops trace link --task <id> --commit <sha> [--commit <sha> …]` — bind
   explicit commit shas to a task's `commits`, clearing a `missing-link` (user story
   with no commit) that `complete-task`'s range harvest could not record — commits

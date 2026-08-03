@@ -229,6 +229,67 @@ def test_acknowledge_already_planned_is_noop(trace_repo) -> None:
     assert _acks(root) == []
 
 
+# --- out-of-feature acknowledgement (issue #63) ----------------------------
+
+
+def test_acknowledge_out_of_feature_records_without_task(trace_repo) -> None:
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")])
+    r = trace.cmd_acknowledge(root, "skills/foo.md", reason="supports dev", out_of_feature=True)
+    assert r.status == trace.ACK_RECORDED and r.exit_code == 0
+    recs = _acks(root)
+    assert len(recs) == 1
+    assert recs[0]["out_of_feature"] is True
+    assert "task" not in recs[0]           # tooling ack carries no task
+    # the path is now discovered-and-acknowledged, so the drift gate passes
+    assert _classify(root, ["skills/foo.md"])["skills/foo.md"] == trace.DISCOVERED
+
+
+def test_acknowledge_out_of_feature_rejects_task(trace_repo) -> None:
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")])
+    r = trace.cmd_acknowledge(root, "skills/foo.md", task="T001", reason="r", out_of_feature=True)
+    assert r.status == trace.USAGE_ERROR
+    assert _acks(root) == []
+
+
+def test_acknowledge_requires_task_or_out_of_feature(trace_repo) -> None:
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")])
+    r = trace.cmd_acknowledge(root, "skills/foo.md", reason="r")
+    assert r.status == trace.USAGE_ERROR
+    assert _acks(root) == []
+
+
+def test_acknowledge_out_of_feature_idempotent(trace_repo) -> None:
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")])
+    trace.cmd_acknowledge(root, "agents/x.md", reason="r", out_of_feature=True)
+    r = trace.cmd_acknowledge(root, "agents/x.md", reason="r", out_of_feature=True)
+    assert r.status == trace.ACK_IDEMPOTENT
+    assert len(_acks(root)) == 1
+
+
+def test_acknowledge_mode_conflict(trace_repo) -> None:
+    # same path acknowledged out-of-feature then as task-bound → conflict, unchanged
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")])
+    trace.cmd_acknowledge(root, "skills/x.md", reason="r", out_of_feature=True)
+    r = trace.cmd_acknowledge(root, "skills/x.md", task="T001", reason="r")
+    assert r.status == trace.ACK_CONFLICT
+    assert len(_acks(root)) == 1 and _acks(root)[0]["out_of_feature"] is True
+
+
+def test_out_of_feature_ack_is_not_a_dangling_reference(trace_repo) -> None:
+    root = trace_repo(
+        spec_scs=["SC-001"], plan_paths=[],
+        tasks_md_tasks=["- [ ] T001 [US1] do it [SC-001]"],
+        tasks=[make_task("T001", status="DONE", commits=["a" * 40])],
+    )
+    trace.cmd_acknowledge(root, "skills/foo.md", reason="tooling", out_of_feature=True)
+    # the taskless ack must not read as a dangling task reference (the fake seed
+    # commit "a"*40 is a separate, expected commit dangling-reference)
+    assert not any(
+        d["kind"] == "dangling-reference" and "acknowledgement" in d["detail"]
+        for d in trace.validate_trace(root)
+    )
+
+
 # ---------------------------------------------------------------------------
 # US3 — Trace graph, report, validation (T016, T017)
 # ---------------------------------------------------------------------------

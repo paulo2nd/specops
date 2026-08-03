@@ -84,6 +84,12 @@ The ledger is the authority; the agent is the executor.
   declared in `plan.md` (a genuine discovery), acknowledge it once so review does
   not block it as unexplained drift:
   `specops trace acknowledge <path> --task <task-id> --reason "<concise reason>"`
+- For a change to a **tooling/methodology** path that belongs to no task — a skill,
+  agent, or `.claude/` file touched to support the feature's development — acknowledge
+  it out-of-feature (no task):
+  `specops trace acknowledge <path> --out-of-feature --reason "<concise reason>"`
+  The record is marked `out_of_feature` so it is auditable as tooling, distinct from
+  in-feature discovered scope.
 - Acknowledge only real, in-scope discoveries — not scope creep. A conflicting or
   unknown-task acknowledgement fails closed and records nothing.
 - This is a delivered capability; where SpecOps is not initialized the step is a

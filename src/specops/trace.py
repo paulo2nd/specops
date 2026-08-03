@@ -527,7 +527,9 @@ def validate_trace(root: Path, *, ctx: _Ctx | None = None) -> list[dict[str, str
                 )
     known_tasks = {tid for tid, t in tasks_by_id.items() if not t.get("orphaned")}
     for a in data.get("acknowledgements") or []:
-        if isinstance(a, dict) and a.get("task") not in known_tasks:
+        # out-of-feature acknowledgements legitimately carry no task — skip them.
+        if isinstance(a, dict) and not a.get("out_of_feature") \
+                and a.get("task") not in known_tasks:
             defects.append(
                 _defect("dangling-reference",
                         f"acknowledgement task '{a.get('task')}' not in ledger", str(a.get("task")))
@@ -617,7 +619,8 @@ def cmd_report(root: Path) -> TraceResult:
     if disc:
         lines.append("Discoveries:")
         for a in sorted(disc, key=lambda a: str(a.get("path"))):
-            lines.append(f"  {a['path']}  (task {a['task']}: {a['reason']})")
+            scope = "out-of-feature" if a.get("out_of_feature") else f"task {a.get('task')}"
+            lines.append(f"  {a['path']}  ({scope}: {a['reason']})")
     human = "\n".join(lines) if lines else "trace report: no success criteria"
     return TraceResult("trace report", TRACE_OK, human, {"graph": graph})
 
@@ -631,18 +634,37 @@ def _read(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def cmd_acknowledge(root: Path, path: str, *, task: str, reason: str) -> TraceResult:
+def cmd_acknowledge(
+    root: Path, path: str, *, task: str | None = None, reason: str,
+    out_of_feature: bool = False,
+) -> TraceResult:
     """Record a one-time path-level acknowledgement (state-changing).
+
+    Two modes: a **task-bound** acknowledgement of a path discovered while working a
+    task (``--task``), or an **out-of-feature** acknowledgement of a path that
+    belongs to no task at all — tooling/methodology changes (``skills/``, ``agents/``,
+    ``.claude/`` …) made to support the feature's development (``--out-of-feature``,
+    no task). Both stop the path being ``unexplained`` so the drift gate passes; the
+    out-of-feature record carries ``out_of_feature: true`` (and no task) so audits can
+    tell tooling changes apart from in-feature discovered scope.
 
     Precondition failures (not-a-repo, identity mismatch, stale write) raise
     SpecopsError for the CLI error boundary; semantic outcomes return a
     :class:`TraceResult`.
     """
     reason = (reason or "").strip()
-    if not path or not task or not reason:
+    if not path or not reason:
         return TraceResult("trace acknowledge", USAGE_ERROR,
-                           "trace acknowledge: path, --task and --reason are all required")
+                           "trace acknowledge: path and --reason are required")
+    if out_of_feature and task:
+        return TraceResult("trace acknowledge", USAGE_ERROR,
+                           "trace acknowledge: --out-of-feature cannot be combined with --task")
+    if not out_of_feature and not task:
+        return TraceResult("trace acknowledge", USAGE_ERROR,
+                           "trace acknowledge: --task is required "
+                           "(or --out-of-feature for a tooling path with no task)")
     path = norm_path(path)  # store normalized so classification matches Git-reported paths
+    extra = {"path": path, "task": task, "out_of_feature": out_of_feature}
 
     repo = gitops.find_repo(root)
     if repo is None:
@@ -652,11 +674,11 @@ def cmd_acknowledge(root: Path, path: str, *, task: str, reason: str) -> TraceRe
     feature_dir = status.get_feature_dir(root)
     data, base_rev, base_violations, _repo = status.load_for_write(root, feature_dir)
 
-    known = {t.get("id") for t in data.get("tasks") or [] if not t.get("orphaned")}
-    if task not in known:
-        return TraceResult("trace acknowledge", ACK_UNKNOWN_TASK,
-                           f"trace acknowledge: unknown task '{task}'",
-                           {"path": path, "task": task})
+    if not out_of_feature:
+        known = {t.get("id") for t in data.get("tasks") or [] if not t.get("orphaned")}
+        if task not in known:
+            return TraceResult("trace acknowledge", ACK_UNKNOWN_TASK,
+                               f"trace acknowledge: unknown task '{task}'", extra)
 
     # already-planned (never-discovered) path → no-op (FR-007). The check ignores
     # existing acknowledgements (acks=∅) so it reflects only plan/ownership.
@@ -670,29 +692,37 @@ def cmd_acknowledge(root: Path, path: str, *, task: str, reason: str) -> TraceRe
         if cls == PLANNED:
             return TraceResult("trace acknowledge", ACK_ALREADY_PLANNED,
                                f"trace acknowledge: '{path}' is already planned; "
-                               "no acknowledgement recorded",
-                               {"path": path, "task": task})
+                               "no acknowledgement recorded", extra)
 
     prior = existing.get(path)
     if prior is not None:
-        if prior.get("task") == task and (prior.get("reason") or "").strip() == reason:
+        same = (
+            bool(prior.get("out_of_feature")) == out_of_feature
+            and (prior.get("task") or None) == (task or None)
+            and (prior.get("reason") or "").strip() == reason
+        )
+        if same:
             return TraceResult("trace acknowledge", ACK_IDEMPOTENT,
                                f"trace acknowledge: '{path}' already acknowledged (idempotent)",
-                               {"path": path, "task": task})
+                               extra)
         return TraceResult("trace acknowledge", ACK_CONFLICT,
                            f"trace acknowledge: '{path}' already acknowledged by a "
                            "different task/reason; "
-                           "existing record left unchanged", {"path": path, "task": task})
+                           "existing record left unchanged", extra)
 
     record: records.AcknowledgementRecord = {
-        "path": path, "task": task, "reason": reason,
+        "path": path, "reason": reason,
         "map_digest": contextmap.map_digest(root), "at": ledger.now_utc(),
     }
+    if out_of_feature:
+        record["out_of_feature"] = True
+    else:
+        record["task"] = task  # type: ignore[typeddict-item]
     data.setdefault("acknowledgements", []).append(record)
     status.finalize(feature_dir, data, base_rev, base_violations)
+    scope = "out-of-feature" if out_of_feature else f"task {task}"
     return TraceResult("trace acknowledge", ACK_RECORDED,
-                       f"trace acknowledge: recorded '{path}' (task {task})",
-                       {"path": path, "task": task})
+                       f"trace acknowledge: recorded '{path}' ({scope})", extra)
 
 
 # ---------------------------------------------------------------------------
