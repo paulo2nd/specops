@@ -55,8 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   round/role/range that all already existed in the ledger — leaving the artifact a
   reviewer reads hard to interpret. It now projects a structured model: a
   verdict/round/role/range header, findings grouped by severity with
-  id/state/rule/action/expected-evidence/closure/evidence, and the remaining-blocking
-  set. The 010-compatible flat `<file>:<line> - <action>` lines are retained as a
+  id/state/rule/action/expected-evidence/closure/evidence, and *this round's*
+  remaining-blocking set (verdict, counts and remaining are all round-scoped, so the
+  artifact is never self-contradictory; the feature-global gate stays
+  `blocking_approval_check` at the DONE transition). Every interpolated field is
+  flattened to a single line so an embedded newline can never inject a parseable
+  finding. The 010-compatible flat `<file>:<line> - <action>` lines are retained as a
   trailing appendix, and remain the **only** section `handoff import` parses back into
   findings (the rich header is import-inert by construction), so render → import still
   round-trips. This establishes SpecOps' first rendered-artifact template.

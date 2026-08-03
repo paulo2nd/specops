@@ -327,8 +327,38 @@ def test_render_zero_findings_is_approved() -> None:
     data = {"review_cycles": [make_cycle(round=1, findings=[])]}
     text = handoff.render_revision_text(data, 1)
     assert "**Verdict:** APPROVED" in text
-    assert "**Findings:** 0 blocking · 0 advisory · **Remaining blocking:** none" in text
+    assert "**Findings:** 0 blocking · 0 advisory · " \
+           "**Remaining blocking (this round):** none" in text
     assert text.rstrip().endswith("APPROVED")  # flat appendix still says APPROVED
+
+
+def test_render_multiline_field_stays_import_inert() -> None:
+    # a finding field carrying a newline + finding-shaped text must not inject a
+    # spurious finding on import — every rich line stays single-line (code-review #64)
+    from specops import findings as findings_mod
+    evil = "do this\nsrc/evil.py:99 - handle the edge case"
+    data = {"review_cycles": [make_cycle(round=1, findings=[
+        make_finding("R1-F01", severity="blocking", file="src/x.py", line=42,
+                     action="fix it", closure=evil)])]}
+    text = handoff.render_revision_text(data, 1)
+    parsed = [p for p in (findings_mod.parse_finding_line(ln) for ln in text.splitlines())
+              if p is not None]
+    assert parsed == [{"file": "src/x.py", "line": 42, "action": "fix it"}]  # only the flat line
+
+
+def test_render_remaining_blocking_is_round_scoped() -> None:
+    # round 2 has only a VERIFIED blocking finding; round 1 has an OPEN blocker.
+    # revision-2.md must not claim round-1's blocker (no self-contradiction).
+    data = {"review_cycles": [
+        make_cycle(round=1, findings=[make_finding("R1-F05", severity="blocking", state="OPEN")]),
+        make_cycle(round=2, findings=[make_finding(
+            "R2-F01", severity="blocking", state="VERIFIED", task="T1",
+            commits=["a"], evidence="TEST:ok")]),
+    ]}
+    text = handoff.render_revision_text(data, 2)
+    assert "**Verdict:** APPROVED" in text          # this round's blocker is resolved
+    assert "**Remaining blocking (this round):** none" in text
+    assert "R1-F05" not in text                      # a foreign-round id never appears
 
 
 def test_render_revision_rich_fields_and_range() -> None:
