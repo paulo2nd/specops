@@ -542,7 +542,10 @@ def _acknowledgement_violations(data: records.LedgerLike) -> list[str]:
 
     Absent is allowed (a pre-v4 ledger). When present each record MUST be a
     mapping carrying non-empty ``path``/``task``/``reason`` whose ``task`` matches
-    a known non-orphaned task id (no dangling task reference, FR-007).
+    a known non-orphaned task id (no dangling task reference, FR-007). An
+    ``out_of_feature`` record (issue #63) instead carries only ``path``/``reason``
+    (a tooling/methodology path that belongs to no task) — no ``task`` is required
+    or checked.
     """
     acks = data.get("acknowledgements")
     if acks is None:
@@ -560,12 +563,21 @@ def _acknowledgement_violations(data: records.LedgerLike) -> list[str]:
     }
     out: list[str] = []
     for i, rec in enumerate(acks):
+        oof = isinstance(rec, dict) and bool(rec.get("out_of_feature"))
+        required = ("path", "reason") if oof else ACK_FIELDS
         if not isinstance(rec, dict) or any(
-            not isinstance(rec.get(f), str) or not rec.get(f) for f in ACK_FIELDS
+            not isinstance(rec.get(f), str) or not rec.get(f) for f in required
         ):
-            out.append(f"acknowledgement {i} is malformed (path/task/reason required)")
+            need = "path/reason" if oof else "path/task/reason"
+            out.append(f"acknowledgement {i} is malformed ({need} required)")
             continue
-        if rec["task"] not in known:
+        if oof and rec.get("task"):
+            out.append(
+                f"acknowledgement {i} is malformed "
+                "(out_of_feature record must not carry a task)"
+            )
+            continue
+        if not oof and rec["task"] not in known:
             out.append(
                 f"acknowledgement {i} references unknown task '{rec['task']}'"
             )

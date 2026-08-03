@@ -492,6 +492,22 @@ def test_invariant_accepts_valid_acknowledgement() -> None:
     assert ledger.validate_invariants(data) == []
 
 
+def test_invariant_accepts_out_of_feature_acknowledgement_without_task() -> None:
+    # issue #63: a taskless out_of_feature record needs only path/reason
+    data = {"current_phase": "IMPLEMENT", "tasks": [], "review_cycles": [],
+            "acknowledgements": [{"path": "skills/x.md", "reason": "r", "out_of_feature": True}]}
+    assert ledger.validate_invariants(data) == []
+
+
+def test_invariant_flags_out_of_feature_acknowledgement_carrying_task() -> None:
+    # an out_of_feature record must not carry a task (contradictory shape)
+    data = {"current_phase": "IMPLEMENT", "tasks": [], "review_cycles": [],
+            "acknowledgements": [
+                {"path": "skills/x.md", "reason": "r", "out_of_feature": True, "task": "GHOST"}]}
+    violations = ledger.validate_invariants(data)
+    assert any("must not carry a task" in v for v in violations)
+
+
 def test_invariant_accepts_acknowledgement_for_orphaned_task() -> None:
     # A task removed from tasks.md becomes orphaned but its ledger record remains,
     # so an acknowledgement referencing it is NOT dangling (Feature 010, Finding 5).

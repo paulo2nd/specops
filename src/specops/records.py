@@ -125,6 +125,7 @@ class AcknowledgementRecord(TypedDict, total=False):
 
     path: str
     task: str
+    out_of_feature: bool  # true → path belongs to no task (tooling/methodology); no `task` key
     reason: str
     map_digest: str | None
     at: str

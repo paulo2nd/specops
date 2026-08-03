@@ -110,6 +110,29 @@ def test_acknowledge_unknown_task_exit_two(trace_repo) -> None:
     assert (_ledger(root).get("acknowledgements") or []) == []
 
 
+def test_acknowledge_out_of_feature_records_and_reclassifies(trace_repo) -> None:
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")],
+                      changed={"skills/tool.md": "help\n"})
+    r = _run(root, "trace", "acknowledge", "skills/tool.md",
+             "--out-of-feature", "--reason", "supports feature dev", "--json")
+    assert r.returncode == 0
+    assert json.loads(r.stdout)["status"] == "ack_recorded"
+    rec = (_ledger(root)["acknowledgements"])[0]
+    assert rec["out_of_feature"] is True and "task" not in rec
+    # classify now labels the tooling path discovered-and-acknowledged (gate passes)
+    row = next(p for p in json.loads(_run(root, "trace", "classify", "--json").stdout)["paths"]
+               if p["path"] == "skills/tool.md")
+    assert row["class"] == "discovered-and-acknowledged"
+
+
+def test_acknowledge_out_of_feature_with_task_exit_two(trace_repo) -> None:
+    root = trace_repo(plan_paths=[], tasks=[make_task("T001", status="IN_PROGRESS")])
+    r = _run(root, "trace", "acknowledge", "skills/x.md",
+             "--out-of-feature", "--task", "T001", "--reason", "r")
+    assert r.returncode == 2
+    assert (_ledger(root).get("acknowledgements") or []) == []
+
+
 # ---------------------------------------------------------------------------
 # link (issue #62)
 # ---------------------------------------------------------------------------
