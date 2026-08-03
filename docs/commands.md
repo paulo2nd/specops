@@ -539,7 +539,10 @@ any **blocking** finding is unverified.
   set. Both read-only.
 - `specops handoff import [--round <n>]` — import legacy revision prose into
   advisory findings. `specops handoff render --round <n>` — project the structured
-  findings to a compatible `revisions/revision-X.md`.
+  findings to `revisions/revision-X.md` as a readable model (verdict/round/role/range
+  header, findings grouped by severity with id/state/rule/action/evidence, and the
+  remaining-blocking set) with the 010-compatible `[File]:[Line] - [action]` flat lines
+  kept as a trailing appendix (the only import-parseable section).
 
 Findings live in the ledger (schema **v5**, migrated forward automatically); the
 Markdown revision report is a rendered projection of that authoritative state.

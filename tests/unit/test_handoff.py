@@ -314,12 +314,58 @@ def test_render_revision_text_canonical() -> None:
         make_finding("R1-F01", severity="blocking", file="a.py", line=9, action="fix it"),
     ])]}
     text = handoff.render_revision_text(data, 1)
-    assert text == "a.py:9 - fix it\nz.py:1 - minor\n"  # blocking first (canonical)
+    # rich header + counts + per-finding block
+    assert text.startswith("# Review — Round 1")
+    assert "**Verdict:** REJECTED" in text  # an OPEN blocking finding
+    assert "**Findings:** 1 blocking · 1 advisory" in text
+    assert "### R1-F01 · OPEN · `a.py:9`" in text
+    # 010-compat flat appendix, blocking first (canonical), at the end
+    assert text.rstrip().endswith("a.py:9 - fix it\nz.py:1 - minor")
 
 
 def test_render_zero_findings_is_approved() -> None:
     data = {"review_cycles": [make_cycle(round=1, findings=[])]}
-    assert handoff.render_revision_text(data, 1) == "APPROVED\n"
+    text = handoff.render_revision_text(data, 1)
+    assert "**Verdict:** APPROVED" in text
+    assert "**Findings:** 0 blocking · 0 advisory · **Remaining blocking:** none" in text
+    assert text.rstrip().endswith("APPROVED")  # flat appendix still says APPROVED
+
+
+def test_render_revision_rich_fields_and_range() -> None:
+    cycle = make_cycle(round=2, result="REJECTED", findings=[
+        make_finding("R2-F01", severity="blocking", state="OPEN", rule="off-by-one",
+                     file="src/x.py", line=42, action="fix the loop",
+                     expected_evidence="a boundary test", closure="the test passes",
+                     task="T007", evidence="TEST:green"),
+    ])
+    cycle["review_role"] = "corrective"
+    cycle["reviewed_range"] = "base..HEAD"
+    text = handoff.render_revision_text({"review_cycles": [cycle]}, 2)
+    assert "# Review — Round 2 (corrective)" in text
+    assert "**Range:** `base..HEAD`" in text
+    assert "- **Rule:** off-by-one" in text
+    assert "- **Expected evidence:** a boundary test" in text
+    assert "- **Closure:** the test passes" in text
+    assert "- **Task:** T007 · **Commits:** —" in text
+    assert "- **Evidence:** TEST:green" in text
+
+
+def test_render_rich_header_is_import_inert() -> None:
+    # only the flat appendix parses back to findings; the rich header is inert even
+    # when a finding's action itself contains " - " (which the flat line round-trips).
+    from specops import findings as findings_mod
+    data = {"review_cycles": [make_cycle(round=2, result="REJECTED", findings=[
+        make_finding("R2-F01", severity="blocking", file="src/x.py", line=42,
+                     action="fix - the loop", task="T007", evidence="TEST:green"),
+        make_finding("R2-F02", severity="advisory", file="y.py", line=3, action="rename"),
+    ])]}
+    text = handoff.render_revision_text(data, 2)
+    parsed = [p for p in (findings_mod.parse_finding_line(ln) for ln in text.splitlines())
+              if p is not None]
+    assert parsed == [
+        {"file": "src/x.py", "line": 42, "action": "fix - the loop"},
+        {"file": "y.py", "line": 3, "action": "rename"},
+    ]
 
 
 def test_trace_resources_structured_findings_with_ids(handoff_repo) -> None:
@@ -394,6 +440,21 @@ def test_import_is_idempotent(handoff_repo) -> None:
     assert len(findings) == 1
 
 
+def test_rich_render_import_round_trips_without_spurious_findings(handoff_repo) -> None:
+    # render the enriched revision file, then import it back: the two real findings
+    # dedupe (idempotent) and the rich header introduces no spurious findings.
+    root = handoff_repo(review_cycles=[make_cycle(round=1, findings=[
+        make_finding("R1-F01", severity="blocking", file="src/x.py", line=42,
+                     action="fix - the loop"),
+        make_finding("R1-F02", severity="advisory", file="y.py", line=3, action="rename"),
+    ])])
+    assert handoff.render_revision(root, 1).status == handoff.RENDER_OK
+    # importing the file we just rendered adds nothing (all flat lines already exist)
+    assert handoff.cmd_import(root, None).extra["imported"] == 0
+    findings = read_ledger(_fd(root))["review_cycles"][-1]["handoff"]["findings"]
+    assert len(findings) == 2  # no header line leaked in as a finding
+
+
 def test_add_refused_after_close(handoff_repo) -> None:
     root = handoff_repo(review_cycles=[make_cycle(
         findings=[make_finding("R1-F01", severity="advisory")],
@@ -425,9 +486,9 @@ def test_lineless_finding_render_import_roundtrip(handoff_repo) -> None:
     root = handoff_repo(review_cycles=[make_cycle(round=1, findings=[
         make_finding("R1-F01", file="a.py", line=None, action="file-level issue")])])
     text = handoff.render_revision_text(read_ledger(_fd(root)), 1)
-    assert text == "a.py - file-level issue\n"
-    # the rendered line-less form is re-parseable via the co-located grammar (findings.py)
-    assert findings.parse_finding_line(text.strip()) == {
+    # the line-less flat form appears in the 010-compat appendix and round-trips
+    assert text.rstrip().endswith("a.py - file-level issue")
+    assert findings.parse_finding_line("a.py - file-level issue") == {
         "file": "a.py", "line": None, "action": "file-level issue",
     }
 

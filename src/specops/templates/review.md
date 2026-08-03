@@ -89,7 +89,7 @@ specops handoff finding add --severity advisory --rule "skipped-gate" \
   --file . --action "Skipped gate: <name> (<reason>)"
 ```
 
-Render the human-readable revision report — a projection of the structured state, in the compatible `[File]:[Line] - [action]` line format:
+Render the human-readable revision report — a deterministic projection of the structured state: a verdict/round/role/range header, findings grouped by severity with id/state/rule/action/evidence, and the remaining-blocking set, followed by the 010-compatible `[File]:[Line] - [action]` flat lines as a trailing appendix (the only part `handoff import` re-parses):
 
 ```
 specops handoff render --round X    # writes revisions/revision-X.md

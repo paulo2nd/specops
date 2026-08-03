@@ -146,7 +146,9 @@ def test_render_projection_is_010_compatible(handoff_repo) -> None:
     r = _run(root, "handoff", "render", "--round", "1")
     assert r.returncode == 0
     text = (root / "specs" / "001-demo" / "revisions" / "revision-1.md").read_text()
-    assert text == "a.py:9 - fix it\n"
+    # rich human model, with the 010-compatible flat line preserved as an appendix
+    assert text.startswith("# Review — Round 1")
+    assert text.rstrip().endswith("a.py:9 - fix it")
 
 
 def test_not_a_git_repo_exit2(tmp_path: Path) -> None:
