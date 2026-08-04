@@ -47,6 +47,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `dangling-reference` check are relaxed to allow a taskless out-of-feature
   record; `--out-of-feature` cannot be combined with `--task`.
 
+### Changed
+
+- **`revisions/revision-X.md` is now a readable review model ([#64](https://github.com/paulo2nd/specops/issues/64)).**
+  `handoff render` previously emitted only bare `<file>:<line> - <action>` lines (or
+  `APPROVED`), discarding the severity, finding id, state, evidence, verdict, and
+  round/role/range that all already existed in the ledger — leaving the artifact a
+  reviewer reads hard to interpret. It now projects a structured model: a
+  verdict/round/role/range header, findings grouped by severity with
+  id/state/rule/action/expected-evidence/closure/evidence, and *this round's*
+  remaining-blocking set (verdict, counts and remaining are all round-scoped, so the
+  artifact is never self-contradictory; the feature-global gate stays
+  `blocking_approval_check` at the DONE transition). Every interpolated field is
+  flattened to a single line so an embedded newline can never inject a parseable
+  finding. The 010-compatible flat `<file>:<line> - <action>` lines are retained as a
+  trailing appendix, and remain the **only** section `handoff import` parses back into
+  findings (the rich header is import-inert by construction), so render → import still
+  round-trips. This establishes SpecOps' first rendered-artifact template.
+
 ### Fixed
 
 - **`complete-task` no longer discards commits bound via `trace link`.** Task

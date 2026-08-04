@@ -953,19 +953,109 @@ def cmd_report(root: Path) -> HandoffResult:
 # ---------------------------------------------------------------------------
 
 
-def render_revision_text(data: records.LedgerLike, round: int) -> str:
-    """Deterministic revision-X.md content projected from a round's handoff.
+def _derive_round_verdict(blocking: list[records.FindingRecord]) -> str:
+    """APPROVED unless a blocking finding is still open — shares the gate's
+    ``_is_resolved`` definition so the rendered verdict cannot drift from
+    :func:`blocking_approval_check`."""
+    return "REJECTED" if any(not _is_resolved(f) for f in blocking) else "APPROVED"
 
-    Line format is the 010-compatible ``<file>:<line> - <action>`` (ids live in
-    the ledger, not the human line). Zero findings -> ``APPROVED``. Canonical order.
+
+def _oneline(value: Any) -> str:
+    """Collapse a field value to a single physical line.
+
+    Load-bearing for import-inertness: a finding field (rule/action/evidence/…) may
+    contain a newline, and interpolated verbatim it would emit a *column-0*
+    continuation line that ``handoff import``'s parser could read as a spurious
+    finding. Flattening newlines to spaces keeps every rich line a single line whose
+    prefix cannot match the ``<file> - <action>`` grammar."""
+    return " ".join(str(value).split())
+
+
+def _revision_finding_block(f: records.FindingRecord) -> list[str]:
+    """Rich per-finding markdown (heading + labelled fields).
+
+    Every line is safe for ``handoff import``'s flat-line parser: a ``### … ·`` head
+    and ``- **Label:**`` bullets never match ``<file>[:<line>] - <action>`` (the leading
+    ``-`` bullet is not followed by `` - ``, and ``**Label:**`` breaks the file token on
+    ``:``), and every interpolated field is passed through :func:`_oneline` so an
+    embedded newline cannot inject a parseable continuation line. Only the flat
+    appendix round-trips back to findings."""
+    loc = f"{f.get('file')}:{f.get('line')}" if f.get("line") is not None else str(f.get("file"))
+    out = [f"### {_oneline(f.get('id'))} · {_oneline(f.get('state'))} · `{_oneline(loc)}`"]
+    if f.get("rule"):
+        out.append(f"- **Rule:** {_oneline(f.get('rule'))}")
+    out.append(f"- **Action:** {_oneline(f.get('action'))}")
+    if f.get("expected_evidence"):
+        out.append(f"- **Expected evidence:** {_oneline(f.get('expected_evidence'))}")
+    if f.get("closure_criteria"):
+        out.append(f"- **Closure:** {_oneline(f.get('closure_criteria'))}")
+    task, commits = f.get("task"), (f.get("commits") or [])
+    if task or commits:
+        out.append(f"- **Task:** {_oneline(task) if task else '—'} · "
+                   f"**Commits:** {len(commits) or '—'}")
+    if f.get("evidence"):
+        out.append(f"- **Evidence:** {_oneline(f.get('evidence'))}")
+    if f.get("imported"):
+        who = (f.get("producer") or {}).get("name") or "?"
+        out.append(f"- **Imported from:** {_oneline(who)}")
+    out.append("")
+    return out
+
+
+def render_revision_text(data: records.LedgerLike, round: int) -> str:
+    """Deterministic revision-X.md content projected from a round's handoff (#64).
+
+    A human-readable model — verdict/round/role/range header, findings grouped by
+    severity with id/state/rule/action/evidence, and this round's remaining-blocking
+    set — followed by the 010-compatible ``<file>:<line> - <action>`` flat list as a
+    trailing appendix. The appendix is the *only* part ``handoff import`` parses back
+    into findings (the rich header is import-inert by construction), so render → import
+    still round-trips. Everything shown is scoped to *this round* — verdict, counts and
+    remaining-blocking all reflect the round's own findings, so the artifact is never
+    self-contradictory; the feature-global approval gate is
+    :func:`blocking_approval_check`, consulted at the DONE transition, not here. Zero
+    findings -> an APPROVED doc. Canonical (blocking-first) order.
     """
     cycle = next((c for c in _cycles(data) if c.get("round") == round), None)
-    findings = []
+    findings: list[records.FindingRecord] = []
     if cycle is not None and isinstance(cycle.get("handoff"), dict):
         findings = [f for c, f in canonical_finding(data) if c is cycle]
+
+    meta = cycle or {}
+    role = meta.get("review_role")
+    blocking = [f for f in findings if f.get("severity") == "blocking"]
+    advisory = [f for f in findings if f.get("severity") != "blocking"]
+    # Round-scoped, so it never contradicts the round's verdict/findings (a
+    # feature-global blocker from another round is the DONE gate's concern, not this
+    # per-round artifact's).
+    remaining = _unresolved_blocking_ids(iter(findings))
+    verdict = meta.get("result") or _derive_round_verdict(blocking)
+
+    header = f"# Review — Round {round}" + (f" ({_oneline(role)})" if role else "")
+    status_line = f"**Verdict:** {_oneline(verdict)}"
+    if meta.get("reviewed_range"):
+        status_line += f" · **Range:** `{_oneline(meta.get('reviewed_range'))}`"
+    started, completed = meta.get("started_at"), meta.get("completed_at")
+    if started or completed:
+        status_line += f" · {_oneline(started) if started else '—'} → " \
+                       f"{_oneline(completed) if completed else '—'}"
+
+    lines = [header, "", status_line, "",
+             f"**Findings:** {len(blocking)} blocking · {len(advisory)} advisory · "
+             f"**Remaining blocking (this round):** "
+             f"{', '.join(remaining) if remaining else 'none'}", ""]
+
     if not findings:
-        return "APPROVED\n"
-    lines = [findings_mod.format_finding_line(f) for f in findings]
+        lines += ["_No findings recorded in this round._", ""]
+    for title, group in (("Blocking", blocking), ("Advisory", advisory)):
+        if group:
+            lines += [f"## {title}", ""]
+            for f in group:
+                lines += _revision_finding_block(f)
+
+    # 010-compatible flat projection — the only import-parseable section.
+    lines += ["## Flat lines (010-compat)", ""]
+    lines += [findings_mod.format_finding_line(f) for f in findings] if findings else ["APPROVED"]
     return "\n".join(lines) + "\n"
 
 
