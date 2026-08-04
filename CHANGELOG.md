@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-04
+
 ### Added
 
 - **`specops trace link` — surgical commit→task binding ([#62](https://github.com/paulo2nd/specops/issues/62)).**
