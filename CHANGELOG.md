@@ -102,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     review HEAD never blocks reconciliation (Principle II narrowed; constitution
     v1.12.0). `specops preflight` stays byte-for-byte read-only.
 
-## [0.9.0] - 2026-08-01
+## [0.9.0] - 2026-08-02
 
 Test execution moves entirely to the review gate (Feature 024). A full workflow
 run no longer executes the target project's test suite redundantly: from U+2
@@ -951,7 +951,9 @@ honestly named `preflight`, and a single read-only diagnostic explains project h
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/paulo2nd/specops/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/paulo2nd/specops/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/paulo2nd/specops/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/paulo2nd/specops/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/paulo2nd/specops/compare/v0.7.1...v0.8.0
