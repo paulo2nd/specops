@@ -283,7 +283,11 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
         "active-artifact": ledger.artifact_for_phase("SPECIFY"),
         "timestamp": now_utc(),
     })
-    data = yaml.safe_load(content)
+    # Normalize the rendered template to the CURRENT schema (#69). The template is a
+    # content seed, not a schema declaration: stamping it through the same pure
+    # migration every other read/write uses means a fresh ledger is current by
+    # construction, and a future schema bump can never leave it born stale.
+    data = ledger.migrate_to_current(yaml.safe_load(content))
 
     tasks_text = _read_tasks_md(feature_dir)
     if tasks_text:

@@ -571,6 +571,21 @@ def test_cmd_init_spec_creates_ledger(tmp_path: Path) -> None:
     assert (feature_dir / "status.yaml").is_file()
 
 
+def test_cmd_init_spec_ledger_is_born_current(tmp_path: Path) -> None:
+    """A fresh ledger classifies CURRENT — never MIGRATABLE (#69).
+
+    The assertion whose absence let the template literal drift four schema
+    versions behind CURRENT_SCHEMA, so every new feature was told to migrate a
+    file it had just created.
+    """
+    root, feature_dir = _make_fresh_git_repo(tmp_path)
+    s.cmd_init_spec(root, None)
+    data = ledger.load_raw(feature_dir)
+    assert data["schema_version"] == ledger.CURRENT_SCHEMA
+    assert ledger.classify(data) == ledger.CURRENT
+    assert ledger.diagnostic_line(ledger.classify(data)) is None
+
+
 def test_cmd_init_spec_with_tasks_md(tmp_path: Path) -> None:
     root, feature_dir = _make_fresh_git_repo(tmp_path)
     (feature_dir / "tasks.md").write_text("- [ ] T001 first task\n- [ ] T002 second task\n")
