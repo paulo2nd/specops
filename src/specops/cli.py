@@ -136,11 +136,15 @@ def _handle_errors(fn: _F) -> _F:
 
 
 def _resolved_feature(root: Path) -> str | None:
-    """The active feature directory as a repo-relative string, or None.
+    """The active feature directory as a repo-relative POSIX string, or None.
 
     Echoed by the commands that silently validate whatever the pointer happens to
     name: a stale `.specify/feature.json` otherwise reports `ok` about a different,
     already-finished feature, with nothing in the output to say so (#75).
+
+    POSIX separators always — this value is a documented `--json` key, and every
+    other path SpecOps emits comes from git, which reports POSIX on every platform.
+    A backslash here would make the contract platform-dependent.
     """
     from specops import speckit
 
@@ -148,9 +152,9 @@ def _resolved_feature(root: Path) -> str | None:
     if feature_dir is None:
         return None
     try:
-        return str(feature_dir.relative_to(root.resolve()))
+        return feature_dir.relative_to(root.resolve()).as_posix()
     except ValueError:
-        return str(feature_dir)
+        return feature_dir.as_posix()
 
 
 def _require_git(root: Path = Path(".")) -> gitops.Repository:
