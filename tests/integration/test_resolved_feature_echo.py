@@ -131,3 +131,13 @@ def test_preflight_second_run_is_cached_and_says_so(fake_speckit_repo: Path) -> 
     assert "CACHED" in second
     assert "reused from cache" in second
     assert "0 executed" in second
+
+
+def test_feature_key_uses_posix_separators(tmp_path: Path) -> None:
+    """Platform-independent contract: the `feature` key is a documented --json key,
+    and every other path SpecOps emits comes from git (POSIX on every platform).
+    `Path.relative_to` alone yields backslashes on Windows — caught by CI, not here."""
+    root = _repo(tmp_path, pointer="specs/001-done", features=("001-done",))
+    payload = json.loads(cli(root, "consistency", "--json").stdout)
+    assert "\\" not in payload["feature"]
+    assert payload["feature"] == "specs/001-done"
