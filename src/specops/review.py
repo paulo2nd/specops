@@ -12,6 +12,7 @@ lint/test commands cannot fail the run that created them.
 from __future__ import annotations
 
 import importlib.metadata
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -63,6 +64,11 @@ class GateResult:
     commit_range: str | None = None
     affected_paths: list[str] = field(default_factory=list)
     required: bool = True
+    # Wall clock of the gate's command, in milliseconds — None when nothing ran
+    # (cached, skipped, or a fixed gate). A `PASS` in 0.2s and a `PASS` in 9min are
+    # different kinds of claim; showing the elapsed time is what makes that visible
+    # at the interface (#73).
+    duration_ms: int | None = None
     # Feature 024: transient — set when a command gate executed-and-passed, so
     # `profile_gates` can write it to the git-dir gate cache. Never serialized.
     pending_record: records.EvidenceRecord | None = None
@@ -86,9 +92,43 @@ class GateReport:
                 reason = r.detail[0] if r.detail else ""
                 lines.append(f"{label} SKIPPED ({reason})")
                 continue
-            lines.append(f"{label} {r.status}")
+            # A cached entry is a claim about the cache, not about the code, so it
+            # does not render as PASS (#73). The machine surface is unchanged —
+            # `status` stays PASS and `disposition` stays "cached" in --json.
+            verdict = "CACHED" if r.disposition == "cached" else r.status
+            lines.append(f"{label} {verdict}{_elapsed_suffix(r.duration_ms)}")
             lines.extend(f"  {d}" for d in r.detail)
+        lines.append(self.summary())
         return "\n".join(lines)
+
+    def summary(self) -> str:
+        """One line stating how many gates actually executed vs. were reused (#73).
+
+        Without it, a suite served entirely from cache is indistinguishable from one
+        that ran — the observation that took six review sessions to make by hand.
+        """
+        executed = [r for r in self.results if r.duration_ms is not None]
+        cached = sum(1 for r in self.results if r.disposition == "cached")
+        skipped = sum(1 for r in self.results if r.status == "SKIPPED")
+        total_ms = sum(r.duration_ms or 0 for r in executed)
+        parts = [f"{len(executed)} executed{_elapsed_suffix(total_ms) or ' (0ms)'}"]
+        if cached:
+            parts.append(f"{cached} reused from cache")
+        if skipped:
+            parts.append(f"{skipped} skipped")
+        return f"[gates] {len(self.results)} total — " + ", ".join(parts)
+
+
+def _elapsed_suffix(duration_ms: int | None) -> str:
+    """`" (9m 12s)"` / `" (1.2s)"` / `" (240ms)"`, or `""` when nothing ran."""
+    if duration_ms is None:
+        return ""
+    if duration_ms < 1000:
+        return f" ({duration_ms}ms)"
+    seconds = duration_ms / 1000
+    if seconds < 60:
+        return f" ({seconds:.1f}s)"
+    return f" ({int(seconds) // 60}m {int(seconds) % 60}s)"
 
 
 def _tail(output: str, limit: int = TAIL_LINES) -> list[str]:
@@ -146,17 +186,18 @@ def _cached_record(
 
 def _blocking_result(
     p: gateprofiles.GateProfile, reason: str, detail: list[str], disposition: str,
-    eid: str, commit_range: str, changed: list[str],
+    eid: str, commit_range: str, changed: list[str], duration_ms: int | None = None,
 ) -> GateResult:
     """A required failure/unavailability FAILs (blocks); an optional one is recorded
     but never flips the verdict (FR-004/FR-008)."""
     if p.required:
         return GateResult(p.name, "FAIL", detail, disposition=disposition, reason=reason,
                           evidence_id=eid, commit_range=commit_range,
-                          affected_paths=changed, required=True)
+                          affected_paths=changed, required=True, duration_ms=duration_ms)
     return GateResult(p.name, "PASS", [*detail, "(optional gate — non-blocking)"],
                       disposition=disposition, reason=reason, evidence_id=eid,
-                      commit_range=commit_range, affected_paths=changed, required=False)
+                      commit_range=commit_range, affected_paths=changed, required=False,
+                      duration_ms=duration_ms)
 
 
 def _run_profile_gate(
@@ -191,16 +232,24 @@ def _run_profile_gate(
     # Reuse only a *passing* cached run (FR-002); a non-zero record (defensive — the
     # cache only ever stores passes) is ignored so a re-run reproduces the real outcome.
     if cached is not None and cached.get("exit_code", 0) == 0:
-        return GateResult(p.name, "PASS", [f"cached ({sel.reason})"], disposition="cached",
+        detail = [
+            f"reused a passing run of this exact tree — nothing executed ({sel.reason})",
+            f"evidence: {eid}",
+        ]
+        return GateResult(p.name, "PASS", detail, disposition="cached",
                           reason=sel.reason, evidence_id=eid, commit_range=commit_range,
                           affected_paths=changed, required=p.required)
+    started = time.monotonic()
     result = shell.run_client_command(p.command, root, timeout=p.timeout)
+    elapsed_ms = int((time.monotonic() - started) * 1000)
     if result.timed_out:
         detail = [f"command: {p.command}", f"timeout after {p.timeout}s"]
-        return _blocking_result(p, sel.reason, detail, "failed", eid, commit_range, changed)
+        return _blocking_result(p, sel.reason, detail, "failed", eid, commit_range, changed,
+                                elapsed_ms)
     if result.returncode == 127:
         detail = [f"command: {p.command}", "command not found (tool unavailable)"]
-        return _blocking_result(p, sel.reason, detail, "unavailable", eid, commit_range, changed)
+        return _blocking_result(p, sel.reason, detail, "unavailable", eid, commit_range, changed,
+                                elapsed_ms)
     if result.returncode == 0:
         disposition = "required" if p.required else "optional"
         # A fresh pass is cacheable: record it so an identical later run reuses it.
@@ -211,10 +260,12 @@ def _run_profile_gate(
         )
         return GateResult(p.name, "PASS", [], disposition=disposition,
                           reason=sel.reason, evidence_id=eid, commit_range=commit_range,
-                          affected_paths=changed, required=p.required, pending_record=rec)
+                          affected_paths=changed, required=p.required, duration_ms=elapsed_ms,
+                          pending_record=rec)
     combined = "\n".join(part for part in (result.stdout, result.stderr) if part)
     detail = [f"command: {p.command}", f"exit code: {result.returncode}", *_tail(combined)]
-    return _blocking_result(p, sel.reason, detail, "failed", eid, commit_range, changed)
+    return _blocking_result(p, sel.reason, detail, "failed", eid, commit_range, changed,
+                            elapsed_ms)
 
 
 def profile_gates(root: Path, repo: gitops.Repository, baseline: str) -> list[GateResult]:
@@ -407,7 +458,12 @@ def run_gates(root: Path) -> str:
     output/error (stable contract); it never changes the pass/fail outcome.
     """
     report = evaluate(root)
-    rendered = report.render()
+    # Name the feature the suite ran against (#75). Part of the rendered report rather
+    # than a separate echo, so it rides the same stream as the verdict — stdout on a
+    # pass, stderr on a failure — keeping the "failure evidence is stderr-only" contract.
+    feature_dir = speckit.resolve_feature_dir(root)
+    header = f"feature: {feature_dir.name}\n" if feature_dir is not None else ""
+    rendered = header + report.render()
     warning = digest_drift_warning(root)
     suffix = f"\n[warning] {warning}" if warning else ""
     if not report.passed:
