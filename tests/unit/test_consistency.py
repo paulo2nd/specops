@@ -130,3 +130,48 @@ def test_uncovered_sc_reports_spec_line_number(tmp_path: Path) -> None:
 def test_missing_feature_dir_raises(tmp_path: Path) -> None:
     with pytest.raises(SpecopsError):
         consistency.run(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# (remove) declarations resolve against Git history (#71)
+# ---------------------------------------------------------------------------
+
+def _commit(root: Path, message: str) -> None:
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", message], cwd=root, check=True, capture_output=True
+    )
+
+
+def test_removed_path_in_history_passes(tmp_path: Path) -> None:
+    """A file the feature actually deleted is the SUCCESS case, not a violation.
+
+    Before #71 the check consulted only the index (`git ls-files`), so the more
+    correctly a feature executed its removal plan, the redder the gate went.
+    """
+    root = _setup(tmp_path, plan="- doomed.py (remove)\n")
+    (root / "doomed.py").write_text("x = 1\n")
+    _commit(root, "add doomed.py")
+    (root / "doomed.py").unlink()
+    _commit(root, "remove doomed.py as planned")
+
+    warnings, violations = consistency.run(root)
+    assert violations == []
+
+
+def test_removed_path_deleted_but_not_yet_committed_passes(tmp_path: Path) -> None:
+    """The deletion staged but not committed still resolves (history has the add)."""
+    root = _setup(tmp_path, plan="- doomed.py (remove)\n")
+    (root / "doomed.py").write_text("x = 1\n")
+    _commit(root, "add doomed.py")
+    (root / "doomed.py").unlink()
+
+    warnings, violations = consistency.run(root)
+    assert violations == []
+
+
+def test_removed_path_never_existed_still_fails(tmp_path: Path) -> None:
+    """A typo in the plan — absent from the worktree AND from history — fails."""
+    root = _setup(tmp_path, plan="- never_existed.py (remove)\n")
+    warnings, violations = consistency.run(root)
+    assert any("never_existed.py" in v for v in violations)
