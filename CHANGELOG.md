@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-08-31
+
 ### Fixed
 
 - **A fresh ledger is born current, not four schema versions stale
@@ -1002,7 +1004,8 @@ honestly named `preflight`, and a single read-only diagnostic explains project h
 - CI matrix (Python 3.10 and 3.14) running ruff, mypy, and pytest with a
   coverage floor of 85%.
 
-[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/paulo2nd/specops/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/paulo2nd/specops/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/paulo2nd/specops/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/paulo2nd/specops/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/paulo2nd/specops/compare/v0.8.1...v0.9.0
