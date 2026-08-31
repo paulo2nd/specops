@@ -135,6 +135,24 @@ def _handle_errors(fn: _F) -> _F:
     return wrapper  # type: ignore[return-value]
 
 
+def _resolved_feature(root: Path) -> str | None:
+    """The active feature directory as a repo-relative string, or None.
+
+    Echoed by the commands that silently validate whatever the pointer happens to
+    name: a stale `.specify/feature.json` otherwise reports `ok` about a different,
+    already-finished feature, with nothing in the output to say so (#75).
+    """
+    from specops import speckit
+
+    feature_dir = speckit.resolve_feature_dir(root)
+    if feature_dir is None:
+        return None
+    try:
+        return str(feature_dir.relative_to(root.resolve()))
+    except ValueError:
+        return str(feature_dir)
+
+
 def _require_git(root: Path = Path(".")) -> gitops.Repository:
     """Fail with exit 1 within <1 s when not inside a Git repo (FR-002, SC-008).
 
@@ -222,6 +240,7 @@ def consistency(
     _require_git(root)
     from specops import consistency as con_mod
     from specops import outcome
+    feature = _resolved_feature(root)
     if json_out:
         try:
             _warnings, violations = con_mod.run(root)
@@ -229,17 +248,25 @@ def consistency(
             typer.echo(outcome.render("consistency", outcome.INFRA_ERROR, detail=exc.message))
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
         if violations:
-            typer.echo(outcome.render("consistency", outcome.GATE_REJECTION, violations=violations))
+            typer.echo(outcome.render(
+                "consistency", outcome.GATE_REJECTION, feature=feature, violations=violations))
             raise typer.Exit(outcome.exit_for(outcome.GATE_REJECTION))
-        typer.echo(outcome.render("consistency", outcome.PASS))
+        typer.echo(outcome.render("consistency", outcome.PASS, feature=feature))
         return
     warnings, violations = con_mod.run(root)
     for w in warnings:
         typer.echo(w)
+    # Name the feature this answer is ABOUT — a stale pointer otherwise reports `ok`
+    # about an already-finished feature with no cue in the output (#75). It rides the
+    # same stream as the verdict, so the "failure evidence is stderr-only" contract holds.
     if violations:
+        if feature:
+            typer.echo(f"feature: {feature}", err=True)
         for v in violations:
             typer.echo(v, err=True)
         raise typer.Exit(1)
+    if feature:
+        typer.echo(f"feature: {feature}")
     typer.echo("consistency: ok")
 
 
@@ -290,6 +317,7 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
         _emit_sarif(root)
         return
     _ov = gateprofiles.OUTPUT_VERSION
+    feature = _resolved_feature(root)
     if json_out:
         try:
             report = review_mod.evaluate(root)
@@ -299,11 +327,12 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
         gates = [_gate_json(r) for r in report.results]
         if report.passed:
             typer.echo(outcome.render(
-                command_name, outcome.PASS, verdict="APPROVED", gates=gates, output_version=_ov))
+                command_name, outcome.PASS, verdict="APPROVED", feature=feature,
+                gates=gates, output_version=_ov))
             return
         typer.echo(outcome.render(
-            command_name, outcome.GATE_REJECTION,
-            verdict="REJECTED", gates=gates, output_version=_ov))
+            command_name, outcome.GATE_REJECTION, verdict="REJECTED", feature=feature,
+            gates=gates, output_version=_ov))
         # --soft keeps exit 0 so a do-while body can branch on the verdict; the
         # terminal gate (hard `specops preflight`) is what fails closed on REJECTED.
         if not soft:
@@ -1052,6 +1081,11 @@ def _emit_sarif(root: Path) -> None:
 def _gate_json(r: Any) -> dict[str, Any]:
     """Provenance object for one gate in a verdict (Feature 012, FR-011/FR-012)."""
     obj: dict[str, Any] = {"name": r.name, "status": r.status}
+    # Additive per-command key (docs/stability.md): wall clock of the gate's command,
+    # absent when nothing ran (cached/skipped/fixed gate) — so a consumer can tell a
+    # fresh verdict from a reused one without parsing `disposition` (#73).
+    if getattr(r, "duration_ms", None) is not None:
+        obj["duration_ms"] = r.duration_ms
     for field_name in ("disposition", "reason", "evidence_id", "commit_range"):
         value = getattr(r, field_name, None)
         if value is not None:

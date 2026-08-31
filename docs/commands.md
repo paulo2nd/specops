@@ -283,6 +283,29 @@ exit 2. Runs from any directory inside the repo, never writes to the ledger or
 any repository file, needs no specific ledger phase, and never prompts — safe
 as a CI step.
 
+The report **names the feature it ran against** and states, per gate and in a
+closing summary line, whether the gate actually executed:
+
+```
+feature: 007-guided-mapping
+[gate] reconcile ....... PASS
+[gate] lint ............ CACHED
+  reused a passing run of this exact tree — nothing executed (matched-path:src/**)
+  evidence: EV-1a38a6bebd3b
+[gate] test ............ PASS (9m 12s)
+[gate] working-tree .... PASS
+[gate] drift ........... PASS
+[gates] 5 total — 3 executed (9m 14s), 1 reused from cache
+```
+
+`PASS` is a claim about the code; `CACHED` is only a claim about the cache — a
+gate whose full cache key still matches a prior passing run is reused rather than
+re-executed, and the two now read differently. The wall clock is the cheapest cue
+that a suite taking minutes has returned in a second. In `--json` this is
+`disposition: "cached"` (unchanged) plus the additive `duration_ms`, which is
+**absent** whenever nothing ran; `status` is still `PASS` for a cached gate,
+because a cached pass is a real pass over an identical tree.
+
 The terminal **drift gate** (Feature 010) rejects the review when any
 effective-diff path is `unexplained` — neither declared in `plan.md` nor recorded
 via `specops trace acknowledge`. Planned and `discovered-and-acknowledged` paths
@@ -292,6 +315,11 @@ pass, and SpecOps/Speckit-managed artifacts (`specs/**`, `.specify/**`,
 ```bash
 specops preflight             # local: gate-check the current change
 ```
+
+Per-command `--json` keys: `verdict` (`APPROVED`/`REJECTED`), `feature` (the
+resolved feature directory), and `gates` (each with `name`, `status`,
+`disposition`, `reason`, `evidence_id`, `commit_range`, `affected_paths`, and
+`duration_ms` when the gate executed).
 
 Flags: `--json` emits the stable outcome envelope; `--soft` (with `--json`)
 always exits 0 so the JSON verdict — not the exit code — drives a workflow
@@ -321,6 +349,22 @@ approve/reject gate; the YAML is yours, no SpecOps coupling):
 Read-only gate. Verifies every `SC-\d+` in the spec has ≥ 1 task with a matching
 `[SC-xxx]` tag, and every `plan.md` path declaration carries a valid action
 suffix (`(create)`/`(modify)`/`(remove)`). Exit 1 on violation.
+
+A `(create)` path needs an existing parent; a `(modify)` path must exist in the
+worktree; a `(remove)` path must be **absent from the worktree and present in Git
+history** — the removal the plan declared, actually performed. Only a path that
+exists in neither (a typo in the plan) fails.
+
+The output **names the feature it validated**, on the same stream as the verdict:
+
+```
+feature: specs/007-guided-mapping
+consistency: ok
+```
+
+The active feature comes from `.specify/feature.json`. A stale pointer makes this
+command answer about a different, already-finished feature — the name is what makes
+that visible. `--json` carries the same value as the additive `feature` key.
 
 ### `specops doctor [--json]`
 

@@ -17,6 +17,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A cached gate no longer reports `PASS`
+  ([#73](https://github.com/paulo2nd/specops/issues/73)).** `preflight` rendered a
+  reused cache entry identically to a freshly executed gate, so a suite that took
+  ~9 minutes and one that returned in 1.2s having executed nothing were
+  indistinguishable at the interface. Independent reviewer sessions caught it the
+  same way six times — by noticing the wall clock — and one team's review process
+  had already accreted a "do not re-run the suite manually" instruction around the
+  bug, producing review rounds where zero tests ran while five green gates were
+  recorded.
+  - A cached gate now renders `CACHED`, not `PASS`, and names the evidence id it
+    reused. `PASS` is a claim about the code; `CACHED` is a claim about the cache.
+  - Every executed gate reports its **wall clock** (`PASS (9m 12s)`), and the report
+    ends with a summary line stating how many gates executed versus were reused.
+  - `preflight --json` gains an additive `duration_ms` per gate, **absent** when
+    nothing ran.
+  - Cache *invalidation* was already correct — the key covers `commit_range`,
+    `worktree_digest`, affected paths, and the context-map digest — so this is a
+    reporting fix, not a behaviour change. `status` stays `PASS` for a cached gate
+    (a cached pass is a real pass over an identical tree) and the exit codes are
+    unchanged; both are frozen surfaces.
+- **`consistency` and `preflight` name the feature they ran against
+  ([#75](https://github.com/paulo2nd/specops/issues/75), partial).** The active
+  feature comes from `.specify/feature.json`, and a pointer left on a finished
+  feature made `consistency` answer `ok` about that one while the feature actually
+  under work went unvalidated — a silent failure reporting success, with nothing in
+  the output to say which feature the answer was about. Both commands now echo the
+  resolved feature directory, on the same stream as the verdict (so the
+  failure-evidence-is-stderr-only contract is unchanged), and carry it as an
+  additive `feature` key in `--json`. The remaining halves of #75 — `feature use`,
+  automatic repointing by `init-spec`, and `feature rename` — are roadmap Feature
+  026.
+
 - **A fresh ledger is born current, not four schema versions stale
   ([#69](https://github.com/paulo2nd/specops/issues/69)).**
   `templates/status.yaml` hard-coded `schema_version: 4` while `CURRENT_SCHEMA`
