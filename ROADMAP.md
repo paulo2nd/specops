@@ -221,10 +221,10 @@ Triage, verified against `main` @ `bfaf85b`:
 
 | Issue | Verdict | Vehicle |
 |---|---|---|
-| #69 template pins `schema_version: 4` | defect, reproduced | fix PR → `0.11.1` |
-| #71 `(remove)` path checked against the index, not history | defect, reproduced | fix PR → `0.11.1` |
-| #77 `/specops-review` directive skips `REVIEW` before `DONE` | defect, reproduced (directive, not CLI) | fix PR → `0.11.1` |
-| #72 refusals exit 0 | **not reproducible** — every refusal raises through the single error boundary and exits 1 | closed; the missing invariant test ships in `0.11.1` |
+| #69 template pins `schema_version: 4` | defect, reproduced | fix PR → `0.12.0` |
+| #71 `(remove)` path checked against the index, not history | defect, reproduced | fix PR → `0.12.0` |
+| #77 `/specops-review` directive skips `REVIEW` before `DONE` | defect, reproduced (directive, not CLI) | fix PR → `0.12.0` |
+| #72 refusals exit 0 | **not reproducible** — every refusal raises through the single error boundary and exits 1 | closed; the missing invariant test ships in `0.12.0` |
 | #73 `preflight` reports `PASS` from cache | defect, but of **labelling** — the cache key already carries `commit_range` and `worktree_digest`, so invalidation is correct | fix PR → `0.12.0` (behaviour-visible) |
 | #74 no path to correct a DONE task | capability gap | **Feature 026** |
 | #75 no CLI to repoint/rename the active feature | capability gap (the "echo the resolved feature" half is a defect → `0.12.0`) | **Feature 026** |
@@ -239,9 +239,11 @@ Triage, verified against `main` @ `bfaf85b`:
   story (an approval blocked by a never-read baseline file) reads better once
   026 has given the ledger a supported correction path.
 
-Release points: `0.11.1` for the three reproduced defects plus the #72 invariant
-test; `0.12.0` for #73 and the #75 echo/repoint half; the Field Hardening
-milestone closes with 026 and 027 merged.
+Release point: **`0.12.0`** for all five reproduced defects plus the #72 invariant
+test. A `0.11.1` patch was prepared for the first three (PR #79, on the `0.5.1`
+precedent) but folded into `0.12.0` instead once #73/#75 proved same-day work —
+it was never tagged, so no `v0.11.1` exists. The Field Hardening milestone closes
+with 026 and 027 merged.
 
 ## Standard Spec Kit Execution Protocol
 
