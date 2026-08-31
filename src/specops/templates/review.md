@@ -111,9 +111,19 @@ Set the review decision:
 - Any **blocking** finding not yet `VERIFIED` → **REJECTED**
 - Every blocking finding `VERIFIED` (advisory may remain open) → **APPROVED**
 
-Execute the outcome:
+Execute the outcome. Both verdicts are recorded **from `REVIEW`**, and a corrective
+round starts in `IMPLEMENT` — so re-enter the phase first (a no-op when already there):
+
+```
+specops status transition-phase REVIEW --if-needed
+```
+
 - APPROVED → `specops handoff close` then `specops status transition-phase DONE -r APPROVED`
 - REJECTED → `specops status transition-phase IMPLEMENT -r REJECTED`
+
+Without the prelude, a round that follows any earlier REJECTED round fails on the
+final write (`Invalid transition: IMPLEMENT → DONE`) — the verdict is correct, the
+phase simply is not where the state machine expects it (#77).
 
 `specops status transition-phase DONE` fails closed while any blocking finding is unverified — approval cannot bypass the corrective handoff. A repository with no structured findings (legacy) degrades to the prior cycle-result gate.
 

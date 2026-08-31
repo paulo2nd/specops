@@ -94,6 +94,8 @@ Roadmap status uses four values:
 | 023 | Context Read-Set Consumption in IMPLEMENT | MERGED | 009 | Lifecycle Coverage |
 | 024 | Test Execution Only at the Review Gate | MERGED | 012, 021 | Review Integrity |
 | 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
+| 026 | Supported Recovery Operations | PLANNED | 006, 010, 021 | Field Hardening |
+| 027 | Cross-Round Review Coverage | PLANNED | 025, 026 | Field Hardening |
 
 ### Build sequence (dependency review — 2026-07-23)
 
@@ -206,6 +208,40 @@ roadmap. The two feature-sized gaps form the Lifecycle Coverage cycle:
 Issue timing: #50 before Feature 022's implementation (its fix defines the
 recording seam 022 generalizes); #51 and #52 are directive/doc text fixes,
 anytime, no conflict with either feature.
+
+### Build sequence (adoption review — 2026-08-31)
+
+The Review Integrity milestone is complete (024–025 MERGED). The first review
+driven by **external adoption** rather than internal audit — an adopter running
+`0.11.0` on a real multi-round feature — filed issues #69, #71–#77. Per the
+Dependency and Replanning Policy, defect-sized findings stay as issues and never
+enter this roadmap; only the capability gaps become features.
+
+Triage, verified against `main` @ `bfaf85b`:
+
+| Issue | Verdict | Vehicle |
+|---|---|---|
+| #69 template pins `schema_version: 4` | defect, reproduced | fix PR → `0.11.1` |
+| #71 `(remove)` path checked against the index, not history | defect, reproduced | fix PR → `0.11.1` |
+| #77 `/specops-review` directive skips `REVIEW` before `DONE` | defect, reproduced (directive, not CLI) | fix PR → `0.11.1` |
+| #72 refusals exit 0 | **not reproducible** — every refusal raises through the single error boundary and exits 1 | closed; the missing invariant test ships in `0.11.1` |
+| #73 `preflight` reports `PASS` from cache | defect, but of **labelling** — the cache key already carries `commit_range` and `worktree_digest`, so invalidation is correct | fix PR → `0.12.0` (behaviour-visible) |
+| #74 no path to correct a DONE task | capability gap | **Feature 026** |
+| #75 no CLI to repoint/rename the active feature | capability gap (the "echo the resolved feature" half is a defect → `0.12.0`) | **Feature 026** |
+| #76 corrective rounds narrow coverage instead of accumulating it | capability gap in the 025 design | **Feature 027** |
+
+> **026 → 027**
+
+- **026** first — both halves are additive commands over frozen surfaces
+  (`status`, the feature pointer); no change to the review loop, so it cannot
+  conflict with 027.
+- **027** second — it revises Feature 025's own coverage model, and its recovery
+  story (an approval blocked by a never-read baseline file) reads better once
+  026 has given the ledger a supported correction path.
+
+Release points: `0.11.1` for the three reproduced defects plus the #72 invariant
+test; `0.12.0` for #73 and the #75 echo/repoint half; the Field Hardening
+milestone closes with 026 and 027 merged.
 
 ## Standard Spec Kit Execution Protocol
 
@@ -1328,6 +1364,127 @@ cycle-result path.
 > anchor pass exists, and a configurable round cap halts and asks a human — all
 > recording, never judging a finding's merit, and degrading to today's behavior on
 > legacy ledgers.
+
+## Feature 026 — Supported Recovery Operations
+
+### Objective
+
+Give the ledger a **supported way to be corrected**. Today the two states an
+interrupted session leaves behind have no legal move: a task closed with wrong or
+missing evidence cannot be amended (`start-task` refuses to reopen it,
+`complete-task` refuses to write to it — #74), and the active-feature pointer
+`.specify/feature.json` can only be repointed by hand (#75), which contradicts the
+workflow's own rule that ledger state is CLI-only. Both push the operator toward
+hand-editing the very files the ledger exists to make trustworthy. Close both with
+auditable commands, recording — never laundering — the correction.
+
+### Required outcomes
+
+- `specops status amend-task <id> --evidence … --reason …` **appends** a
+  correction to a DONE task rather than rewriting it: the ledger records both what
+  was claimed and what was later verified, so an amended task is *more*
+  informative than a silently-correct one. Reopening a DONE task remains
+  unsupported — amendment-only cannot be used to quietly launder a bad close.
+- `specops feature use <dir>` repoints the active feature explicitly, validating
+  that the directory exists and carries the expected artifacts; `status init-spec`
+  repoints to the feature it initializes, covering the common case with no extra
+  step.
+- `consistency`, `preflight`, and `status show` echo the resolved feature
+  directory, so a stale pointer is visible in the very output it would otherwise
+  corrupt. (Shipped ahead of this feature in `0.12.0` — the defect half of #75.)
+- `specops feature rename <old> <new>` makes renumbering a supported operation
+  (directory, branch reference, artifacts, ledger identity) instead of the current
+  delete-the-ledger-and-re-init improvisation.
+- Ledger schema bump with forward migration if the amendment record requires one;
+  English and Portuguese documentation updated equivalently.
+
+### Explicit non-goals
+
+- No judgment of whether an amendment's reason is good (Principle IV / "record,
+  do not validate").
+- No reopening of DONE tasks, and no editing or deletion of a prior evidence
+  entry — corrections are append-only.
+- No automatic recovery: SpecOps never infers what the interrupted session
+  *meant* to record.
+- No change to the deterministic gate suite or to the review loop.
+
+### Acceptance gate
+
+A task closed with wrong evidence can be amended and the ledger shows both
+records with their reasons; `reconcile` accepts the amended ledger; a fresh
+feature initialized by `init-spec` is validated by `consistency` without any hand
+edit of `feature.json`; a renumbered feature keeps a coherent ledger identity;
+and every one of the new commands refuses non-zero with a reason on its
+precondition failures (the #72 invariant).
+
+### `/speckit.specify` brief
+
+> Add the ledger's supported correction path: an append-only
+> `status amend-task` that records a corrected evidence entry and its reason on an
+> already-DONE task without reopening it, a `feature use` command plus automatic
+> repointing by `init-spec` so the active-feature pointer is never edited by hand,
+> and a `feature rename` that carries a renumbering across directory, branch,
+> artifacts, and ledger identity — all recording, never validating, and never
+> mutating or deleting a prior evidence entry.
+
+## Feature 027 — Cross-Round Review Coverage
+
+### Objective
+
+Make review rounds **accumulate** coverage instead of shrinking it. Feature 025
+scopes a corrective round to `prev_to..HEAD` plus prior findings' files, which is
+correct as a *priority* and unsafe as a *boundary*: it assumes round 1 read the
+baseline completely and correctly, which is exactly the assumption a review exists
+not to rely on. A defect in the baseline that round 1 missed becomes structurally
+invisible to every round that follows — and the more rounds a feature needs, the
+more confident the process looks while its coverage narrows (#76). An adopter's
+out-of-band full-feature review has already caught, in this blind spot, two
+blocking defects in one feature and a cross-tenant data leak in another, the
+latter after four rounds including one that ended APPROVED.
+
+### Required outcomes
+
+- `handoff record-scope` keeps presenting `prev_to..HEAD` plus prior findings'
+  files as the round's **priority**, but also emits the full `baseline..HEAD` set
+  marked as not yet re-verified this round. The narrowing becomes a
+  recommendation the reviewer can see past, not a boundary the tool enforces
+  invisibly. (Shipped ahead of this feature in `0.12.0` as the additive half.)
+- The ledger tracks, across rounds, which baseline product paths have been read by
+  *some* round and which have never been read by any — derived from recorded
+  ranges, never self-reported.
+- APPROVED fails closed while the never-read set is non-empty, with the same
+  legacy-degradation rule Feature 025 established for ledgers carrying no
+  reviewed-scope records.
+- The reviewer directive states the tradeoff explicitly: if a round declines to
+  read part of the baseline for context-budget reasons, that decision is the
+  reviewer's to record, not the tool's to make silently.
+
+### Explicit non-goals
+
+- No re-reading mandate: the feature records what was covered, it does not
+  prescribe how a reviewer spends its context.
+- No change to the round cap, the finding lifecycle, or the deterministic gate
+  suite.
+- No path-similarity heuristics — coverage stays derived from commit reach, as
+  `reviewscope.assess` already computes it.
+
+### Acceptance gate
+
+A REJECTED → REJECTED → APPROVED sequence in which no round ever read a
+baseline-changed file fails closed on approval and names that file; the same
+sequence with an anchor round covering it approves; a ledger with no
+reviewed-scope records still closes through the prior behavior; and
+`record-scope` on a corrective round emits both the priority set and the
+not-yet-re-verified full set.
+
+### `/speckit.specify` brief
+
+> Make multi-round review accumulate coverage: `handoff record-scope` emits the
+> full `baseline..HEAD` set alongside the corrective priority set marked as not
+> yet re-verified, the ledger derives from recorded ranges which baseline product
+> paths no round has ever read, and APPROVED fails closed while that never-read
+> set is non-empty — degrading to today's behavior on ledgers with no
+> reviewed-scope records, and never prescribing how a reviewer spends its context.
 
 ## Dependency and Replanning Policy
 

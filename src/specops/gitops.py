@@ -326,6 +326,20 @@ def is_tracked(repo: Repository, path: str) -> bool:
     return _git(repo.root, ["ls-files", "--error-unmatch", path]).returncode == 0
 
 
+def path_in_history(repo: Repository, path: str) -> bool:
+    """Return True when *path* appears in any commit reachable from any ref.
+
+    Unlike :func:`is_tracked` — which only sees the current index — this answers
+    "did this path ever exist here?", which is the question a deleted file needs
+    (#71). ``--all`` covers unmerged feature branches, so a removal that has not
+    landed on the default branch still resolves.
+    """
+    proc = _git(
+        repo.root, ["log", "--all", "--max-count=1", "--format=%H", "--", path]
+    )
+    return proc.returncode == 0 and bool(proc.stdout.strip())
+
+
 def name_only_diff(repo: Repository, start_sha: str, end_sha: str = "HEAD") -> list[str]:
     """Return deduplicated list of changed file paths between *start_sha* and *end_sha*."""
     proc = _git(repo.root, ["diff", "--name-only", start_sha, end_sha])

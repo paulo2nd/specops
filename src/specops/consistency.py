@@ -95,8 +95,15 @@ def run(root: Path) -> tuple[list[str], list[str]]:
                         f"(create) parent of '{raw_path}' does not exist"
                     )
             elif action == "remove":
+                # A removal the feature actually performed is the SUCCESS condition:
+                # absent from the worktree, present in history. Only a path that never
+                # existed (a typo in the plan) fails (#71). The index is consulted too,
+                # so a still-uncommitted declaration resolves before its first commit.
                 in_worktree = candidate.exists()
-                in_history = repo is not None and gitops.is_tracked(repo, raw_path)
+                in_history = repo is not None and (
+                    gitops.path_in_history(repo, raw_path)
+                    or gitops.is_tracked(repo, raw_path)
+                )
                 if not in_worktree and not in_history:
                     violations.append(
                         f"consistency: {plan_path.name}:{lineno} - "

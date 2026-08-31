@@ -13,6 +13,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A fresh ledger is born current, not four schema versions stale
+  ([#69](https://github.com/paulo2nd/specops/issues/69)).**
+  `templates/status.yaml` hard-coded `schema_version: 4` while `CURRENT_SCHEMA`
+  was `8`, so `status init-spec` produced a ledger that classified `MIGRATABLE`
+  from the moment it was created: the first `status show` on a clean install
+  emitted a migration diagnostic, `doctor` raised a WARNING with a `status
+  migrate` next-action, and the v4→v8 migration ran on the first state change of
+  every new feature. `init-spec` now normalizes the rendered template through the
+  same pure `ledger.migrate_to_current` every other read/write uses, so the
+  template stays a *content* seed and can never again drift into a false schema
+  declaration — regardless of future bumps. Existing on-disk ledgers are
+  unaffected (the v1–v7 migration path is unchanged).
+- **`consistency` resolves `(remove)` paths against Git history
+  ([#71](https://github.com/paulo2nd/specops/issues/71)).** The check consulted
+  only the index (`git ls-files --error-unmatch`), which by definition cannot
+  contain a deleted file — so a path the plan declared for removal and the
+  implementation correctly removed was reported as if it had never existed, and
+  the error message claimed a history lookup that never happened. This was a false
+  negative on the happy path: the more faithfully a feature executed its removal
+  plan, the redder the gate went, with the standing temptation to "fix" it by
+  dropping the `(remove)` declarations from `plan.md` — destroying the
+  traceability record the gate exists to protect. A `(remove)` declaration now
+  passes when the path is absent from the worktree and present anywhere in
+  reachable history (`--all`, so an unmerged feature branch resolves); only a path
+  that exists in neither — a typo in the plan — fails.
+  - `gitops.path_in_history` — did this path ever exist in any reachable commit.
+- **`/specops-review` records both verdicts from `REVIEW`
+  ([#77](https://github.com/paulo2nd/specops/issues/77)).** The directive
+  instructed `status transition-phase DONE -r APPROVED` directly, which the phase
+  machine correctly rejects after any earlier REJECTED round — the ledger sits at
+  `IMPLEMENT` and the sequence is `IMPLEMENT → REVIEW → DONE`. The reviewer hit an
+  error on the last write of a multi-round review, at exactly the moment a
+  mistaken retry muddies the ledger. `templates/review.md` now issues
+  `status transition-phase REVIEW --if-needed` as a prelude to both outcomes,
+  which is a forward transition from `IMPLEMENT` and a no-op when already in
+  `REVIEW`. The CLI is unchanged: the refusal and its message were correct.
+
+### Added
+
+- **CLI-wide refusal-exit contract test
+  ([#72](https://github.com/paulo2nd/specops/issues/72)).** Reported as
+  `status` subcommands exiting `0` on a refusal; not reproducible — every refusal
+  raises `SpecopsError` through the single `_handle_errors` boundary and exits `1`.
+  The invariant was nonetheless untested, which is what made the report plausible.
+  `tests/unit/test_refusal_exit_contract.py` now pins it two ways: a *structural*
+  check that every registered command (including future ones) is wrapped by the
+  error boundary, and a *behavioural* table asserting that each reachable refusal
+  exits non-zero, explains itself, and leaves the ledger byte-identical.
+
 ## [0.11.0] - 2026-08-04
 
 ### Added
