@@ -107,6 +107,7 @@ src/specops/
 ├── handoff.py           # (modify) carry amendment provenance into inherited evidence (FR-006a)
 ├── cli.py               # (modify) status amend-task; new `feature` sub-app; echo suffix
 ├── trace.py             # (modify) evidence_amended / evidence_history in the report
+├── doctor.py            # (modify) report the active-feature selection; fail on a broken one
 ├── templates/
 │   ├── status.yaml      # (modify) drop the stale schema_version declaration
 │   └── directives/
@@ -126,7 +127,8 @@ tests/
 │   ├── test_handoff.py                 # (modify) inherited-evidence provenance
 │   ├── test_status.py                  # (modify) init-spec repoint
 │   ├── test_extension.py               # (modify) directive recovery-move text
-│   └── test_cli.py                     # (modify) echo suffix + refusal sweep
+│   ├── test_cli.py                     # (modify) echo suffix + refusal sweep
+│   └── test_doctor.py                  # (modify) selection diagnostics
 └── integration/
     ├── test_recovery_amend.py          # (create)
     ├── test_recovery_pointer.py        # (create)

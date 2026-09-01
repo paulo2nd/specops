@@ -177,9 +177,19 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at re
 - [X] T076 [P] Document the recovery operations in `README.md`
 - [X] T077 [P] Document the recovery operations equivalently in `README.pt-br.md`
 - [X] T078 Record the v9 bump, the three new commands, the resolution-precedence alignment and the migration requirement under `[Unreleased]` in `CHANGELOG.md` [SC-011]
+- [X] T080 Report the active-feature selection in `doctor` and fail on a broken one — an unresolvable override (a state this feature created) and a dangling pointer are blocking, an inferred answer is a warning — in `src/specops/doctor.py` [SC-007]
+- [X] T081 [P] Write the selection-diagnostic tests, including the guard that "no feature started yet" stays a supported `ok` resting state, in `tests/unit/test_doctor.py` [SC-007]
 - [X] T079 Run the full gate suite — `conda run -n specops pytest -q`, `mypy src/`, `ruff check .` — and record the results as the user story's evidence [SC-011]
 
 ---
+
+> **T080–T081 appended during implementation (2026-09-01).** `doctor` echoes the
+> resolved feature, so FR-014a ("reported as an inference *wherever* the resolved
+> feature is echoed") always covered it — the task list named only `status show`,
+> `consistency` and `preflight`. Honouring `SPECIFY_FEATURE_DIRECTORY` (T015) also
+> created a state where `doctor` reported `ok — no active SpecOps feature` while a
+> valid pointer sat unused. Both are this feature's own work, so they are recorded
+> here rather than deferred; they add no success criterion.
 
 ## Dependencies
 
