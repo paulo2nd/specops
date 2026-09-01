@@ -2,10 +2,19 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from specops.errors import SpecopsError
+
+# Spec Kit's own explicit override, read with the same precedence it uses (see
+# `.specify/scripts/**/common.ps1`: env var, then `.specify/feature.json`, then error).
+# SpecOps reads it and never persists it: Spec Kit persists only on its *write* path
+# and passes -NoPersist for read-only resolution (issue #3025), and every SpecOps
+# resolution is read-only — persisting would dirty the tree on a plain `specops report`.
+FEATURE_DIR_ENV = "SPECIFY_FEATURE_DIRECTORY"
 
 # ---------------------------------------------------------------------------
 # Detection & feature-dir resolution (R1)
@@ -22,42 +31,103 @@ def has_speckit(root: Path) -> bool:
     return (root / ".specify" / "templates").is_dir()
 
 
-def resolve_feature_dir(root: Path) -> Path | None:
-    """
-    Return the active feature directory.
+@dataclass(frozen=True)
+class ResolvedFeature:
+    """The active feature plus *how* it was resolved (Feature 026, FR-014a).
 
-    Reads .specify/feature.json > feature_directory.
-    Fallback: newest specs/NNN-* directory by name (lexicographic).
-    Returns None when neither source yields a valid directory.
+    ``source`` is ``"override"`` | ``"pointer"`` | ``"inferred"``, or None when nothing
+    resolved. ``error`` is set only when a source answered but its answer is unusable
+    (today: an override naming a directory that does not exist) — that case must be
+    *reported*, never silently downgraded to the next source, because Spec Kit would
+    fail there and a silent fallback is precisely how the two tools drift apart.
     """
+
+    path: Path | None
+    source: str | None
+    error: str | None = None
+
+
+def _from_override(root: Path) -> ResolvedFeature | None:
+    """Level 1: the explicit environment override, or None when unset/empty.
+
+    An exported-but-empty value is not a selection — Spec Kit's `if ($env:...)` is
+    falsy for an empty string, so resolution must fall through to the pointer file.
+    """
+    raw = os.environ.get(FEATURE_DIR_ENV)
+    if not raw:
+        return None
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = root / candidate  # Spec Kit joins a relative value to the repo root
+    candidate = candidate.resolve()
+    if candidate.is_dir():
+        return ResolvedFeature(candidate, "override")
+    return ResolvedFeature(
+        None, "override",
+        f"{FEATURE_DIR_ENV} is set to {raw!r}, which is not a directory.",
+    )
+
+
+def _from_pointer(root: Path) -> ResolvedFeature | None:
+    """Level 2: `.specify/feature.json` > feature_directory, or None when unusable."""
     feature_json = root / ".specify" / "feature.json"
-    if feature_json.is_file():
-        try:
-            data = json.loads(feature_json.read_text(encoding="utf-8"))
-            rel = data.get("feature_directory", "")
-            if rel:
-                candidate = (root / rel).resolve()
-                if candidate.is_dir():
-                    return candidate
-        except (json.JSONDecodeError, OSError):
-            pass
+    if not feature_json.is_file():
+        return None
+    try:
+        data = json.loads(feature_json.read_text(encoding="utf-8"))
+        rel = data.get("feature_directory", "")
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not rel:
+        return None
+    candidate = (root / rel).resolve()
+    return ResolvedFeature(candidate, "pointer") if candidate.is_dir() else None
 
-    # Fallback: newest specs/NNN-* directory (numeric prefix sort, tie-break full name)
+
+def _from_inference(root: Path) -> ResolvedFeature | None:
+    """Level 3: newest ``specs/NNN-*`` by numeric prefix (SpecOps-only).
+
+    Spec Kit errors where this guesses. The guess is retained because repositories
+    already run without a pointer file and removing it would break them — but it is
+    labelled ``inferred`` so the answer is never passed off as an explicit one.
+    """
     specs_dir = root / "specs"
-    if specs_dir.is_dir():
-        def _numeric_key(d: Path) -> tuple[int, str]:
-            m = re.match(r"(\d+)", d.name)
-            return (int(m.group(1)) if m else 0, d.name)
+    if not specs_dir.is_dir():
+        return None
 
-        candidates = sorted(
-            [d for d in specs_dir.iterdir() if d.is_dir() and re.match(r"\d+", d.name)],
-            key=_numeric_key,
-            reverse=True,
-        )
-        if candidates:
-            return candidates[0]
+    def _numeric_key(d: Path) -> tuple[int, str]:
+        m = re.match(r"(\d+)", d.name)
+        return (int(m.group(1)) if m else 0, d.name)
 
-    return None
+    candidates = sorted(
+        [d for d in specs_dir.iterdir() if d.is_dir() and re.match(r"\d+", d.name)],
+        key=_numeric_key,
+        reverse=True,
+    )
+    return ResolvedFeature(candidates[0], "inferred") if candidates else None
+
+
+def resolve_feature(root: Path) -> ResolvedFeature:
+    """Resolve the active feature with Spec Kit's precedence, reporting the source.
+
+    Order: environment override → `.specify/feature.json` → newest ``specs/NNN-*``.
+    An override that names a missing directory stops resolution with an error rather
+    than falling through, so SpecOps and Spec Kit can never answer about different
+    features from the same repository state (Feature 026, FR-009a).
+    """
+    override = _from_override(root)
+    if override is not None:
+        return override
+    return _from_pointer(root) or _from_inference(root) or ResolvedFeature(None, None)
+
+
+def resolve_feature_dir(root: Path) -> Path | None:
+    """Return the active feature directory, or None when nothing resolves.
+
+    The bare-path entry point every existing caller uses; :func:`resolve_feature` is
+    the same resolution with its provenance attached.
+    """
+    return resolve_feature(root).path
 
 
 # ---------------------------------------------------------------------------

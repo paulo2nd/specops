@@ -163,3 +163,73 @@ def test_validate_string_accepts(value: str) -> None:
 ])
 def test_validate_string_rejects(value: str) -> None:
     assert evidence.validate_string(value) is False
+
+
+# --- Feature 026 (T004/T005): amendment fields and id derivation ---------------
+
+
+def _amend_kwargs(**over: object) -> dict:
+    base = dict(
+        producer="amend", command="specops status amend-task T001", exit_code=0,
+        timestamp="2026-09-01T00:00:00+00:00", commit_range="aaa111..bbb222",
+        affected_paths=["src/a.py"], summary="TEST_REPORT: 1795 passed",
+    )
+    base.update(over)
+    return base
+
+
+def test_build_record_omits_amendment_fields_by_default() -> None:
+    """A close-time record carries neither field — absence is what marks it original."""
+    rec = evidence.build_record(**_amend_kwargs(producer="auto"))
+    assert "amendment" not in rec
+    assert "reason" not in rec
+
+
+def test_build_record_emits_amendment_and_reason() -> None:
+    rec = evidence.build_record(
+        **_amend_kwargs(), amendment=True, reason="original close recorded no gate run",
+    )
+    assert rec["amendment"] is True
+    assert rec["reason"] == "original close recorded no gate run"
+    assert rec["producer"] == "amend"
+
+
+def test_amendment_requires_a_reason() -> None:
+    """FR-005: an amendment without a reason is refused at construction."""
+    with pytest.raises(ValueError, match="reason"):
+        evidence.build_record(**_amend_kwargs(), amendment=True)
+    with pytest.raises(ValueError, match="reason"):
+        evidence.build_record(**_amend_kwargs(), amendment=True, reason="")
+
+
+def test_repeated_amendment_with_identical_reason_gets_a_distinct_id() -> None:
+    """FR-002b/T005: the amendment index disambiguates otherwise-identical keys.
+
+    Without it `append_record` would treat the second amendment as an id match and
+    silently reuse the first — collapsing "amended twice" into one record.
+    """
+    first = evidence.build_record(
+        **_amend_kwargs(), amendment=True, reason="same reason",
+        subject="T001#amend0:same reason",
+    )
+    second = evidence.build_record(
+        **_amend_kwargs(), amendment=True, reason="same reason",
+        subject="T001#amend1:same reason",
+    )
+    assert first["id"] != second["id"]
+
+
+def test_amendment_id_is_still_deterministic() -> None:
+    """The id stays a pure function of the cache key — same inputs, same id."""
+    kwargs = dict(**_amend_kwargs(), amendment=True, reason="r", subject="T001#amend0:r")
+    assert evidence.build_record(**kwargs)["id"] == evidence.build_record(**kwargs)["id"]
+
+
+def test_amendment_fields_are_excluded_from_the_cache_key() -> None:
+    """`reason` is content, not identity: the key is the documented tuple plus subject."""
+    key = evidence.cache_key(
+        producer="amend", command="c", commit_range="a..b",
+        affected_paths=["src/a.py"], context_map_digest=None, subject="T001#amend0:r",
+    )
+    assert "reason" not in key
+    assert "amendment" not in key

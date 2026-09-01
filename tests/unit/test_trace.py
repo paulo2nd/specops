@@ -526,3 +526,68 @@ def test_link_requires_task_and_commit(trace_repo) -> None:
     root = _seed_missing_link(trace_repo)
     assert trace.cmd_link(root, task="T001", commits=[]).status == trace.USAGE_ERROR
     assert trace.cmd_link(root, task="", commits=["a" * 40]).status == trace.USAGE_ERROR
+
+
+# --- Feature 026 (T033): amendment provenance in the trace report -------------
+
+
+def _amended_ledger_tasks() -> list[dict]:
+    """One amended task (T001) and one ordinarily-closed task (T002)."""
+    return [
+        {"id": "T001", "status": "DONE", "started_commit": None, "commits": [],
+         "evidence": "TEST_REPORT:verified later", "completed_at": "2026-09-01T00:00:00+00:00",
+         "evidence_refs": ["EV-original0001", "EV-amendment01"]},
+        {"id": "T002", "status": "DONE", "started_commit": None, "commits": [],
+         "evidence": "CLI_LOG:ordinary close", "completed_at": "2026-09-01T00:00:00+00:00",
+         "evidence_refs": ["EV-plainclose1"]},
+    ]
+
+
+def _amended_ledger_evidence() -> list[dict]:
+    base = {
+        "producer": "auto", "command": "c", "exit_code": 0,
+        "timestamp": "2026-09-01T00:00:00+00:00", "commit_range": "a..b",
+        "affected_paths": [], "superseded_by": None,
+    }
+    return [
+        {**base, "id": "EV-original0001", "summary": "CLI_LOG:placeholder",
+         "superseded_by": "EV-amendment01"},
+        {**base, "id": "EV-amendment01", "summary": "TEST_REPORT:verified later",
+         "producer": "amend", "amendment": True, "reason": "no gate run at close"},
+        {**base, "id": "EV-plainclose1", "summary": "CLI_LOG:ordinary close"},
+    ]
+
+
+def _amended_repo(trace_repo) -> Path:
+    import yaml as _yaml
+
+    root = trace_repo(tasks=_amended_ledger_tasks(),
+                      tasks_md_tasks=["- [ ] T001 [SC-001] a", "- [ ] T002 [SC-001] b"])
+    fd = root / "specs" / "001-demo"
+    data = _yaml.safe_load((fd / "status.yaml").read_text())
+    data["evidence"] = _amended_ledger_evidence()
+    (fd / "status.yaml").write_text(_yaml.dump(data))
+    return root
+
+
+def test_trace_report_marks_an_amended_task(trace_repo) -> None:
+    """FR-006: an amended close is never rendered as an original one."""
+    graph = trace.build_graph(_amended_repo(trace_repo))
+    t1 = next(t for t in graph["tasks"] if t["id"] == "T001")
+    assert t1["evidence_amended"] is True
+    assert t1["evidence"] == "TEST_REPORT:verified later"
+
+
+def test_trace_report_lists_the_superseded_history(trace_repo) -> None:
+    graph = trace.build_graph(_amended_repo(trace_repo))
+    t1 = next(t for t in graph["tasks"] if t["id"] == "T001")
+    assert t1["evidence_history"] == ["EV-original0001"]
+
+
+def test_trace_report_omits_the_keys_for_an_ordinary_close(trace_repo) -> None:
+    """Absence is what identifies an original — a consumer reading a pre-026 report
+    sees exactly what it saw before."""
+    graph = trace.build_graph(_amended_repo(trace_repo))
+    t2 = next(t for t in graph["tasks"] if t["id"] == "T002")
+    assert "evidence_amended" not in t2
+    assert "evidence_history" not in t2

@@ -98,7 +98,9 @@ def test_doctor_does_not_crash_when_git_missing(monkeypatch, tmp_git_repo: Path)
 _EXPECTED_COMMANDS = {
     "consistency", "doctor", "init", "preflight", "reconcile", "report", "review",
 }
-_EXPECTED_GROUPS = {"context", "extension", "gate", "handoff", "lane", "status", "trace"}
+_EXPECTED_GROUPS = {
+    "context", "extension", "feature", "gate", "handoff", "lane", "status", "trace",
+}
 
 
 def test_cli_command_surface_unchanged() -> None:

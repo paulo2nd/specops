@@ -161,6 +161,25 @@ def current_command() -> str:
     return _CURRENT_COMMAND.get()
 
 
+def _current_amendment(
+    data: records.LedgerDocument, task: records.TaskRecord
+) -> records.EvidenceRecord | None:
+    """The task's current evidence record when it is an amendment, else None.
+
+    Current is the single ``evidence_refs`` entry with no ``superseded_by``
+    (Feature 026 data-model). Returns the record so the caller can carry its reason.
+    """
+    by_id = {
+        r["id"]: r for r in data.get("evidence") or []
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    for ref in task.get("evidence_refs") or []:
+        rec = by_id.get(ref)
+        if rec is not None and rec.get("superseded_by") is None and rec.get("amendment"):
+            return rec
+    return None
+
+
 def _handoff_command(
     cmd: str,
 ) -> Callable[[Callable[_P, HandoffResult]], Callable[_P, HandoffResult]]:
@@ -403,6 +422,7 @@ def cmd_finding_fix(
         return HandoffResult(cmd, UNKNOWN_TASK, f"{cmd}: unknown task '{task}'", {"id": fid})
 
     commits = list(commits or [])
+    inherited_amendment: records.EvidenceRecord | None = None
     if auto:
         # Prefer the task's own recorded commits (scoped to that task) over the
         # whole started_commit..HEAD range, which would sweep in unrelated work
@@ -415,6 +435,11 @@ def cmd_finding_fix(
             elif started:
                 commits = gitops.commits_in_range(repo, started)
         evidence = evidence or task_rec.get("evidence")
+        # Feature 026 (FR-006a): when the inherited value is an amendment, the
+        # finding's own record must say so. Without this the correction is laundered
+        # one record downstream — it would re-enter the ledger as ordinary evidence,
+        # which is the outcome the amendment path exists to prevent.
+        inherited_amendment = _current_amendment(data, task_rec)
     if not commits:
         return HandoffResult(cmd, PRECONDITION_UNMET,
                              f"{cmd}: at least one --commit (or --auto) is required", {"id": fid})
@@ -431,6 +456,8 @@ def cmd_finding_fix(
         timestamp=ledger.now_utc(), commit_range=commit_range,
         affected_paths=[], summary=evidence,
         context_map_digest=contextmap.map_digest(root), subject=fid,
+        amendment=bool(inherited_amendment),
+        reason=inherited_amendment.get("reason") if inherited_amendment else None,
     )
     stored = evidence_mod.append_record(data.setdefault("evidence", []), ev_record)
 

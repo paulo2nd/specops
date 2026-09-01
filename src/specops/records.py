@@ -118,6 +118,12 @@ class _EvidenceRequired(TypedDict):
 
 class EvidenceRecord(_EvidenceRequired, total=False):
     artifact_digest: str
+    # Feature 026 (v9) — the amendment pair. `amendment` marks a record written by
+    # `status amend-task` after the task closed; `reason` is the operator's stated
+    # reason for the correction, mandatory whenever `amendment` is true and never
+    # judged for its content (Principle IV). Absent on every close-time record.
+    amendment: bool
+    reason: str
 
 
 class AcknowledgementRecord(TypedDict, total=False):

@@ -26,8 +26,13 @@ _EVIDENCE_REQUIRED = {
 
 
 def test_ledger_schema_baseline_pinned() -> None:
-    """SC-007: the frozen baseline is v8 (Feature 025 additive-only schema bump)."""
-    assert ledger.CURRENT_SCHEMA == 8
+    """SC-007: the frozen baseline is v9 (Feature 026 additive-only schema bump).
+
+    The version moves with each additive bump; what this file freezes is the
+    *required*-field set of every record, which an additive field never changes —
+    see ``test_evidence_record_required_fields_frozen``, unchanged across v9.
+    """
+    assert ledger.CURRENT_SCHEMA == 9
     assert ledger.OLDEST_SUPPORTED == 1
 
 

@@ -111,12 +111,22 @@ def build_record(
     commit_range: str, affected_paths: list[str], summary: str,
     context_map_digest: str | None = None, artifact_digest: str | None = None,
     subject: str | None = None, worktree_digest: str | None = None,
+    amendment: bool = False, reason: str | None = None,
 ) -> EvidenceRecord:
     """Build a structured evidence record dict with its cache-key-derived id (FR-006).
 
     ``worktree_digest`` (Feature 024) is threaded into the cache key for gate-run cache
     records so the derived id matches the gate's own lookup key; None for all other
-    producers (id unchanged)."""
+    producers (id unchanged).
+
+    ``amendment`` / ``reason`` (Feature 026, v9) mark a correction recorded after the
+    task closed. Both are omitted from a close-time record, so their *absence* is what
+    identifies an original — a consumer never has to know about amendments to read one.
+    A reason is mandatory for an amendment (FR-005) and is deliberately **not** part of
+    the cache key: it is content, not identity (callers disambiguate repeated
+    amendments through ``subject``)."""
+    if amendment and not reason:
+        raise ValueError("An amendment requires a non-empty reason.")
     key = cache_key(
         producer=producer, command=command, commit_range=commit_range,
         affected_paths=affected_paths, context_map_digest=context_map_digest,
@@ -135,6 +145,9 @@ def build_record(
     }
     if artifact_digest is not None:
         rec["artifact_digest"] = artifact_digest
+    if amendment:
+        rec["amendment"] = True
+        rec["reason"] = str(reason)
     return rec
 
 

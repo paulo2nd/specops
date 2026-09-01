@@ -108,6 +108,12 @@ gate_app = typer.Typer(
 )
 app.add_typer(gate_app, name="gate")
 
+feature_app = typer.Typer(
+    help="Feature-identity operations: repoint and rename the active feature.",
+    no_args_is_help=True,
+)
+app.add_typer(feature_app, name="feature")
+
 lane_app = typer.Typer(
     name="lane",
     help="Lightweight lane: start, status, check, attest, close, promote (Feature 013). "
@@ -464,6 +470,28 @@ def status_complete_task(
     _require_git(root)
     from specops import status
     typer.echo(status.cmd_complete_task(root, task_id, auto=auto, evidence=evidence))
+
+
+@status_app.command("amend-task")
+@_handle_errors
+def status_amend_task(
+    task_id: str = typer.Argument(..., help="Task identifier, e.g. T001."),
+    evidence: str = typer.Option(
+        ..., "--evidence", help='Corrected evidence string, e.g. "TEST_REPORT:1795 passed".'
+    ),
+    reason: str = typer.Option(
+        ..., "--reason", help="Why the correction is being recorded. Never judged, always kept."
+    ),
+) -> None:
+    """Append a corrected evidence record to a task already DONE (append-only).
+
+    The correction becomes the task's current evidence; the records it displaces are
+    retained as superseded history. The task is NOT reopened — a DONE task stays DONE.
+    """
+    root = Path(".")
+    _require_git(root)
+    from specops import status
+    typer.echo(status.cmd_amend_task(root, task_id, evidence=evidence, reason=reason))
 
 
 @status_app.command("show")
