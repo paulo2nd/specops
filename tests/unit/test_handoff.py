@@ -533,3 +533,110 @@ def test_import_legacy_prose(handoff_repo) -> None:
     f = read_ledger(_fd(root))["review_cycles"][-1]["handoff"]["findings"][0]
     assert f["severity"] == "advisory" and f["file"] == "src/x.py" and f["line"] == 12
     assert f["action"] == "do the thing" and f["state"] == "OPEN"
+
+
+# ---------------------------------------------------------------------------
+# Feature 026 (T034) — inherited evidence keeps its amendment provenance
+# ---------------------------------------------------------------------------
+
+
+def _amended_task(tid: str = "T001") -> dict:
+    """A task whose current evidence is an amendment, as `status amend-task` leaves it."""
+    t = make_task(tid, evidence="TEST_REPORT:verified on recovery")
+    t["evidence_refs"] = ["EV-original0001", "EV-amendment01"]
+    return t
+
+
+def _with_amended_evidence(root) -> None:
+    """Attach the matching evidence records to the ledger written by the fixture."""
+    import yaml
+
+    fd = _fd(root)
+    data = yaml.safe_load((fd / "status.yaml").read_text(encoding="utf-8"))
+    base = {"producer": "auto", "command": "c", "exit_code": 0,
+            "timestamp": "2026-09-01T00:00:00+00:00", "commit_range": "a..b",
+            "affected_paths": [], "superseded_by": None}
+    data["evidence"] = [
+        {**base, "id": "EV-original0001", "summary": "CLI_LOG:placeholder",
+         "superseded_by": "EV-amendment01"},
+        {**base, "id": "EV-amendment01", "summary": "TEST_REPORT:verified on recovery",
+         "producer": "amend", "amendment": True, "reason": "no gate run at close"},
+    ]
+    (fd / "status.yaml").write_text(yaml.dump(data))
+
+
+def test_auto_fix_inherits_amendment_provenance(handoff_repo) -> None:
+    """FR-006a: `finding fix --auto` copies the task's evidence string. When that value
+    is an amendment, the finding's own record must carry the amendment provenance —
+    otherwise the correction is laundered one record downstream, which is precisely
+    what this feature exists to prevent."""
+    root = handoff_repo(tasks=[_amended_task()],
+                        review_cycles=[make_cycle(findings=[make_finding("R1-F01")])])
+    _with_amended_evidence(root)
+    sha = head_commit(root)
+
+    res = handoff.cmd_finding_fix(root, "R1-F01", task="T001", commits=[sha],
+                                  evidence=None, auto=True)
+
+    assert res.status == handoff.FINDING_FIXED
+    led = read_ledger(_fd(root))
+    finding = led["review_cycles"][-1]["handoff"]["findings"][0]
+    inherited = next(r for r in led["evidence"] if r["id"] == finding["evidence_id"])
+    assert inherited["amendment"] is True
+    assert inherited["reason"] == "no gate run at close"
+
+
+def test_auto_fix_from_an_unamended_task_carries_no_provenance(handoff_repo) -> None:
+    """The ordinary path is byte-identical to before: absence marks an original."""
+    root = handoff_repo(tasks=[make_task("T001", evidence="CLI_LOG:ordinary")],
+                        review_cycles=[make_cycle(findings=[make_finding("R1-F01")])])
+    sha = head_commit(root)
+
+    handoff.cmd_finding_fix(root, "R1-F01", task="T001", commits=[sha],
+                            evidence=None, auto=True)
+
+    led = read_ledger(_fd(root))
+    finding = led["review_cycles"][-1]["handoff"]["findings"][0]
+    record = next(r for r in led["evidence"] if r["id"] == finding["evidence_id"])
+    assert "amendment" not in record
+    assert "reason" not in record
+
+
+def test_explicit_evidence_is_never_marked_as_inherited(handoff_repo) -> None:
+    """Only *inheritance* carries provenance. Evidence the operator supplies directly
+    is their own assertion about the fix, not a copy of the task's amended value."""
+    root = handoff_repo(tasks=[_amended_task()],
+                        review_cycles=[make_cycle(findings=[make_finding("R1-F01")])])
+    _with_amended_evidence(root)
+    sha = head_commit(root)
+
+    handoff.cmd_finding_fix(root, "R1-F01", task="T001", commits=[sha],
+                            evidence="CLI_LOG:fixed by hand", auto=False)
+
+    led = read_ledger(_fd(root))
+    finding = led["review_cycles"][-1]["handoff"]["findings"][0]
+    record = next(r for r in led["evidence"] if r["id"] == finding["evidence_id"])
+    assert "amendment" not in record
+
+
+def test_auto_with_explicit_evidence_is_not_marked_as_inherited(handoff_repo) -> None:
+    """`--auto` harvests *commits*; it does not make caller-supplied evidence a copy.
+
+    Before the fix the amendment flag was computed for the whole `--auto` branch, so a
+    fresh operator-written evidence string was stamped `amendment: true` and carried
+    another record's reason — an assertion the operator never made.
+    """
+    root = handoff_repo(tasks=[_amended_task()],
+                        review_cycles=[make_cycle(findings=[make_finding("R1-F01")])])
+    _with_amended_evidence(root)
+    sha = head_commit(root)
+
+    handoff.cmd_finding_fix(root, "R1-F01", task="T001", commits=[sha],
+                            evidence="CLI_LOG:fixed by hand", auto=True)
+
+    led = read_ledger(_fd(root))
+    finding = led["review_cycles"][-1]["handoff"]["findings"][0]
+    record = next(r for r in led["evidence"] if r["id"] == finding["evidence_id"])
+    assert record["summary"] == "CLI_LOG:fixed by hand"
+    assert "amendment" not in record
+    assert "reason" not in record

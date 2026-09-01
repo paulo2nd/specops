@@ -14,6 +14,7 @@ never execute — FR-015a).
 """
 from __future__ import annotations
 
+import json
 import shlex
 import shutil
 from collections.abc import Callable
@@ -79,6 +80,7 @@ NA_RUN_SPECIFY_WORKFLOW_STATUS = "run_specify_workflow_status"
 NA_MIGRATE_LEGACY = "migrate_legacy_install"
 NA_FIX_CONFIG = "fix_config"
 NA_START_OR_SELECT_FEATURE = "start_or_select_feature"
+NA_RESOLVE_FEATURE_SELECTION = "resolve_feature_selection"
 NA_RESOLVE_IDENTITY = "resolve_identity_conflict"
 NA_RUN_STATUS_MIGRATE = "run_status_migrate"
 NA_LEDGER_UNSUPPORTED = "ledger_schema_unsupported"
@@ -285,9 +287,77 @@ def _domain_config(root: Path) -> DomainResult:
     return DomainResult(D_CONFIG, [_ok("config", "specops.json is valid.")])
 
 
+def _selection_finding(root: Path, resolved: speckit.ResolvedFeature) -> Finding | None:
+    """Report *how* the active feature was selected, when that is worth saying.
+
+    doctor echoes the resolved feature, so FR-014a applies here as much as to
+    `status show`: a guess presented as a fact is the silence #75 is about. Three
+    states are not healthy, and every one of them reported `ok` before:
+
+    - an unresolvable override — a state Feature 026 itself created by honouring
+      `SPECIFY_FEATURE_DIRECTORY`. It made doctor report "no active SpecOps feature"
+      and advise `status init-spec` while a perfectly good pointer sat unused;
+    - a pointer naming a directory that does not exist — resolution falls through to
+      the newest `specs/NNN-*`, so doctor answered about a *different* feature;
+    - an inferred answer — legitimate, but a guess, and it should say so.
+
+    Returns None when the selection is explicit and resolved (the healthy path).
+    """
+    if resolved.source == "override" and resolved.path is None:
+        return _finding(
+            BLOCKING, "selection", resolved.error or "the feature override is unresolvable",
+            NA_RESOLVE_FEATURE_SELECTION,
+            f"Unset {speckit.FEATURE_DIR_ENV}, or point it at a feature that exists.",
+        )
+    # A stored pointer that does not resolve is a *stated* selection that cannot be
+    # honoured. Resolution still falls back (existing repositories depend on it) —
+    # doctor is where that fallback stops being invisible. Only when the pointer is
+    # actually consulted, though: a live override outranks it, so a stale pointer
+    # underneath one changes nothing and blocking on it would report a healthy
+    # repository as broken — and skip every identity check behind the early return.
+    stated = None if resolved.source == "override" else _stated_pointer(root)
+    if stated is not None and not (root / stated).is_dir():
+        return _finding(
+            BLOCKING, "selection",
+            f".specify/feature.json names '{stated}', which does not exist",
+            NA_RESOLVE_FEATURE_SELECTION,
+            "Repoint the active feature with 'specops feature use <dir>'.",
+        )
+    if resolved.source == "inferred" and resolved.path is not None:
+        return _finding(
+            WARNING, "selection",
+            f"active feature inferred as {resolved.path.name} "
+            f"(no {speckit.FEATURE_DIR_ENV} and no .specify/feature.json)",
+            NA_RESOLVE_FEATURE_SELECTION,
+            "Record the choice with 'specops feature use <dir>'.",
+        )
+    return None
+
+
+def _stated_pointer(root: Path) -> str | None:
+    """The raw `feature_directory` value on disk, or None when absent/unreadable.
+
+    Read here rather than through resolution because resolution deliberately reports
+    only what it *resolved* — this asks the different question of what was *asked for*.
+    """
+    path = root / ".specify" / "feature.json"
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get("feature_directory")
+    except (json.JSONDecodeError, OSError):
+        return None
+    return str(value) if value else None
+
+
 def _domain_feature_identity(
-    root: Path, repo: Any, feature_dir: Path | None, data: dict | None
+    root: Path, repo: Any, resolved: speckit.ResolvedFeature, data: dict | None
 ) -> DomainResult:
+    selection = _selection_finding(root, resolved)
+    if selection is not None:
+        return DomainResult(D_FEATURE_IDENTITY, [selection])
+
+    feature_dir = resolved.path
     if feature_dir is None:
         return DomainResult(D_FEATURE_IDENTITY, [_finding(
             OK, "feature", "no active SpecOps feature", NA_START_OR_SELECT_FEATURE,
@@ -300,7 +370,10 @@ def _domain_feature_identity(
                 BLOCKING, "identity", f"ledger {dim} diverges from the workspace",
                 NA_RESOLVE_IDENTITY, "Re-anchor the ledger with 'specops status rebaseline'.",
             )])
-    return DomainResult(D_FEATURE_IDENTITY, [_ok("feature", f"active feature: {feature_dir.name}")])
+    detail = f"active feature: {feature_dir.name}"
+    if resolved.source == "override":
+        detail += f" (selected by {speckit.FEATURE_DIR_ENV})"
+    return DomainResult(D_FEATURE_IDENTITY, [_ok("feature", detail)])
 
 
 def _domain_ledger(
@@ -521,7 +594,8 @@ def diagnose(root: Path) -> list[DomainResult]:
     except gitops.GitError as exc:
         git_version, git_error = None, exc
     repo = gitops.find_repo(root) if git_error is None else None
-    feature_dir = speckit.resolve_feature_dir(root)
+    resolved = speckit.resolve_feature(root)
+    feature_dir = resolved.path
     data, ledger_error = _load_ledger_data(feature_dir)
     has_speckit = speckit.has_speckit(root)
     try:
@@ -537,7 +611,7 @@ def diagnose(root: Path) -> list[DomainResult]:
         (_run(D_LEGACY, _domain_legacy, install_state)
          if state_error is None else _error_domain(D_LEGACY, state_error)),
         _run(D_CONFIG, _domain_config, root),
-        _run(D_FEATURE_IDENTITY, _domain_feature_identity, root, repo, feature_dir, data),
+        _run(D_FEATURE_IDENTITY, _domain_feature_identity, root, repo, resolved, data),
         _run(D_LEDGER, _domain_ledger, feature_dir, data, ledger_error),
         _run(D_CONTEXT_MAP, _domain_context_map, root),
         _run(D_WORKFLOW_DIVERGENCE, _domain_workflow_divergence, root, feature_dir),

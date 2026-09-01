@@ -108,6 +108,12 @@ gate_app = typer.Typer(
 )
 app.add_typer(gate_app, name="gate")
 
+feature_app = typer.Typer(
+    help="Feature-identity operations: repoint and rename the active feature.",
+    no_args_is_help=True,
+)
+app.add_typer(feature_app, name="feature")
+
 lane_app = typer.Typer(
     name="lane",
     help="Lightweight lane: start, status, check, attest, close, promote (Feature 013). "
@@ -135,8 +141,8 @@ def _handle_errors(fn: _F) -> _F:
     return wrapper  # type: ignore[return-value]
 
 
-def _resolved_feature(root: Path) -> str | None:
-    """The active feature directory as a repo-relative POSIX string, or None.
+def _as_relative(root: Path, feature_dir: Path) -> str:
+    """The active feature directory as a repo-relative POSIX string.
 
     Echoed by the commands that silently validate whatever the pointer happens to
     name: a stale `.specify/feature.json` otherwise reports `ok` about a different,
@@ -146,15 +152,31 @@ def _resolved_feature(root: Path) -> str | None:
     other path SpecOps emits comes from git, which reports POSIX on every platform.
     A backslash here would make the contract platform-dependent.
     """
-    from specops import speckit
-
-    feature_dir = speckit.resolve_feature_dir(root)
-    if feature_dir is None:
-        return None
     try:
         return feature_dir.relative_to(root.resolve()).as_posix()
     except ValueError:
         return feature_dir.as_posix()
+
+
+def _feature_echo(root: Path) -> tuple[str | None, str | None, str | None]:
+    """(`--json` path, human line, machine source) for the resolved-feature echo (026).
+
+    The human form labels an inferred answer; the machine form is the bare source
+    (`override` | `pointer` | `inferred`), carried as an additive `--json` key. All
+    three come from ONE resolution — a second `resolve_feature` call would re-read the
+    environment, the pointer file and `specs/` for an answer this one already has, and
+    the two could disagree between the human and machine outputs.
+    """
+    from specops import speckit
+
+    resolved = speckit.resolve_feature(root)
+    if resolved.path is None:
+        return None, None, None
+    return (
+        _as_relative(root, resolved.path),
+        speckit.describe(root, resolved),
+        resolved.source,
+    )
 
 
 def _require_git(root: Path = Path(".")) -> gitops.Repository:
@@ -244,7 +266,7 @@ def consistency(
     _require_git(root)
     from specops import consistency as con_mod
     from specops import outcome
-    feature = _resolved_feature(root)
+    feature, described, source = _feature_echo(root)
     if json_out:
         try:
             _warnings, violations = con_mod.run(root)
@@ -253,9 +275,11 @@ def consistency(
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
         if violations:
             typer.echo(outcome.render(
-                "consistency", outcome.GATE_REJECTION, feature=feature, violations=violations))
+                "consistency", outcome.GATE_REJECTION, feature=feature,
+                feature_source=source, violations=violations))
             raise typer.Exit(outcome.exit_for(outcome.GATE_REJECTION))
-        typer.echo(outcome.render("consistency", outcome.PASS, feature=feature))
+        typer.echo(outcome.render(
+            "consistency", outcome.PASS, feature=feature, feature_source=source))
         return
     warnings, violations = con_mod.run(root)
     for w in warnings:
@@ -264,13 +288,13 @@ def consistency(
     # about an already-finished feature with no cue in the output (#75). It rides the
     # same stream as the verdict, so the "failure evidence is stderr-only" contract holds.
     if violations:
-        if feature:
-            typer.echo(f"feature: {feature}", err=True)
+        if described:
+            typer.echo(f"feature: {described}", err=True)
         for v in violations:
             typer.echo(v, err=True)
         raise typer.Exit(1)
-    if feature:
-        typer.echo(f"feature: {feature}")
+    if described:
+        typer.echo(f"feature: {described}")
     typer.echo("consistency: ok")
 
 
@@ -321,8 +345,10 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
         _emit_sarif(root)
         return
     _ov = gateprofiles.OUTPUT_VERSION
-    feature = _resolved_feature(root)
     if json_out:
+        # Only the JSON envelope needs the echo here; the human path gets its own
+        # (single) resolution inside `review.run_gates`, which renders the header.
+        feature, _described, source = _feature_echo(root)
         try:
             report = review_mod.evaluate(root)
         except (LedgerParseError, SpecopsError) as exc:
@@ -332,11 +358,11 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
         if report.passed:
             typer.echo(outcome.render(
                 command_name, outcome.PASS, verdict="APPROVED", feature=feature,
-                gates=gates, output_version=_ov))
+                feature_source=source, gates=gates, output_version=_ov))
             return
         typer.echo(outcome.render(
             command_name, outcome.GATE_REJECTION, verdict="REJECTED", feature=feature,
-            gates=gates, output_version=_ov))
+            feature_source=source, gates=gates, output_version=_ov))
         # --soft keeps exit 0 so a do-while body can branch on the verdict; the
         # terminal gate (hard `specops preflight`) is what fails closed on REJECTED.
         if not soft:
@@ -464,6 +490,28 @@ def status_complete_task(
     _require_git(root)
     from specops import status
     typer.echo(status.cmd_complete_task(root, task_id, auto=auto, evidence=evidence))
+
+
+@status_app.command("amend-task")
+@_handle_errors
+def status_amend_task(
+    task_id: str = typer.Argument(..., help="Task identifier, e.g. T001."),
+    evidence: str = typer.Option(
+        ..., "--evidence", help='Corrected evidence string, e.g. "TEST_REPORT:1795 passed".'
+    ),
+    reason: str = typer.Option(
+        ..., "--reason", help="Why the correction is being recorded. Never judged, always kept."
+    ),
+) -> None:
+    """Append a corrected evidence record to a task already DONE (append-only).
+
+    The correction becomes the task's current evidence; the records it displaces are
+    retained as superseded history. The task is NOT reopened — a DONE task stays DONE.
+    """
+    root = Path(".")
+    _require_git(root)
+    from specops import status
+    typer.echo(status.cmd_amend_task(root, task_id, evidence=evidence, reason=reason))
 
 
 @status_app.command("show")
@@ -1182,6 +1230,44 @@ def gate_report(
 # ---------------------------------------------------------------------------
 # lane subcommands (Feature 013) — agent/workflow-facing, non-interactive
 # ---------------------------------------------------------------------------
+
+@feature_app.command("use")
+@_handle_errors
+def feature_use(
+    directory: str = typer.Argument(..., help="Feature directory, e.g. specs/026-recovery."),
+) -> None:
+    """Repoint the active feature to DIRECTORY.
+
+    Reports the previous and new directory, which downstream artifacts are not yet
+    present, and any unfinished work left on the outgoing feature. Refuses when
+    SPECIFY_FEATURE_DIRECTORY names somewhere else — the write would have no effect.
+    """
+    root = Path(".")
+    from specops import feature
+    typer.echo(feature.cmd_use(root, directory))
+
+
+@feature_app.command("rename")
+@_handle_errors
+def feature_rename(
+    old: str = typer.Argument(..., help="Current feature directory, e.g. specs/026-x."),
+    new: str = typer.Argument(..., help="New feature directory, e.g. specs/027-x."),
+    branch: str = typer.Option(
+        None, "--branch",
+        help="New branch name to record. SpecOps never renames the Git branch itself — "
+             "rename it with 'git branch -m' and pass the new name here.",
+    ),
+) -> None:
+    """Rename a feature, carrying its ledger identity and artifacts.
+
+    Every recorded fact (tasks, evidence, acknowledgements, review cycles) travels
+    through unchanged. Prose in the artifacts is never rewritten — remaining mentions
+    of the old name are reported with file and line for you to judge.
+    """
+    root = Path(".")
+    from specops import feature
+    typer.echo(feature.cmd_rename(root, old, new, branch=branch))
+
 
 @lane_app.command("start")
 @_handle_errors

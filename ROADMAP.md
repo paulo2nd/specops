@@ -94,7 +94,7 @@ Roadmap status uses four values:
 | 023 | Context Read-Set Consumption in IMPLEMENT | MERGED | 009 | Lifecycle Coverage |
 | 024 | Test Execution Only at the Review Gate | MERGED | 012, 021 | Review Integrity |
 | 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
-| 026 | Supported Recovery Operations | PLANNED | 006, 010, 021 | Field Hardening |
+| 026 | Supported Recovery Operations | MERGED | 006, 010, 021 | Field Hardening |
 | 027 | Cross-Round Review Coverage | PLANNED | 025, 026 | Field Hardening |
 
 ### Build sequence (dependency review — 2026-07-23)
@@ -1397,6 +1397,18 @@ auditable commands, recording — never laundering — the correction.
 - `specops feature rename <old> <new>` makes renumbering a supported operation
   (directory, branch reference, artifacts, ledger identity) instead of the current
   delete-the-ledger-and-re-init improvisation.
+- SpecOps resolves the active feature with the **same precedence Spec Kit uses**
+  (`SPECIFY_FEATURE_DIRECTORY` before `.specify/feature.json`). Added during
+  specification: SpecOps reads only the pointer file today, so with the override set
+  the two tools resolve different features — the #75 failure through another door,
+  and one that would make `feature use` report a repoint that has no effect.
+  `feature rename` refuses when the override names the source directory, since
+  completing it would leave the override aimed at a directory that no longer exists.
+- An amended evidence value never loses its provenance by being **inherited**:
+  closing a review finding with automatic evidence copies the task's recorded
+  string, so that path carries the amendment marker too. Added during
+  specification — without it the correction is laundered one record downstream,
+  which is the outcome this feature exists to prevent.
 - Ledger schema bump with forward migration if the amendment record requires one;
   English and Portuguese documentation updated equivalently.
 

@@ -413,6 +413,22 @@ def _findings(feature_dir: Path, data: dict | None = None) -> list[dict[str, Any
     ))
 
 
+def _amendment_view(
+    task: dict, evidence_by_id: dict[str, dict]
+) -> tuple[bool, list[str]]:
+    """Is this task's *current* evidence an amendment, and what did it displace?
+
+    Current is the single ref whose record has no ``superseded_by``; the history is
+    every ref that does, oldest first (see specs/026 data-model). A task that was
+    never amended yields ``(False, [])`` and contributes no keys to the report.
+    """
+    refs = [r for r in task.get("evidence_refs") or [] if r in evidence_by_id]
+    current = [r for r in refs if evidence_by_id[r].get("superseded_by") is None]
+    amended = any(evidence_by_id[r].get("amendment") for r in current)
+    history = [r for r in refs if evidence_by_id[r].get("superseded_by") is not None]
+    return amended, history
+
+
 def build_graph(root: Path) -> dict[str, Any]:
     """Materialize the trace graph from ledger + provenance + findings (R4)."""
     fd = _feature_dir(root)
@@ -442,20 +458,33 @@ def build_graph(root: Path) -> dict[str, Any]:
             "completed": bool(covering) and len(done) == len(covering),
         })
 
+    evidence_by_id = {
+        r["id"]: r for r in data.get("evidence") or []
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+
     task_nodes = []
     for tid in sorted(tasks_by_id):
         t = tasks_by_id[tid]
         if t.get("orphaned"):
             continue
         prov = t.get("context_provenance") or {}
-        task_nodes.append({
+        node: dict[str, Any] = {
             "id": tid,
             "status": t.get("status"),
             "evidence": t.get("evidence"),
             "commits": t.get("commits") or [],
             "contexts": prov.get("context_ids") or [],
             "digest": prov.get("digest"),
-        })
+        }
+        # Feature 026 (FR-006): an amended close is never rendered as an original one.
+        # Both keys are additive and *absent* for an ordinary close, so a consumer
+        # reading a pre-026 report sees exactly what it saw before.
+        amended, history = _amendment_view(t, evidence_by_id)
+        if amended:
+            node["evidence_amended"] = True
+            node["evidence_history"] = history
+        task_nodes.append(node)
 
     cycles = [
         {"round": c.get("round"), "result": c.get("result")}

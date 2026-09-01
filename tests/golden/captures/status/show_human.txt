@@ -2,6 +2,7 @@ $ specops status show
 --- exit_code ---
 0
 --- stdout ---
+feature directory: specs/001-demo
 feature: 001-demo
 branch: main
 phase: IMPLEMENT

@@ -301,6 +301,13 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
 
     ledger.write_new(feature_dir, data)
     _discard_pending_steps(feature_dir)
+    # Feature 026 (FR-013): record the feature this initialized. Without a pointer file
+    # the resolution above was a *guess* (the newest specs/NNN-*); persisting it turns
+    # that guess into a recorded decision, so the next command reads a fact instead of
+    # re-inferring one. Written only after the ledger write persists — a refused init
+    # must never move the pointer to a feature it did not create.
+    from specops import feature as feature_mod
+    feature_mod.record_active(root, feature_dir)
     try:
         rel = ledger_path.relative_to(root.resolve())
     except ValueError:
@@ -332,7 +339,10 @@ def synthesize_ledger_at_plan(feature_dir: Path, repo: gitops.Repository, lane_d
         "active-artifact": ledger.artifact_for_phase("PLAN"),
         "timestamp": ts,
     })
-    data = yaml.safe_load(content)
+    # Same normalization as init-spec (#69): the template is a content seed, not a
+    # schema declaration — and since it stopped declaring one, an unmigrated load here
+    # would write a promoted ledger with no `schema_version` at all.
+    data = ledger.migrate_to_current(yaml.safe_load(content))
     data["current_phase"] = "PLAN"
     ledger.attach_lane_provenance(data, lane_data)
     # Feature 022 (FR-007): promotion is a ledger-creation seam too — decisions
@@ -666,9 +676,7 @@ def _record_completion(
 
     # Feature 012 (v6): record the structured evidence object + task reference,
     # alongside the retained legacy `<CLASS>:<summary>` string (FR-006/FR-007).
-    task_commits = task.get("commits") or []
-    head = task_commits[0] if task_commits else started
-    commit_range = f"{started}..{head}" if head != started else str(started)
+    commit_range = _commit_range_for(task, started)
     ev_record = evidence_mod.build_record(
         producer="auto", command=evidence_command, exit_code=0,
         timestamp=completed_at, commit_range=commit_range,
@@ -709,6 +717,153 @@ def cmd_complete_task(
     )
     finalize(feature_dir, data, base_rev, base_violations)
     return f"Task '{task_id}' completed. Evidence: {evidence_str}"
+
+
+# ---------------------------------------------------------------------------
+# Amendment (Feature 026, US1) — the ledger's supported correction path
+# ---------------------------------------------------------------------------
+
+
+def _materialize_legacy_evidence(
+    data: records.LedgerDocument, task: records.TaskRecord
+) -> None:
+    """Ensure the task's *current* evidence exists as a record before it is displaced.
+
+    A ledger written by SpecOps always has refs (``migrate_to_current`` backfills them
+    at v6). A current-schema ledger that never migrated — hand-built, or hand-edited —
+    can still carry a ``DONE`` task with an evidence string and no refs. Amending it
+    would otherwise drop the original wording entirely, which is the one thing an
+    append-only correction must never do (research D4).
+    """
+    if task.get("evidence_refs"):
+        return
+    legacy = task.get("evidence")
+    if not isinstance(legacy, str) or not legacy:
+        return
+    refs: list[str] = []
+    for rec in evidence_mod.parse_legacy_string(
+        legacy,
+        timestamp=task.get("completed_at") or now_utc(),
+        commit_range=_commit_range_for(task),
+        subject=task.get("id"),
+    ):
+        refs.append(evidence_mod.append_record(data.setdefault("evidence", []), rec)["id"])
+    task["evidence_refs"] = refs
+
+
+def _commit_range_for(task: records.TaskRecord, started: str | None = None) -> str:
+    """The task's recorded range, as ``<started>..<head>`` or the bare start commit.
+
+    ``commits[0]`` is HEAD-most by construction (see ``_merge_task_commits``). *started*
+    overrides the recorded ``started_commit`` for the close path, which already holds it.
+    """
+    started = started if started is not None else (task.get("started_commit") or "")
+    commits = task.get("commits") or []
+    head = commits[0] if commits else started
+    return f"{started}..{head}" if head and head != started else str(started)
+
+
+def _supersede_task_evidence(
+    data: records.LedgerDocument, task: records.TaskRecord, new_id: str
+) -> list[str]:
+    """Mark the task's currently-live evidence records as superseded by *new_id*.
+
+    Deliberately **not** ``evidence.append_record(supersede=True)``: that matches on
+    ``producer`` across the entire ledger, which is right for gate caching (a producer
+    *is* the gate's identity) and wrong here — it would reach into other tasks' records.
+    The correct scope is this task's own refs (research D3, FR-002b).
+
+    Returns the ids it superseded. Content is never touched; only the pointer is set.
+    """
+    by_id = {
+        r["id"]: r for r in data.get("evidence") or []
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    superseded: list[str] = []
+    for ref in task.get("evidence_refs") or []:
+        rec = by_id.get(ref)
+        if rec is not None and rec.get("superseded_by") is None and ref != new_id:
+            rec["superseded_by"] = new_id
+            superseded.append(str(ref))
+    return superseded
+
+
+def _amendment_index(data: records.LedgerDocument, task: records.TaskRecord) -> int:
+    """How many amendments this task already carries.
+
+    Feeds the evidence subject so two amendments sharing a reason and commit range get
+    distinct ids — without it ``append_record`` would treat the second as an id match
+    and silently collapse "amended twice" into one record (research D2).
+    """
+    by_id = {
+        r["id"]: r for r in data.get("evidence") or []
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    amendments = [
+        ref for ref in task.get("evidence_refs") or []
+        if ref in by_id and by_id[ref].get("amendment")
+    ]
+    return len(amendments)
+
+
+def cmd_amend_task(root: Path, task_id: str, *, evidence: str, reason: str) -> str:
+    """Append a corrected evidence record to a DONE task (cli-contract: amend-task).
+
+    Append-only and task-scoped: the correction becomes the task's current evidence,
+    every previously-current record is retained and marked superseded, and the task's
+    status, completion time and commits are untouched. Reopening a DONE task stays
+    unsupported — amendment-only cannot be used to quietly launder a bad close (#74).
+    """
+    # Argument validation precedes the ledger read (FR-005), so a bad invocation fails
+    # the same way whether or not the ledger is even loadable.
+    if not reason or not reason.strip():
+        raise SpecopsError("A reason is required to amend a task (--reason).")
+    if not evidence or not evidence_mod.validate_string(evidence):
+        raise SpecopsError(
+            "Invalid evidence format. Expected '<CLASS>:<summary>' with CLASS in "
+            + "/".join(evidence_mod.EVIDENCE_CLASSES) + "."
+        )
+
+    feature_dir = get_feature_dir(root)
+    data, base_rev, base_violations, _repo = load_for_write(root, feature_dir)
+
+    _sync_tasks(data, _read_tasks_md(feature_dir))
+    task_map = {t["id"]: t for t in data.get("tasks", [])}
+    if task_id not in task_map:
+        raise SpecopsError(f"Task '{task_id}' not found in tasks.md.")
+    task = task_map[task_id]
+    if task["status"] != "DONE":
+        raise SpecopsError(
+            f"Task '{task_id}' is not DONE (status: {task['status']}). "
+            "Use 'start-task' to begin it or 'complete-task' to close it."
+        )
+
+    _materialize_legacy_evidence(data, task)
+
+    index = _amendment_index(data, task)
+    record = evidence_mod.build_record(
+        producer="amend", command=f"specops status amend-task {task_id}", exit_code=0,
+        timestamp=now_utc(), commit_range=_commit_range_for(task),
+        affected_paths=[], summary=evidence,
+        context_map_digest=contextmap.map_digest(root),
+        subject=f"{task_id}#amend{index}:{reason}",
+        amendment=True, reason=reason,
+    )
+    stored = evidence_mod.append_record(data.setdefault("evidence", []), record)
+    superseded = _supersede_task_evidence(data, task, stored["id"])
+    task["evidence_refs"] = [*(task.get("evidence_refs") or []), stored["id"]]
+    # The legacy string is the task's *current* summary, and two validators plus
+    # `trace report` read it (reconcile, validate_invariants, trace). Leaving it stale
+    # would make the amendment invisible exactly where the audit happens (research D4).
+    task["evidence"] = evidence
+
+    finalize(feature_dir, data, base_rev, base_violations)
+    detail = (
+        f"Superseded {len(superseded)} prior record"
+        f"{'' if len(superseded) == 1 else 's'} ({', '.join(superseded)})."
+        if superseded else "No prior evidence record to supersede."
+    )
+    return f"Task '{task_id}' amended. Evidence: {evidence}\n{detail} Reason: {reason}"
 
 
 def cmd_sync_tasks(root: Path, *, check: bool = False, as_json: bool = False) -> str:
@@ -785,10 +940,12 @@ def cmd_sync_tasks(root: Path, *, check: bool = False, as_json: bool = False) ->
 
 def cmd_show(root: Path) -> str:
     """Return the ledger summary as a plain-text string (read-only, no save)."""
-    feature_dir = speckit.resolve_feature_dir(root)
+    resolved = speckit.resolve_feature(root)
+    feature_dir = resolved.path
     if feature_dir is None:
         raise SpecopsError(
-            "Cannot resolve active feature directory. Check .specify/feature.json."
+            resolved.error
+            or "Cannot resolve active feature directory. Check .specify/feature.json."
         )
 
     # Single ledger-loading authority (Feature 018 US3, SC-004): canonical
@@ -807,6 +964,10 @@ def cmd_show(root: Path) -> str:
     cycles = data.get("review_cycles") or []
 
     lines = [
+        # Feature 026 (FR-014/FR-014a): name the directory this answer is ABOUT, and
+        # say so when it was inferred rather than stated — a guess presented as an
+        # answer is the same silence #75 is about.
+        f"feature directory: {speckit.describe(root, resolved)}",
         f"feature: {feature_name}",
         f"branch: {branch}",
         f"phase: {phase}",

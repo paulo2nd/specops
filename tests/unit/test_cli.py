@@ -362,3 +362,74 @@ class TestStatusSyncTasks:
         assert payload["revived"] == []
         assert payload["unchanged"] == 1
         assert payload["check"] is False
+
+
+# ---------------------------------------------------------------------------
+# Feature 026 (T063/T074) — every refusal of the new commands exits non-zero
+# ---------------------------------------------------------------------------
+
+
+class TestRecoveryCommandRefusals:
+    """The #72 invariant, applied to the three commands this feature adds.
+
+    A refused operation that exits 0 is worse than one that fails loudly: the caller
+    concludes the state was recorded when nothing happened. That bug corrupted a real
+    ledger silently, and only implausible timestamps gave it away.
+    """
+
+    def _repo(self, tmp_path: Path) -> Path:
+        import subprocess
+
+        root = tmp_path / "repo"
+        root.mkdir()
+        subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
+        (root / ".specify").mkdir(parents=True)
+        (root / ".specify" / "feature.json").write_text(
+            json.dumps({"feature_directory": "specs/001-x"})
+        )
+        d = root / "specs" / "001-x"
+        d.mkdir(parents=True)
+        (d / "spec.md").write_text("# x\n")
+        return root
+
+    @pytest.mark.parametrize("argv", [
+        ["status", "amend-task", "T999", "--evidence", "CLI_LOG:x", "--reason", "r"],
+        ["status", "amend-task", "T001", "--evidence", "not-valid", "--reason", "r"],
+        ["feature", "use", "specs/999-nope"],
+        ["feature", "use", "specs/001-x/../../outside"],
+        ["feature", "rename", "specs/999-nope", "specs/002-y"],
+        ["feature", "rename", "specs/001-x", "specs/001-x"],
+    ])
+    def test_refusal_exits_non_zero(self, tmp_path: Path, argv: list) -> None:
+        root = self._repo(tmp_path)
+        with patch("specops.cli.Path", return_value=root):
+            result = runner.invoke(app, argv)
+        assert result.exit_code != 0, f"{argv} refused but exited 0:\n{result.output}"
+
+    @pytest.mark.parametrize("argv", [
+        ["status", "amend-task", "T001", "--evidence", "CLI_LOG:x"],   # no --reason
+        ["status", "amend-task", "T001", "--reason", "r"],             # no --evidence
+        ["status", "amend-task", "--evidence", "CLI_LOG:x", "--reason", "r"],  # no task
+        ["feature", "use"],                                            # no directory
+        ["feature", "rename", "specs/001-x"],                          # no target
+    ])
+    def test_missing_required_argument_exits_non_zero(
+        self, tmp_path: Path, argv: list
+    ) -> None:
+        root = self._repo(tmp_path)
+        with patch("specops.cli.Path", return_value=root):
+            result = runner.invoke(app, argv)
+        assert result.exit_code != 0, f"{argv} accepted an incomplete invocation"
+
+    def test_exit_codes_stay_inside_the_frozen_set(self, tmp_path: Path) -> None:
+        """Principle VI: the closed {0,1,2} set is a frozen adopter contract. Typer's
+        own usage errors exit 2, which is already the documented usage-error code."""
+        root = self._repo(tmp_path)
+        for argv in (
+            ["status", "amend-task", "T999", "--evidence", "CLI_LOG:x", "--reason", "r"],
+            ["feature", "use", "specs/999-nope"],
+            ["feature", "rename", "specs/999-nope", "specs/002-y"],
+        ):
+            with patch("specops.cli.Path", return_value=root):
+                result = runner.invoke(app, argv)
+            assert result.exit_code in {1, 2}, f"{argv} exited {result.exit_code}"

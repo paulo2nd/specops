@@ -853,3 +853,88 @@ def test_sync_tasks_appended_task_flows_through_loop_reconcile_green(tmp_path: P
     assert by_id["T001"]["status"] == "DONE"
     _warnings, violations = rec.run(root)
     assert violations == []
+
+
+# ---------------------------------------------------------------------------
+# Feature 026 (T049/T054) — init-spec repoints; show echoes the resolved directory
+# ---------------------------------------------------------------------------
+
+
+def _inferred_fresh_feature(tmp_path: Path, name: str = "002-fresh") -> tuple[Path, Path]:
+    """A repo with NO pointer file, so `name` (the newest feature) is resolved by
+    inference — the state in which init-spec's repoint actually does work."""
+    root, _old = _setup_feature(tmp_path)
+    fresh = root / "specs" / name
+    fresh.mkdir(parents=True)
+    (fresh / "spec.md").write_text("# Fresh\n")
+    (root / ".specify" / "feature.json").unlink()
+    return root, fresh
+
+
+def test_init_spec_records_the_feature_it_initialized(tmp_path: Path) -> None:
+    """FR-013: init-spec initializes whatever the *resolution* names — which, without a
+    pointer file, is a guess (the newest specs/NNN-*). Persisting it turns that guess
+    into a recorded decision, so the next command reads a fact instead of re-inferring.
+    """
+    import json as _json
+
+    root, fresh = _inferred_fresh_feature(tmp_path)
+    assert not (root / ".specify" / "feature.json").exists()
+
+    s.cmd_init_spec(root, None)
+
+    assert (fresh / "status.yaml").is_file()
+    pointer = _json.loads((root / ".specify" / "feature.json").read_text())
+    assert pointer["feature_directory"] == "specs/002-fresh"
+
+
+def test_init_spec_repoint_makes_the_resolution_no_longer_inferred(tmp_path: Path) -> None:
+    from specops import speckit as _speckit
+
+    root, _fresh = _inferred_fresh_feature(tmp_path)
+    assert _speckit.resolve_feature(root).source == "inferred"
+    s.cmd_init_spec(root, None)
+    assert _speckit.resolve_feature(root).source == "pointer"
+
+
+def test_init_spec_pointer_write_uses_posix_separators(tmp_path: Path) -> None:
+    import json as _json
+
+    root, _fresh = _inferred_fresh_feature(tmp_path)
+    s.cmd_init_spec(root, None)
+    stored = _json.loads((root / ".specify" / "feature.json").read_text())["feature_directory"]
+    assert "\\" not in stored
+
+
+def test_init_spec_failure_leaves_the_pointer_alone(tmp_path: Path) -> None:
+    """The repoint happens only after the ledger write persists — a refused init
+    must not move the pointer to a feature it did not create."""
+    import json as _json
+
+    root, _old = _setup_feature(tmp_path)   # pointer on 001-test, which HAS a ledger
+    before = (root / ".specify" / "feature.json").read_bytes()
+    with pytest.raises(SpecopsError, match="already exists"):
+        s.cmd_init_spec(root, None)
+    assert (root / ".specify" / "feature.json").read_bytes() == before
+    assert _json.loads(before)["feature_directory"] == "specs/001-test"
+
+
+def test_show_echoes_the_resolved_feature_directory(tmp_path: Path) -> None:
+    """FR-014: completes the resolved-feature echo already shipped for the two gates."""
+    root, _fd = _setup_feature(tmp_path)
+    out = s.cmd_show(root)
+    assert "feature directory: specs/001-test" in out
+
+
+def test_show_labels_an_inferred_resolution(tmp_path: Path) -> None:
+    """FR-014a: the fallback stays (repositories depend on it) but stops being silent."""
+    root, _fd = _setup_feature(tmp_path)
+    (root / ".specify" / "feature.json").unlink()
+    out = s.cmd_show(root)
+    assert "feature directory: specs/001-test" in out
+    assert "inferred" in out
+
+
+def test_show_does_not_label_a_pointer_resolution(tmp_path: Path) -> None:
+    root, _fd = _setup_feature(tmp_path)
+    assert "inferred" not in s.cmd_show(root)

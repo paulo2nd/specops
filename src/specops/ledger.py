@@ -32,8 +32,16 @@ from specops.errors import LedgerParseError, SpecopsError, StaleLedgerError
 
 LEDGER_FILENAME = "status.yaml"
 
-CURRENT_SCHEMA = 8
+CURRENT_SCHEMA = 9
 OLDEST_SUPPORTED = 1  # v1 == a ledger with no `schema_version` key
+
+# Feature 026 (v9) — supported recovery operations. An evidence record may carry
+# `amendment: true` + `reason` recording a correction made after the task closed
+# (`status amend-task`). Both fields are optional — a pre-v9 record simply lacks them
+# (it is "not an amendment") — so the migration is a pure version bump with no
+# backfill (parity with v6→v7 and v7→v8). The amendment supersedes the task's prior
+# records through the existing `superseded_by` pointer rather than mutating them, so
+# no other invariant changes. See specops.evidence / specops.status.cmd_amend_task.
 
 # Feature 025 (v8) — review round integrity. A review cycle may carry a
 # git-derived `reviewed_range` ("<from>..<to>") + `review_role` ("anchor" |
@@ -590,7 +598,9 @@ def _evidence_violations(data: records.LedgerLike) -> list[str]:
     Absent is allowed (a pre-v6 or hand-built ledger). When present, each record MUST
     be a mapping with a non-empty, unique ``id``; every ``task.evidence_refs`` entry and
     every ``finding.evidence_id`` MUST resolve to a recorded evidence id (no dangling
-    reference).
+    reference). Feature 026 (v9): a record marked ``amendment`` MUST carry a non-empty
+    ``reason`` — an unexplained correction is the one thing the amendment path exists
+    to prevent (the reason's *content* is never judged; only its presence).
     """
     ev = data.get("evidence")
     if ev is None:
@@ -610,6 +620,8 @@ def _evidence_violations(data: records.LedgerLike) -> list[str]:
         if rid in ids:
             out.append(f"duplicate evidence id '{rid}'")
         ids.add(rid)
+        if rec.get("amendment") and not rec.get("reason"):
+            out.append(f"evidence '{rid}' is an amendment without a reason")
     for task in data.get("tasks") or []:
         if not isinstance(task, dict):
             continue
@@ -750,8 +762,18 @@ def _logical(data: records.LedgerLike) -> records.LedgerLike:
     return c
 
 
-def _dump(data: records.LedgerLike) -> str:
+def dump(data: records.LedgerLike) -> str:
+    """Serialize a ledger the one way every ledger write uses.
+
+    Public so an out-of-band identity write (``specops feature rename``) produces
+    bytes identical to what :func:`save` would — a private copy of these kwargs is
+    how a rename ends up escaping every non-ASCII character in the file.
+    """
     return yaml.dump(data, default_flow_style=False, allow_unicode=True)
+
+
+# Back-compat private alias (retained so existing call sites need no change).
+_dump = dump
 
 
 def atomic_write(path: Path, content: str) -> None:

@@ -102,3 +102,42 @@ def test_manifest_registers_optional_step_recorders() -> None:
         assert entry["extension"] == extension.OWNER
         assert entry["optional"] is False  # recording is mandatory, the step is not
         assert f"specops status record-step {step} --decision run" in entry["prompt"]
+
+
+# ---------------------------------------------------------------------------
+# Feature 026 (T062) — amendment is presented as a recovery move, never routine
+# ---------------------------------------------------------------------------
+
+
+def _directives_mentioning_amendment() -> list[Path]:
+    from tests.conftest import DIRECTIVES_DIR
+
+    return [
+        p for p in sorted(DIRECTIVES_DIR.glob("*.md"))
+        if "amend-task" in p.read_text(encoding="utf-8")
+    ]
+
+
+def test_at_least_one_directive_teaches_amendment() -> None:
+    """The failure that produced #74 is an agent recovering from a dead session, so
+    the directives are where the knowledge has to land."""
+    assert _directives_mentioning_amendment()
+
+
+def test_every_directive_mentioning_amendment_states_the_restriction() -> None:
+    """FR-025/SC-010: an agent that can amend freely can also amend away its own bad
+    closes — the laundering this feature refuses. The restriction must be *stated*,
+    not merely implied by omission."""
+    for path in _directives_mentioning_amendment():
+        text = path.read_text(encoding="utf-8").lower()
+        assert "recovery move" in text, path.name
+        assert "previous session" in text, path.name
+        assert "current run" in text, path.name
+
+
+def test_directives_do_not_promise_mechanical_enforcement() -> None:
+    """FR-026: SpecOps has no notion of which session closed a task. A directive that
+    implied otherwise would set the agent up to trust a refusal that never comes."""
+    for path in _directives_mentioning_amendment():
+        text = path.read_text(encoding="utf-8").lower()
+        assert "will not refuse you" in text or "cannot tell" in text, path.name

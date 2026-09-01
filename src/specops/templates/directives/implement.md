@@ -143,6 +143,25 @@ directly instead of hand-editing the ledger:
 It runs on `DONE` tasks, is idempotent, and rejects any sha not reachable from
 `HEAD`. Bind at least one commit per affected story; `trace validate` then passes.
 
+### Correcting evidence on a task a *previous* session closed
+
+If you inherit a feature whose `DONE` tasks carry wrong or missing evidence — the
+usual cause is a session terminated mid-flight after closing tasks it never verified —
+record the correction instead of hand-editing `status.yaml`:
+
+`specops status amend-task <task-id> --evidence "<CLASS>:<summary>" --reason "<why>"`
+
+It appends: the correction becomes the task's current evidence and the prior record is
+retained as superseded history with its original wording and timestamp. The task is
+**not** reopened — `DONE` is terminal.
+
+**This is a recovery move, not a corrective one.** Use it to fix a record left by a
+previous session. Do **not** use it to revise a close you made in the current run: if
+you have not closed the task yet, close it correctly; if the work is not actually
+finished, it should not have been closed. SpecOps cannot tell which session closed a
+task and will not refuse you — every amendment is simply recorded with its reason,
+which is what makes a misuse visible to the reviewer rather than prevented.
+
 ### Phase Transitions
 
 - At session start, before the first `start-task`, advance the ledger to the

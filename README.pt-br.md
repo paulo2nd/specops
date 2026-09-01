@@ -110,7 +110,8 @@ sozinhos — as diretivas degradam para no-ops.
 |---|---|
 | `specops init` | Prepara um repositório Speckit: injeta diretivas, instala o `/specops-review`, cria `specops.json` |
 | `specops extension …` | Ciclo de vida nativo de extensões do Spec Kit, mais os workflows `specops` e `specops-lite` |
-| `specops status …` | Conduz o ledger: `show`, `init-spec`, `start-task`, `complete-task`, `transition-phase`, `record-step`, `sync-tasks`, `migrate`, `rebaseline` |
+| `specops status …` | Conduz o ledger: `show`, `init-spec`, `start-task`, `complete-task`, `amend-task`, `transition-phase`, `record-step`, `sync-tasks`, `migrate`, `rebaseline` |
+| `specops feature …` | Operações de recuperação sobre a própria feature: `use` (reaponta a feature ativa), `rename` (renumera sem perder o ledger) |
 | `specops preflight` | Gate determinístico de review, do mais barato para o mais caro — seguro para CI (antigo `specops review`) |
 | `specops reconcile` | Gate somente leitura: todo commit registrado é alcançável, toda tarefa `DONE` tem evidência |
 | `specops consistency` | Gate somente leitura: tags de cobertura SC + sufixos de ação nos caminhos do plano |
@@ -135,6 +136,29 @@ findings, o arquivo de context-map e a saída SARIF — como **congelada**, e
 enuncia a regra aditivo-vs-quebra e as obrigações de versionamento/migração
 pós-1.0 de cada uma. Toda saída `--json` carrega um `output_version` para que
 você detecte mudanças de envelope.
+
+### Operações de recuperação
+
+Dois estados que uma sessão interrompida deixa para trás não tinham nenhum movimento
+legal, então o único caminho adiante era editar à mão justamente os arquivos que o
+ledger existe para tornar confiáveis. Ambos agora são comandos que **registram** a
+correção em vez de escondê-la:
+
+- **Uma tarefa fechada com evidência errada.** `specops status amend-task <id>
+  --evidence … --reason …` anexa a correção: ela passa a ser a evidência atual da
+  tarefa, o registro anterior é preservado como histórico substituído, e a tarefa
+  *não* é reaberta. Uma tarefa emendada é mais informativa do que uma silenciosamente
+  correta — é isso que impede a emenda de virar um jeito de lavar um fechamento ruim.
+- **O ponteiro da feature ativa.** `specops feature use <dir>` reaponta
+  explicitamente (e o `status init-spec` registra a feature que inicializou),
+  enquanto `specops feature rename <antigo> <novo>` leva uma renumeração pelo
+  diretório, identidade do ledger, referência de branch e ponteiro com todo fato
+  registrado intacto.
+
+O SpecOps resolve a feature ativa com a mesma precedência que o Spec Kit usa —
+`SPECIFY_FEATURE_DIRECTORY` antes de `.specify/feature.json` — para que as duas
+ferramentas nunca respondam sobre features diferentes a partir do mesmo estado do
+repositório.
 
 ## Como o SpecOps se comporta: um caminho pavimentado que você pode deixar — mas fica registrado
 
