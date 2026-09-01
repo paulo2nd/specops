@@ -327,3 +327,54 @@ def test_a_feature_with_no_ledger_can_still_be_renamed(repo: Path) -> None:
     feature.cmd_rename(repo, OLD, NEW)
     assert (repo / NEW / "spec.md").is_file()
     assert _pointer(repo) == NEW
+
+
+def test_a_failed_move_restores_a_header_that_was_not_the_directory_name(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rollback restores what the header *held*, not the old directory name.
+
+    A `**Feature Branch**` header may legitimately name something else. Writing the
+    directory name back on failure corrupts it instead of restoring the pre-rename state.
+    """
+    import os
+
+    spec = repo / OLD / "spec.md"
+    spec.write_text(spec.read_text().replace("`026-old-name`", "`feat/recovery`"))
+    monkeypatch.setattr(os, "rename", lambda *_a, **_k: (_ for _ in ()).throw(OSError("no")))
+
+    with pytest.raises(SpecopsError):
+        feature.cmd_rename(repo, OLD, NEW)
+
+    assert "**Feature Branch**: `feat/recovery`" in spec.read_text()
+
+
+def test_non_ascii_ledger_content_is_not_escaped_by_the_rename(repo: Path) -> None:
+    """The rename rewrites the ledger identity; it must not re-encode recorded facts.
+
+    A local `yaml.dump` defaults to `allow_unicode=False` and turns every accent into
+    a \\uXXXX escape — a rewrite of content this command promises never to touch.
+    """
+    data = _ledger(repo / OLD)
+    data["evidence"][0]["summary"] = "CLI_LOG:validação — ok"
+    (repo / OLD / "status.yaml").write_text(
+        yaml.dump(data, allow_unicode=True), encoding="utf-8"
+    )
+
+    feature.cmd_rename(repo, OLD, NEW)
+
+    raw = (repo / NEW / "status.yaml").read_text(encoding="utf-8")
+    assert "validação — ok" in raw
+    assert "\\u" not in raw
+
+
+def test_a_malformed_pointer_aborts_before_the_identity_is_written(repo: Path) -> None:
+    """The pointer read raises exit 2; doing it after the in-place writes would leave
+    the source directory stamped with an identity its name does not carry."""
+    (repo / ".specify" / "feature.json").write_text("{ not json")
+
+    with pytest.raises(LedgerParseError):
+        feature.cmd_rename(repo, OLD, NEW)
+
+    assert _ledger(repo / OLD)["feature"] == "026-old-name"
+    assert "`026-old-name`" in (repo / OLD / "spec.md").read_text()

@@ -20,8 +20,6 @@ import os
 import re
 from pathlib import Path
 
-import yaml
-
 from specops import fsutil, gitops, ledger, speckit
 from specops.errors import LedgerParseError, SpecopsError
 
@@ -276,16 +274,25 @@ def _stale_references(feature_dir: Path, old_name: str, old_branch: str | None) 
     return hits
 
 
-def _rewrite_identity_header(spec: Path, new_name: str) -> bool:
-    """Point the specification's feature-branch header at *new_name*. Idempotent."""
+def _rewrite_identity_header(spec: Path, new_name: str) -> str | None:
+    """Point the specification's feature-branch header at *new_name*. Idempotent.
+
+    Returns the value it replaced (so a rollback can restore it verbatim), or None
+    when nothing was written. The old *directory name* is not a safe substitute: the
+    header may legitimately hold something else — a `feat/x` branch name — and
+    writing the directory name back would corrupt it instead of restoring it.
+    """
     if not spec.is_file():
-        return False
+        return None
     text = spec.read_text(encoding="utf-8")
-    updated, count = _BRANCH_HEADER_RE.subn(rf"\g<1>{new_name}\g<3>", text, count=1)
-    if count and updated != text:
-        fsutil.atomic_write(spec, updated)
-        return True
-    return False
+    match = _BRANCH_HEADER_RE.search(text)
+    if match is None:
+        return None
+    updated = text[: match.start(2)] + new_name + text[match.end(2) :]
+    if updated == text:
+        return None
+    fsutil.atomic_write(spec, updated)
+    return match.group(2)
 
 
 def cmd_rename(
@@ -306,6 +313,12 @@ def cmd_rename(
     old_name, new_name = src.name, dst.name
     src_rel, dst_rel = _relative(root, src), _relative(root, dst)
 
+    # Read the pointer before anything is written: a malformed one raises (exit 2), and
+    # raising *after* the in-place ledger/spec writes would abort a rename that had
+    # already stamped the new identity onto the source directory, with no rollback.
+    pointer = _read_pointer(root)
+    pointer_was_here = pointer is not None and (root / pointer).resolve() == src
+
     ledger_path = src / ledger.LEDGER_FILENAME
     ledger_backup: str | None = None
     old_branch: str | None = None
@@ -317,13 +330,13 @@ def cmd_rename(
         data["feature"] = new_name
         if branch:
             data["branch"] = branch
-        fsutil.atomic_write(ledger_path, yaml.dump(data, sort_keys=False))
+        # The ledger's own serializer, not a local yaml.dump: a private copy would
+        # drop `allow_unicode` and escape every accent in the file to \uXXXX — a
+        # rewrite of recorded facts this command promises never to touch.
+        fsutil.atomic_write(ledger_path, ledger.dump(data))
 
-    header_changed = _rewrite_identity_header(src / "spec.md", new_name)
+    previous_header = _rewrite_identity_header(src / "spec.md", new_name)
     stale = _stale_references(src, old_name, old_branch)
-    pointer_was_here = (_read_pointer(root) or "") and (
-        (root / str(_read_pointer(root))).resolve() == src
-    )
 
     try:
         os.rename(src, dst)
@@ -331,8 +344,8 @@ def cmd_rename(
         # Undo the two in-place writes so the pre-rename state is exactly restored.
         if ledger_backup is not None:
             fsutil.atomic_write(ledger_path, ledger_backup)
-        if header_changed:
-            _rewrite_identity_header(src / "spec.md", old_name)
+        if previous_header is not None:
+            _rewrite_identity_header(src / "spec.md", previous_header)
         raise SpecopsError(f"Could not move {src_rel} to {dst_rel}: {exc}") from None
 
     lines = [f"Renamed: {src_rel} → {dst_rel}"]
@@ -346,14 +359,14 @@ def cmd_rename(
             f"branch reference unchanged ({old_branch or 'unset'}) — pass --branch to update it."
         )
         lines.append(identity)
-    if header_changed:
+    if previous_header is not None:
         lines.append("spec.md: **Feature Branch** header updated.")
 
     if pointer_was_here:
         _write_pointer(root, dst_rel)
         lines.append("Active feature pointer followed the rename.")
     else:
-        lines.append(f"Active feature pointer unchanged ({_read_pointer(root) or 'none'}).")
+        lines.append(f"Active feature pointer unchanged ({pointer or 'none'}).")
 
     if stale:
         lines.append(

@@ -617,3 +617,26 @@ def test_explicit_evidence_is_never_marked_as_inherited(handoff_repo) -> None:
     finding = led["review_cycles"][-1]["handoff"]["findings"][0]
     record = next(r for r in led["evidence"] if r["id"] == finding["evidence_id"])
     assert "amendment" not in record
+
+
+def test_auto_with_explicit_evidence_is_not_marked_as_inherited(handoff_repo) -> None:
+    """`--auto` harvests *commits*; it does not make caller-supplied evidence a copy.
+
+    Before the fix the amendment flag was computed for the whole `--auto` branch, so a
+    fresh operator-written evidence string was stamped `amendment: true` and carried
+    another record's reason — an assertion the operator never made.
+    """
+    root = handoff_repo(tasks=[_amended_task()],
+                        review_cycles=[make_cycle(findings=[make_finding("R1-F01")])])
+    _with_amended_evidence(root)
+    sha = head_commit(root)
+
+    handoff.cmd_finding_fix(root, "R1-F01", task="T001", commits=[sha],
+                            evidence="CLI_LOG:fixed by hand", auto=True)
+
+    led = read_ledger(_fd(root))
+    finding = led["review_cycles"][-1]["handoff"]["findings"][0]
+    record = next(r for r in led["evidence"] if r["id"] == finding["evidence_id"])
+    assert record["summary"] == "CLI_LOG:fixed by hand"
+    assert "amendment" not in record
+    assert "reason" not in record

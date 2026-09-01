@@ -698,7 +698,7 @@ finding's merit**.
   `1`. Resume by raising the cap, resolving the open findings and approving, or
   rebaselining (which clears stale reviewed-scope records).
 
-Ledger schema **v8**, migrated forward automatically.
+Ledger schema **v9**, migrated forward automatically.
 
 ### `specops feature use <dir>` (Feature 026)
 

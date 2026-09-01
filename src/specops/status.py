@@ -339,7 +339,10 @@ def synthesize_ledger_at_plan(feature_dir: Path, repo: gitops.Repository, lane_d
         "active-artifact": ledger.artifact_for_phase("PLAN"),
         "timestamp": ts,
     })
-    data = yaml.safe_load(content)
+    # Same normalization as init-spec (#69): the template is a content seed, not a
+    # schema declaration — and since it stopped declaring one, an unmigrated load here
+    # would write a promoted ledger with no `schema_version` at all.
+    data = ledger.migrate_to_current(yaml.safe_load(content))
     data["current_phase"] = "PLAN"
     ledger.attach_lane_provenance(data, lane_data)
     # Feature 022 (FR-007): promotion is a ledger-creation seam too — decisions
@@ -673,9 +676,7 @@ def _record_completion(
 
     # Feature 012 (v6): record the structured evidence object + task reference,
     # alongside the retained legacy `<CLASS>:<summary>` string (FR-006/FR-007).
-    task_commits = task.get("commits") or []
-    head = task_commits[0] if task_commits else started
-    commit_range = f"{started}..{head}" if head != started else str(started)
+    commit_range = _commit_range_for(task, started)
     ev_record = evidence_mod.build_record(
         producer="auto", command=evidence_command, exit_code=0,
         timestamp=completed_at, commit_range=commit_range,
@@ -750,9 +751,13 @@ def _materialize_legacy_evidence(
     task["evidence_refs"] = refs
 
 
-def _commit_range_for(task: records.TaskRecord) -> str:
-    """The task's recorded range, as ``<started>..<head>`` or the bare start commit."""
-    started = task.get("started_commit") or ""
+def _commit_range_for(task: records.TaskRecord, started: str | None = None) -> str:
+    """The task's recorded range, as ``<started>..<head>`` or the bare start commit.
+
+    ``commits[0]`` is HEAD-most by construction (see ``_merge_task_commits``). *started*
+    overrides the recorded ``started_commit`` for the close path, which already holds it.
+    """
+    started = started if started is not None else (task.get("started_commit") or "")
     commits = task.get("commits") or []
     head = commits[0] if commits else started
     return f"{started}..{head}" if head and head != started else str(started)
@@ -770,7 +775,10 @@ def _supersede_task_evidence(
 
     Returns the ids it superseded. Content is never touched; only the pointer is set.
     """
-    by_id = {r["id"]: r for r in data.get("evidence") or []}
+    by_id = {
+        r["id"]: r for r in data.get("evidence") or []
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
     superseded: list[str] = []
     for ref in task.get("evidence_refs") or []:
         rec = by_id.get(ref)
@@ -787,7 +795,10 @@ def _amendment_index(data: records.LedgerDocument, task: records.TaskRecord) -> 
     distinct ids — without it ``append_record`` would treat the second as an id match
     and silently collapse "amended twice" into one record (research D2).
     """
-    by_id = {r["id"]: r for r in data.get("evidence") or []}
+    by_id = {
+        r["id"]: r for r in data.get("evidence") or []
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
     amendments = [
         ref for ref in task.get("evidence_refs") or []
         if ref in by_id and by_id[ref].get("amendment")

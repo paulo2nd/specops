@@ -141,8 +141,8 @@ def _handle_errors(fn: _F) -> _F:
     return wrapper  # type: ignore[return-value]
 
 
-def _resolved_feature(root: Path) -> str | None:
-    """The active feature directory as a repo-relative POSIX string, or None.
+def _as_relative(root: Path, feature_dir: Path) -> str:
+    """The active feature directory as a repo-relative POSIX string.
 
     Echoed by the commands that silently validate whatever the pointer happens to
     name: a stale `.specify/feature.json` otherwise reports `ok` about a different,
@@ -152,30 +152,31 @@ def _resolved_feature(root: Path) -> str | None:
     other path SpecOps emits comes from git, which reports POSIX on every platform.
     A backslash here would make the contract platform-dependent.
     """
-    from specops import speckit
-
-    feature_dir = speckit.resolve_feature_dir(root)
-    if feature_dir is None:
-        return None
     try:
         return feature_dir.relative_to(root.resolve()).as_posix()
     except ValueError:
         return feature_dir.as_posix()
 
 
-def _feature_echo(root: Path) -> tuple[str | None, str | None]:
-    """(human line, machine source) for the resolved-feature echo (Feature 026).
+def _feature_echo(root: Path) -> tuple[str | None, str | None, str | None]:
+    """(`--json` path, human line, machine source) for the resolved-feature echo (026).
 
     The human form labels an inferred answer; the machine form is the bare source
-    (`override` | `pointer` | `inferred`), carried as an additive `--json` key. Both
-    come from one resolution so the two outputs can never disagree.
+    (`override` | `pointer` | `inferred`), carried as an additive `--json` key. All
+    three come from ONE resolution — a second `resolve_feature` call would re-read the
+    environment, the pointer file and `specs/` for an answer this one already has, and
+    the two could disagree between the human and machine outputs.
     """
     from specops import speckit
 
     resolved = speckit.resolve_feature(root)
     if resolved.path is None:
-        return None, None
-    return speckit.describe(root, resolved), resolved.source
+        return None, None, None
+    return (
+        _as_relative(root, resolved.path),
+        speckit.describe(root, resolved),
+        resolved.source,
+    )
 
 
 def _require_git(root: Path = Path(".")) -> gitops.Repository:
@@ -265,8 +266,7 @@ def consistency(
     _require_git(root)
     from specops import consistency as con_mod
     from specops import outcome
-    feature = _resolved_feature(root)
-    described, source = _feature_echo(root)
+    feature, described, source = _feature_echo(root)
     if json_out:
         try:
             _warnings, violations = con_mod.run(root)
@@ -345,8 +345,7 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
         _emit_sarif(root)
         return
     _ov = gateprofiles.OUTPUT_VERSION
-    feature = _resolved_feature(root)
-    _described, source = _feature_echo(root)
+    feature, _described, source = _feature_echo(root)
     if json_out:
         try:
             report = review_mod.evaluate(root)

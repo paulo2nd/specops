@@ -762,8 +762,18 @@ def _logical(data: records.LedgerLike) -> records.LedgerLike:
     return c
 
 
-def _dump(data: records.LedgerLike) -> str:
+def dump(data: records.LedgerLike) -> str:
+    """Serialize a ledger the one way every ledger write uses.
+
+    Public so an out-of-band identity write (``specops feature rename``) produces
+    bytes identical to what :func:`save` would — a private copy of these kwargs is
+    how a rename ends up escaping every non-ASCII character in the file.
+    """
     return yaml.dump(data, default_flow_style=False, allow_unicode=True)
+
+
+# Back-compat private alias (retained so existing call sites need no change).
+_dump = dump
 
 
 def atomic_write(path: Path, content: str) -> None:

@@ -167,7 +167,10 @@ def _current_amendment(
     """The task's current evidence record when it is an amendment, else None.
 
     Current is the single ``evidence_refs`` entry with no ``superseded_by``
-    (Feature 026 data-model). Returns the record so the caller can carry its reason.
+    (Feature 026 data-model). Returns the record so the caller can carry its reason —
+    and only when that reason is actually there: a reasonless amendment is already an
+    invariant violation `consistency` reports, and passing it on would make
+    ``build_record`` raise ValueError out of a command that should fail cleanly.
     """
     by_id = {
         r["id"]: r for r in data.get("evidence") or []
@@ -175,7 +178,10 @@ def _current_amendment(
     }
     for ref in task.get("evidence_refs") or []:
         rec = by_id.get(ref)
-        if rec is not None and rec.get("superseded_by") is None and rec.get("amendment"):
+        if (
+            rec is not None and rec.get("superseded_by") is None
+            and rec.get("amendment") and rec.get("reason")
+        ):
             return rec
     return None
 
@@ -434,12 +440,15 @@ def cmd_finding_fix(
                 commits = list(recorded)
             elif started:
                 commits = gitops.commits_in_range(repo, started)
-        evidence = evidence or task_rec.get("evidence")
-        # Feature 026 (FR-006a): when the inherited value is an amendment, the
-        # finding's own record must say so. Without this the correction is laundered
-        # one record downstream — it would re-enter the ledger as ordinary evidence,
-        # which is the outcome the amendment path exists to prevent.
-        inherited_amendment = _current_amendment(data, task_rec)
+        if not evidence:
+            evidence = task_rec.get("evidence")
+            # Feature 026 (FR-006a): when the inherited value is an amendment, the
+            # finding's own record must say so. Without this the correction is laundered
+            # one record downstream — it would re-enter the ledger as ordinary evidence,
+            # which is the outcome the amendment path exists to prevent. Scoped to the
+            # inheriting branch: caller-supplied `--evidence` is the caller's own record,
+            # and stamping someone else's amendment reason onto it would be a lie.
+            inherited_amendment = _current_amendment(data, task_rec)
     if not commits:
         return HandoffResult(cmd, PRECONDITION_UNMET,
                              f"{cmd}: at least one --commit (or --auto) is required", {"id": fid})
