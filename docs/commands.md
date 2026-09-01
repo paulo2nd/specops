@@ -118,10 +118,19 @@ contract — they compose as gates, exactly like `specops preflight`.
 
 ### `specops status show`
 
-Read-only. Prints ledger state: feature, branch, phase, active task, task counts
-(pending / in progress / done / orphaned), and the review-cycle history. Never
-mutates; on a legacy, too-new, unsupported, or malformed ledger it still prints a
-best-effort summary plus a one-line diagnostic.
+Read-only. Prints the resolved feature directory, then ledger state: feature,
+branch, phase, active task, task counts (pending / in progress / done / orphaned),
+and the review-cycle history. Never mutates; on a legacy, too-new, unsupported, or
+malformed ledger it still prints a best-effort summary plus a one-line diagnostic.
+
+The first line names the directory the answer is *about*. When neither
+`SPECIFY_FEATURE_DIRECTORY` nor `.specify/feature.json` resolves, SpecOps falls back
+to the newest `specs/NNN-*` and says so — a guess presented as an answer is the
+failure mode the echo exists to remove:
+
+```text
+feature directory: specs/026-recovery (inferred — no SPECIFY_FEATURE_DIRECTORY and no usable .specify/feature.json)
+```
 
 ### `specops status init-spec [<name>]`
 
@@ -129,6 +138,11 @@ Creates `<feature_dir>/status.yaml` from the packaged scaffold, syncing task IDs
 from `tasks.md`. Usually run for you by the tasks directive. Optional-step
 decisions recorded before the ledger existed (see `record-step`) are drained
 into `workflow.skipped_steps` here and the buffer file is deleted (Feature 022).
+
+Records the feature it initialized in `.specify/feature.json` (Feature 026). Without
+a pointer file the feature was resolved by *inference*; persisting it turns that
+guess into a recorded decision. Written only after the ledger write persists, so a
+refused init never moves the pointer.
 
 ### `specops status migrate`
 
@@ -161,6 +175,36 @@ Marks the task `DONE` with exactly one evidence source:
   review gate (`specops preflight`), not at task close.
 - `--evidence "CLASS:summary"`: caller-supplied, with `CLASS` in
   `CLI_LOG | TEST_REPORT | SCREENSHOT_PATH | CODE_DIFF`.
+
+### `specops status amend-task <task-id> --evidence "CLASS:summary" --reason "<why>"`
+
+Records a **corrected** evidence entry on a task already `DONE`, append-only
+(Feature 026). Both options are required.
+
+The correction becomes the task's current evidence; the records it displaces are
+retained with their original wording and timestamps, marked superseded. The task's
+status, completion time and commits are untouched — `DONE` stays terminal, so
+amendment cannot be used to launder a bad close into a good one. Reopening a `DONE`
+task is deliberately unsupported.
+
+```bash
+specops status amend-task T027 \
+    --evidence "TEST_REPORT:1795 passed, 0 failed" \
+    --reason "original close recorded no gate run; session terminated mid-flight"
+```
+
+The reason is mandatory and never judged for its content (Principle IV: SpecOps
+records, it does not validate) — a weak reason is a *recorded* weak reason, visible
+to the reviewer.
+
+Refuses non-zero when the task is unknown, is not `DONE`, the reason is empty, or the
+evidence violates the `CLASS:summary` grammar. `trace report` marks an amended task
+with `evidence_amended` and lists the superseded ids in `evidence_history`; a review
+finding closed with `--auto` against an amended task inherits the amendment
+provenance, so a correction cannot lose its marker one record downstream.
+
+**Use it for recovery, not revision.** It exists to correct a record left by a
+*previous* session — not to revise a close you made in the current run.
 
 ### `specops status transition-phase <phase> [-r APPROVED|REJECTED] [--if-needed]`
 
@@ -655,6 +699,69 @@ finding's merit**.
   rebaselining (which clears stale reviewed-scope records).
 
 Ledger schema **v8**, migrated forward automatically.
+
+### `specops feature use <dir>` (Feature 026)
+
+Repoints the active feature. The pointer selects the feature every command answers
+about, and before this the only way to move it was to edit `.specify/feature.json`
+by hand — which contradicts the rule that ledger state is CLI-only.
+
+```console
+$ specops feature use specs/027-next
+Active feature: specs/026-recovery → specs/027-next
+Not yet present: plan.md, tasks.md, status.yaml
+Outgoing feature has unfinished work: task T041 IN_PROGRESS
+```
+
+Reports, without failing: which downstream artifacts the target does not have yet
+(pointing at a feature *before* planning it is the normal flow), a ledger there that
+names a different feature, and any unfinished work left on the outgoing feature.
+Idempotent — repointing to the already-active feature is a no-op that says so.
+
+Refuses non-zero when the directory does not exist, lies outside `specs/`, has no
+`spec.md`, or when `SPECIFY_FEATURE_DIRECTORY` names somewhere else. That variable
+takes precedence over the pointer file (SpecOps follows Spec Kit's resolution order),
+so writing the pointer would not change what any command resolves — and reporting
+success on a write that cannot take effect is exactly the silent failure this command
+removes.
+
+### `specops feature rename <old> <new> [--branch <name>]` (Feature 026)
+
+Renumbers or renames a feature, carrying its identity across the directory, the
+ledger, the branch reference and the pointer.
+
+```console
+$ git branch -m 027-next
+$ specops feature rename specs/026-recovery specs/027-next --branch 027-next
+Renamed: specs/026-recovery → specs/027-next
+Ledger identity: feature 026-recovery → 027-next; branch 026-recovery → 027-next. …
+spec.md: **Feature Branch** header updated.
+Active feature pointer followed the rename.
+2 remaining references to the old name (not changed):
+  specs/027-next/plan.md:14
+  specs/027-next/tasks.md:8
+```
+
+Every recorded fact — tasks, evidence, acknowledgements, review cycles, the revision
+counter — travels through unchanged. This is an identity change, not a history change.
+
+**SpecOps never renames the Git branch.** Its Git access is read-only; rename the
+branch yourself with `git branch -m` and pass the new name via `--branch`. Without
+the flag the ledger's branch reference is left as recorded and the output says so.
+With it, the next command fails closed on the identity check until the Git branch
+actually matches — correct behaviour, which the output warns you about rather than
+letting it surface later as an inexplicable refusal.
+
+**Artifact prose is never rewritten.** Only the `**Feature Branch**` header in
+`spec.md` — the one structured identity token SpecOps owns — is updated. Every other
+remaining mention of the old name is reported with file and line for you to judge; a
+reference to the old feature may well be deliberate.
+
+Refuses non-zero when the target exists, the source is not a feature directory, the
+target lies outside `specs/`, or `SPECIFY_FEATURE_DIRECTORY` names the source (the
+rename would leave it aimed at a directory that no longer exists). A rename that
+cannot complete leaves the feature exactly as it was — no half-moved directory, no
+pointer aimed at nothing.
 
 ### `specops --version`
 

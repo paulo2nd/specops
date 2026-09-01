@@ -145,24 +145,24 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at re
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T057 [P] [US3] Write the record-preservation test: after a rename, tasks, evidence, acknowledgements, review cycles and the revision counter are identical, in `tests/unit/test_feature_rename.py` [SC-008]
-- [ ] T058 [P] [US3] Write the identity tests: the ledger `feature` field and the specification's `**Feature Branch**` header both name the new feature, in `tests/unit/test_feature_rename.py` [SC-008]
-- [ ] T059 [P] [US3] Write the branch-reference tests: `--branch` updates the ledger reference; its absence leaves it unchanged and the output says so, in `tests/unit/test_feature_rename.py` [SC-008]
-- [ ] T060 [P] [US3] Write the pointer-follow tests: the pointer follows when the renamed feature was active and is left alone otherwise, with the output stating which happened, in `tests/unit/test_feature_rename.py` [SC-008]
-- [ ] T061 [P] [US3] Write the override-refusal test: a rename whose source is named by `SPECIFY_FEATURE_DIRECTORY` refuses with a non-zero exit, names the override, and changes nothing — completing it would leave the override dangling (FR-019a), in `tests/unit/test_feature_rename.py` [SC-007] [SC-009]
-- [ ] T062 [P] [US3] Write the stale-reference test: occurrences of the old name in `plan.md` / `tasks.md` / checklists are reported with file and line and left byte-identical, in `tests/unit/test_feature_rename.py` [SC-008]
-- [ ] T063 [P] [US3] Write the error-path tests asserting non-zero exit and no change for: existing target, missing source, non-feature source, target outside `specs/` — in `tests/unit/test_feature_rename.py` [SC-009]
-- [ ] T064 [P] [US3] Write the exit-2 tests asserting an unparseable ledger and a run outside a Git repository return 2, in `tests/unit/test_feature_rename.py` [SC-009]
-- [ ] T065 [P] [US3] Write the atomicity test: a failure injected at the ledger write and at the directory move each leave the feature in its pre-rename state — no half-moved directory, no pointer at a non-existent path, in `tests/unit/test_feature_rename.py` [SC-008]
-- [ ] T066 [P] [US3] Write the integration test driving a full renumber on a populated fixture, then `reconcile` and `consistency` under the new name, in `tests/integration/test_recovery_rename.py` [SC-008]
+- [X] T057 [P] [US3] Write the record-preservation test: after a rename, tasks, evidence, acknowledgements, review cycles and the revision counter are identical, in `tests/unit/test_feature_rename.py` [SC-008]
+- [X] T058 [P] [US3] Write the identity tests: the ledger `feature` field and the specification's `**Feature Branch**` header both name the new feature, in `tests/unit/test_feature_rename.py` [SC-008]
+- [X] T059 [P] [US3] Write the branch-reference tests: `--branch` updates the ledger reference; its absence leaves it unchanged and the output says so, in `tests/unit/test_feature_rename.py` [SC-008]
+- [X] T060 [P] [US3] Write the pointer-follow tests: the pointer follows when the renamed feature was active and is left alone otherwise, with the output stating which happened, in `tests/unit/test_feature_rename.py` [SC-008]
+- [X] T061 [P] [US3] Write the override-refusal test: a rename whose source is named by `SPECIFY_FEATURE_DIRECTORY` refuses with a non-zero exit, names the override, and changes nothing — completing it would leave the override dangling (FR-019a), in `tests/unit/test_feature_rename.py` [SC-007] [SC-009]
+- [X] T062 [P] [US3] Write the stale-reference test: occurrences of the old name in `plan.md` / `tasks.md` / checklists are reported with file and line and left byte-identical, in `tests/unit/test_feature_rename.py` [SC-008]
+- [X] T063 [P] [US3] Write the error-path tests asserting non-zero exit and no change for: existing target, missing source, non-feature source, target outside `specs/` — in `tests/unit/test_feature_rename.py` [SC-009]
+- [X] T064 [P] [US3] Write the exit-2 tests asserting an unparseable ledger and a run outside a Git repository return 2, in `tests/unit/test_feature_rename.py` [SC-009]
+- [X] T065 [P] [US3] Write the atomicity test: a failure injected at the ledger write and at the directory move each leave the feature in its pre-rename state — no half-moved directory, no pointer at a non-existent path, in `tests/unit/test_feature_rename.py` [SC-008]
+- [X] T066 [P] [US3] Write the integration test driving a full renumber on a populated fixture, then `reconcile` and `consistency` under the new name, in `tests/integration/test_recovery_rename.py` [SC-008]
 
 ### Implementation for User Story 3
 
-- [ ] T067 [US3] Implement the up-front validation pass — source is a feature directory, target does not exist and lies under `specs/`, no override names the source, ledger loads and identity checks — in `src/specops/feature.py` [SC-007] [SC-009]
-- [ ] T068 [US3] Implement the ordered mutation per research D9: ledger identity write into the source directory, identity-header rewrite, `os.rename` of the directory, pointer write last — in `src/specops/feature.py` [SC-008]
-- [ ] T069 [US3] Implement the stale-reference scan reporting file and line for every remaining old-name or old-branch occurrence, changing nothing, in `src/specops/feature.py` [SC-008]
-- [ ] T070 [US3] Report in the rename output that a `--branch` update will make the next command fail closed until the Git branch is renamed (data-model §5), in `src/specops/feature.py`
-- [ ] T071 [US3] Register `feature rename <OLD> <NEW> [--branch NAME]` on the Phase 2 sub-app, in `src/specops/cli.py` [SC-009]
+- [X] T067 [US3] Implement the up-front validation pass — source is a feature directory, target does not exist and lies under `specs/`, no override names the source, ledger loads and identity checks — in `src/specops/feature.py` [SC-007] [SC-009]
+- [X] T068 [US3] Implement the ordered mutation per research D9: ledger identity write into the source directory, identity-header rewrite, `os.rename` of the directory, pointer write last — in `src/specops/feature.py` [SC-008]
+- [X] T069 [US3] Implement the stale-reference scan reporting file and line for every remaining old-name or old-branch occurrence, changing nothing, in `src/specops/feature.py` [SC-008]
+- [X] T070 [US3] Report in the rename output that a `--branch` update will make the next command fail closed until the Git branch is renamed (data-model §5), in `src/specops/feature.py`
+- [X] T071 [US3] Register `feature rename <OLD> <NEW> [--branch NAME]` on the Phase 2 sub-app, in `src/specops/cli.py` [SC-009]
 
 **Checkpoint**: all three user stories complete.
 
@@ -170,14 +170,14 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at re
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T072 [P] Add the recovery-move directive text to `src/specops/templates/directives/implement.md`, stating that amendment corrects a previous session's record and is never a way to revise a close made in the current run [SC-010]
-- [ ] T073 [P] Write the directive test asserting every template mentioning amendment states the recovery-only restriction, in `tests/unit/test_extension.py` [SC-010]
-- [ ] T074 [P] Write the CLI-wide refusal test asserting every new command exits non-zero on every documented refusal path, in `tests/unit/test_cli.py` [SC-009]
-- [ ] T075 [P] Document `status amend-task`, `feature use` and `feature rename` — options, output, exit codes — in `docs/commands.md`
-- [ ] T076 [P] Document the recovery operations in `README.md`
-- [ ] T077 [P] Document the recovery operations equivalently in `README.pt-br.md`
-- [ ] T078 Record the v9 bump, the three new commands, the resolution-precedence alignment and the migration requirement under `[Unreleased]` in `CHANGELOG.md` [SC-011]
-- [ ] T079 Run the full gate suite — `conda run -n specops pytest -q`, `mypy src/`, `ruff check .` — and record the results as the user story's evidence [SC-011]
+- [X] T072 [P] Add the recovery-move directive text to `src/specops/templates/directives/implement.md`, stating that amendment corrects a previous session's record and is never a way to revise a close made in the current run [SC-010]
+- [X] T073 [P] Write the directive test asserting every template mentioning amendment states the recovery-only restriction, in `tests/unit/test_extension.py` [SC-010]
+- [X] T074 [P] Write the CLI-wide refusal test asserting every new command exits non-zero on every documented refusal path, in `tests/unit/test_cli.py` [SC-009]
+- [X] T075 [P] Document `status amend-task`, `feature use` and `feature rename` — options, output, exit codes — in `docs/commands.md`
+- [X] T076 [P] Document the recovery operations in `README.md`
+- [X] T077 [P] Document the recovery operations equivalently in `README.pt-br.md`
+- [X] T078 Record the v9 bump, the three new commands, the resolution-precedence alignment and the migration requirement under `[Unreleased]` in `CHANGELOG.md` [SC-011]
+- [X] T079 Run the full gate suite — `conda run -n specops pytest -q`, `mypy src/`, `ruff check .` — and record the results as the user story's evidence [SC-011]
 
 ---
 

@@ -13,6 +13,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The ledger has a supported way to be corrected
+  ([#74](https://github.com/paulo2nd/specops/issues/74),
+  [#75](https://github.com/paulo2nd/specops/issues/75)).** Two states an interrupted
+  session routinely leaves behind had no legal move, so the only way forward was to
+  hand-edit the very files the ledger exists to make trustworthy.
+  - **`specops status amend-task <id> --evidence … --reason …`** records a correction
+    on a task already `DONE`. Once closed, a task could not be corrected at all:
+    `start-task` refuses to reopen it and `complete-task` refuses to write to it. That
+    is not an exotic state — it is the expected residue of the failure the ledger
+    exists to survive, a session terminated mid-flight after closing tasks it never
+    verified. The amendment is **append-only**: the correction becomes the task's
+    current evidence, every previously-current record is retained with its original
+    wording and timestamp marked superseded, and the task's status, completion time
+    and commits are untouched. `DONE` stays terminal — amendment cannot launder a bad
+    close into a good one. The reason is mandatory and never judged for its content.
+  - **`specops feature use <dir>`** repoints the active feature. The pointer selects
+    the feature every command answers about, and nothing wrote it — a stale pointer
+    made `consistency` answer `ok` about a finished feature while the one under work
+    went unvalidated. `0.12.0` made that answer name its subject; this makes the
+    subject movable. It reports what it moved, which artifacts the target does not
+    have yet, and any unfinished work left behind — warning rather than refusing,
+    because parking a feature is legitimate and SpecOps does not judge intent.
+  - **`specops status init-spec` records the feature it initialized.** Without a
+    pointer file the feature was resolved by inference; persisting it turns that guess
+    into a recorded decision. Written only after the ledger write persists.
+  - **`specops feature rename <old> <new> [--branch <name>]`** makes renumbering a
+    supported operation. The previous route was to delete the ledger and re-run
+    `init-spec`, destroying the audit trail the tool exists to keep. Every recorded
+    fact — tasks, evidence, acknowledgements, review cycles, the revision counter —
+    travels through unchanged: this is an identity change, not a history change.
+    SpecOps never renames the Git branch (its Git access is read-only); rename it
+    yourself and pass `--branch`. Artifact prose is never rewritten either — only the
+    `**Feature Branch**` header in `spec.md` is updated, and every other remaining
+    mention of the old name is reported with file and line for you to judge.
+- **SpecOps and Spec Kit can no longer resolve different features.** Spec Kit consults
+  `SPECIFY_FEATURE_DIRECTORY` before `.specify/feature.json`; SpecOps read only the
+  pointer file, so with the override set the two tools answered about different
+  features from identical repository state — the #75 failure through another door, and
+  one that would have made `feature use` report a repoint with no effect. SpecOps now
+  follows the same precedence. It **reads** the override and never persists it: Spec
+  Kit itself passes `-NoPersist` for read-only resolution (spec-kit#3025), and every
+  SpecOps resolution is read-only.
+- **An inferred feature resolution says so.** When neither source resolves, SpecOps
+  falls back to the newest `specs/NNN-*` where Spec Kit would error. The fallback stays
+  — repositories already run without a pointer file — but `status show`, `consistency`
+  and `preflight` now label it, and the two gates carry the source as an additive
+  `feature_source` JSON key (`override` | `pointer` | `inferred`).
+
+### Changed
+
+- **Ledger schema v8 → v9.** Evidence records may carry `amendment` and `reason`. Both
+  are optional, so the migration is a pure version bump with no backfill (parity with
+  v6→v7 and v7→v8) and every required-field set is unchanged. Ledgers written before
+  this release load, migrate, and behave identically.
+- **`preflight` names the feature with its repo-relative path**, matching `consistency`
+  and `status show`. It previously printed the bare directory name while its own
+  `--json` `feature` key already carried the relative path — the two disagreed.
+- **`status show` gains a leading `feature directory:` line**, completing the
+  resolved-feature echo shipped for the two gate commands in `0.12.0`.
+- **A finding closed with `--auto` against an amended task inherits the amendment
+  provenance.** `handoff finding fix --auto` copies the task's evidence string; without
+  this the correction would re-enter the ledger as ordinary evidence one record
+  downstream, which is the laundering the amendment path exists to prevent.
+- **`trace report`** marks an amended task with `evidence_amended` and lists the
+  superseded record ids in `evidence_history`. Both keys are additive and absent for an
+  ordinary close.
+- **The ledger scaffold template no longer declares a schema version.** It is a content
+  seed, normalized through `migrate_to_current` since
+  [#69](https://github.com/paulo2nd/specops/issues/69); a hard-coded version there can
+  only drift into a false declaration on the next bump.
+
 ## [0.12.0] - 2026-08-31
 
 ### Fixed

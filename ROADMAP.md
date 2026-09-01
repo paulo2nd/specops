@@ -94,7 +94,7 @@ Roadmap status uses four values:
 | 023 | Context Read-Set Consumption in IMPLEMENT | MERGED | 009 | Lifecycle Coverage |
 | 024 | Test Execution Only at the Review Gate | MERGED | 012, 021 | Review Integrity |
 | 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
-| 026 | Supported Recovery Operations | ACTIVE | 006, 010, 021 | Field Hardening |
+| 026 | Supported Recovery Operations | MERGED | 006, 010, 021 | Field Hardening |
 | 027 | Cross-Round Review Coverage | PLANNED | 025, 026 | Field Hardening |
 
 ### Build sequence (dependency review — 2026-07-23)

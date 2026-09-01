@@ -105,7 +105,8 @@ directives degrade to no-ops.
 |---|---|
 | `specops init` | Prepare a Speckit repo: inject directives, install `/specops-review`, create `specops.json` |
 | `specops extension …` | Native Spec Kit extension lifecycle, plus the `specops` and `specops-lite` workflows |
-| `specops status …` | Drive the ledger: `show`, `init-spec`, `start-task`, `complete-task`, `transition-phase`, `record-step`, `sync-tasks`, `migrate`, `rebaseline` |
+| `specops status …` | Drive the ledger: `show`, `init-spec`, `start-task`, `complete-task`, `amend-task`, `transition-phase`, `record-step`, `sync-tasks`, `migrate`, `rebaseline` |
+| `specops feature …` | Recovery operations on the feature itself: `use` (repoint the active feature), `rename` (renumber without losing the ledger) |
 | `specops preflight` | Deterministic review gate, cheapest-first — CI-safe (formerly `specops review`) |
 | `specops reconcile` | Read-only gate: every recorded commit reachable, every `DONE` task evidenced |
 | `specops consistency` | Read-only gate: SC coverage tags + plan path action suffixes |
@@ -128,6 +129,27 @@ freeze for 1.0: it classifies every adopter-facing surface — `specops.json`, `
 contract, the context-map file, and SARIF output — as **frozen**, and states the
 additive-vs-breaking rule and the post-1.0 versioning/migration obligations for each. Every
 `--json` output carries an `output_version` so you can detect envelope changes.
+
+### Recovery operations
+
+Two states an interrupted session leaves behind used to have no legal move, so the
+only way forward was to hand-edit the very files the ledger exists to make
+trustworthy. Both are now commands that **record** the correction rather than hiding
+it:
+
+- **A task closed with wrong evidence.** `specops status amend-task <id> --evidence …
+  --reason …` appends the correction: it becomes the task's current evidence, the
+  prior record is retained as superseded history, and the task is *not* reopened.
+  An amended task is more informative than a silently-correct one — which is what
+  stops amendment from being a way to launder a bad close.
+- **The active feature pointer.** `specops feature use <dir>` repoints it explicitly
+  (and `status init-spec` records the feature it initializes), while `specops feature
+  rename <old> <new>` carries a renumbering across directory, ledger identity, branch
+  reference and pointer with every recorded fact intact.
+
+SpecOps resolves the active feature with the same precedence Spec Kit uses —
+`SPECIFY_FEATURE_DIRECTORY` before `.specify/feature.json` — so the two tools can
+never answer about different features from the same repository state.
 
 ## How SpecOps behaves: a paved road you can leave — on the record
 

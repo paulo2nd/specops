@@ -1246,6 +1246,28 @@ def feature_use(
     typer.echo(feature.cmd_use(root, directory))
 
 
+@feature_app.command("rename")
+@_handle_errors
+def feature_rename(
+    old: str = typer.Argument(..., help="Current feature directory, e.g. specs/026-x."),
+    new: str = typer.Argument(..., help="New feature directory, e.g. specs/027-x."),
+    branch: str = typer.Option(
+        None, "--branch",
+        help="New branch name to record. SpecOps never renames the Git branch itself — "
+             "rename it with 'git branch -m' and pass the new name here.",
+    ),
+) -> None:
+    """Rename a feature, carrying its ledger identity and artifacts.
+
+    Every recorded fact (tasks, evidence, acknowledgements, review cycles) travels
+    through unchanged. Prose in the artifacts is never rewritten — remaining mentions
+    of the old name are reported with file and line for you to judge.
+    """
+    root = Path(".")
+    from specops import feature
+    typer.echo(feature.cmd_rename(root, old, new, branch=branch))
+
+
 @lane_app.command("start")
 @_handle_errors
 def lane_start(
