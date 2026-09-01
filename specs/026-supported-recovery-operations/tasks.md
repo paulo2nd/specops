@@ -114,24 +114,24 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at re
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T042 [P] [US2] Write the `feature use` happy-path and idempotency tests: repoint reports old → new; repointing to the already-active feature is a no-op that says so, in `tests/unit/test_feature_use.py` [SC-005]
-- [ ] T043 [P] [US2] Write the missing-artifact reporting test: absent `plan.md` / `tasks.md` / `status.yaml` are named without failing the command, in `tests/unit/test_feature_use.py` [SC-005]
-- [ ] T044 [P] [US2] Write the outgoing-work test: repointing away from a feature with an `IN_PROGRESS` task or an open review round succeeds and names the unfinished work, without requiring any override flag, in `tests/unit/test_feature_use.py` [SC-006]
-- [ ] T045 [P] [US2] Write the no-ledger test: repointing away from a never-initialized feature reports no outgoing-state warning, in `tests/unit/test_feature_use.py` [SC-006]
-- [ ] T046 [P] [US2] Write the foreign-ledger test: repointing to a directory whose ledger names a different feature succeeds and reports the mismatch rather than pre-judging it, in `tests/unit/test_feature_use.py` [SC-005]
-- [ ] T047 [P] [US2] Write the error-path tests asserting non-zero exit and an untouched pointer for: missing directory, directory outside `specs/`, no `spec.md`, and an active override naming a different directory — in `tests/unit/test_feature_use.py` [SC-007] [SC-009]
-- [ ] T048 [P] [US2] Write the exit-2 tests asserting a malformed `.specify/feature.json` and a run outside a Git repository return 2, in `tests/unit/test_feature_use.py` [SC-009]
-- [ ] T049 [P] [US2] Write the `init-spec` repoint test: initializing a feature leaves the pointer resolving to it, in `tests/unit/test_status.py` [SC-005]
-- [ ] T050 [P] [US2] Write the echo tests asserting `status show`, `consistency` and `preflight` name the resolved directory and carry the `(inferred — …)` suffix only when the answer was inferred, in `tests/unit/test_cli.py` [SC-007]
-- [ ] T051 [P] [US2] Write the integration test: author a new feature, repoint, `init-spec`, and validate with `consistency` without editing `feature.json`, in `tests/integration/test_recovery_pointer.py` [SC-005]
+- [X] T042 [P] [US2] Write the `feature use` happy-path and idempotency tests: repoint reports old → new; repointing to the already-active feature is a no-op that says so, in `tests/unit/test_feature_use.py` [SC-005]
+- [X] T043 [P] [US2] Write the missing-artifact reporting test: absent `plan.md` / `tasks.md` / `status.yaml` are named without failing the command, in `tests/unit/test_feature_use.py` [SC-005]
+- [X] T044 [P] [US2] Write the outgoing-work test: repointing away from a feature with an `IN_PROGRESS` task or an open review round succeeds and names the unfinished work, without requiring any override flag, in `tests/unit/test_feature_use.py` [SC-006]
+- [X] T045 [P] [US2] Write the no-ledger test: repointing away from a never-initialized feature reports no outgoing-state warning, in `tests/unit/test_feature_use.py` [SC-006]
+- [X] T046 [P] [US2] Write the foreign-ledger test: repointing to a directory whose ledger names a different feature succeeds and reports the mismatch rather than pre-judging it, in `tests/unit/test_feature_use.py` [SC-005]
+- [X] T047 [P] [US2] Write the error-path tests asserting non-zero exit and an untouched pointer for: missing directory, directory outside `specs/`, no `spec.md`, and an active override naming a different directory — in `tests/unit/test_feature_use.py` [SC-007] [SC-009]
+- [X] T048 [P] [US2] Write the exit-2 tests asserting a malformed `.specify/feature.json` and a run outside a Git repository return 2, in `tests/unit/test_feature_use.py` [SC-009]
+- [X] T049 [P] [US2] Write the `init-spec` repoint test: initializing a feature leaves the pointer resolving to it, in `tests/unit/test_status.py` [SC-005]
+- [X] T050 [P] [US2] Write the echo tests asserting `status show`, `consistency` and `preflight` name the resolved directory and carry the `(inferred — …)` suffix only when the answer was inferred, in `tests/unit/test_cli.py` [SC-007]
+- [X] T051 [P] [US2] Write the integration test: author a new feature, repoint, `init-spec`, and validate with `consistency` without editing `feature.json`, in `tests/integration/test_recovery_pointer.py` [SC-005]
 
 ### Implementation for User Story 2
 
-- [ ] T052 [US2] Implement `cmd_use` in `src/specops/feature.py` — validate existence, `specs/` containment and `spec.md`; refuse when an override names a different directory; report old → new, missing artifacts, a foreign ledger name, and outgoing unfinished work — writing the pointer through `fsutil.atomic_write` [SC-005] [SC-006] [SC-007]
-- [ ] T053 [US2] Repoint the pointer to the initialized feature at the end of `cmd_init_spec`, after the ledger write persists, in `src/specops/status.py` [SC-005]
-- [ ] T054 [US2] Echo the resolved feature directory in `cmd_show`, in `src/specops/status.py`
-- [ ] T055 [US2] Add the inference suffix to `_resolved_feature` and the additive `feature_source` key to the `consistency` / `preflight` JSON output, in `src/specops/cli.py`
-- [ ] T056 [US2] Register `feature use <DIR>` on the Phase 2 sub-app, in `src/specops/cli.py` [SC-009]
+- [X] T052 [US2] Implement `cmd_use` in `src/specops/feature.py` — validate existence, `specs/` containment and `spec.md`; refuse when an override names a different directory; report old → new, missing artifacts, a foreign ledger name, and outgoing unfinished work — writing the pointer through `fsutil.atomic_write` [SC-005] [SC-006] [SC-007]
+- [X] T053 [US2] Repoint the pointer to the initialized feature at the end of `cmd_init_spec`, after the ledger write persists, in `src/specops/status.py` [SC-005]
+- [X] T054 [US2] Echo the resolved feature directory in `cmd_show`, in `src/specops/status.py`
+- [X] T055 [US2] Add the inference suffix to `_resolved_feature` and the additive `feature_source` key to the `consistency` / `preflight` JSON output, in `src/specops/cli.py`
+- [X] T056 [US2] Register `feature use <DIR>` on the Phase 2 sub-app, in `src/specops/cli.py` [SC-009]
 
 **Checkpoint**: US2 complete — the pointer is CLI-managed and the two tools can no longer disagree.
 

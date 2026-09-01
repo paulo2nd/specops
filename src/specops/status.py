@@ -301,6 +301,13 @@ def cmd_init_spec(root: Path, name: str | None) -> str:
 
     ledger.write_new(feature_dir, data)
     _discard_pending_steps(feature_dir)
+    # Feature 026 (FR-013): record the feature this initialized. Without a pointer file
+    # the resolution above was a *guess* (the newest specs/NNN-*); persisting it turns
+    # that guess into a recorded decision, so the next command reads a fact instead of
+    # re-inferring one. Written only after the ledger write persists — a refused init
+    # must never move the pointer to a feature it did not create.
+    from specops import feature as feature_mod
+    feature_mod.record_active(root, feature_dir)
     try:
         rel = ledger_path.relative_to(root.resolve())
     except ValueError:
@@ -922,10 +929,12 @@ def cmd_sync_tasks(root: Path, *, check: bool = False, as_json: bool = False) ->
 
 def cmd_show(root: Path) -> str:
     """Return the ledger summary as a plain-text string (read-only, no save)."""
-    feature_dir = speckit.resolve_feature_dir(root)
+    resolved = speckit.resolve_feature(root)
+    feature_dir = resolved.path
     if feature_dir is None:
         raise SpecopsError(
-            "Cannot resolve active feature directory. Check .specify/feature.json."
+            resolved.error
+            or "Cannot resolve active feature directory. Check .specify/feature.json."
         )
 
     # Single ledger-loading authority (Feature 018 US3, SC-004): canonical
@@ -944,6 +953,10 @@ def cmd_show(root: Path) -> str:
     cycles = data.get("review_cycles") or []
 
     lines = [
+        # Feature 026 (FR-014/FR-014a): name the directory this answer is ABOUT, and
+        # say so when it was inferred rather than stated — a guess presented as an
+        # answer is the same silence #75 is about.
+        f"feature directory: {speckit.describe(root, resolved)}",
         f"feature: {feature_name}",
         f"branch: {branch}",
         f"phase: {phase}",

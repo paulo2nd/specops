@@ -163,6 +163,21 @@ def _resolved_feature(root: Path) -> str | None:
         return feature_dir.as_posix()
 
 
+def _feature_echo(root: Path) -> tuple[str | None, str | None]:
+    """(human line, machine source) for the resolved-feature echo (Feature 026).
+
+    The human form labels an inferred answer; the machine form is the bare source
+    (`override` | `pointer` | `inferred`), carried as an additive `--json` key. Both
+    come from one resolution so the two outputs can never disagree.
+    """
+    from specops import speckit
+
+    resolved = speckit.resolve_feature(root)
+    if resolved.path is None:
+        return None, None
+    return speckit.describe(root, resolved), resolved.source
+
+
 def _require_git(root: Path = Path(".")) -> gitops.Repository:
     """Fail with exit 1 within <1 s when not inside a Git repo (FR-002, SC-008).
 
@@ -251,6 +266,7 @@ def consistency(
     from specops import consistency as con_mod
     from specops import outcome
     feature = _resolved_feature(root)
+    described, source = _feature_echo(root)
     if json_out:
         try:
             _warnings, violations = con_mod.run(root)
@@ -259,9 +275,11 @@ def consistency(
             raise typer.Exit(outcome.exit_for(outcome.INFRA_ERROR)) from None
         if violations:
             typer.echo(outcome.render(
-                "consistency", outcome.GATE_REJECTION, feature=feature, violations=violations))
+                "consistency", outcome.GATE_REJECTION, feature=feature,
+                feature_source=source, violations=violations))
             raise typer.Exit(outcome.exit_for(outcome.GATE_REJECTION))
-        typer.echo(outcome.render("consistency", outcome.PASS, feature=feature))
+        typer.echo(outcome.render(
+            "consistency", outcome.PASS, feature=feature, feature_source=source))
         return
     warnings, violations = con_mod.run(root)
     for w in warnings:
@@ -270,13 +288,13 @@ def consistency(
     # about an already-finished feature with no cue in the output (#75). It rides the
     # same stream as the verdict, so the "failure evidence is stderr-only" contract holds.
     if violations:
-        if feature:
-            typer.echo(f"feature: {feature}", err=True)
+        if described:
+            typer.echo(f"feature: {described}", err=True)
         for v in violations:
             typer.echo(v, err=True)
         raise typer.Exit(1)
-    if feature:
-        typer.echo(f"feature: {feature}")
+    if described:
+        typer.echo(f"feature: {described}")
     typer.echo("consistency: ok")
 
 
@@ -328,6 +346,7 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
         return
     _ov = gateprofiles.OUTPUT_VERSION
     feature = _resolved_feature(root)
+    _described, source = _feature_echo(root)
     if json_out:
         try:
             report = review_mod.evaluate(root)
@@ -338,11 +357,11 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
         if report.passed:
             typer.echo(outcome.render(
                 command_name, outcome.PASS, verdict="APPROVED", feature=feature,
-                gates=gates, output_version=_ov))
+                feature_source=source, gates=gates, output_version=_ov))
             return
         typer.echo(outcome.render(
             command_name, outcome.GATE_REJECTION, verdict="REJECTED", feature=feature,
-            gates=gates, output_version=_ov))
+            feature_source=source, gates=gates, output_version=_ov))
         # --soft keeps exit 0 so a do-while body can branch on the verdict; the
         # terminal gate (hard `specops preflight`) is what fails closed on REJECTED.
         if not soft:
@@ -1210,6 +1229,22 @@ def gate_report(
 # ---------------------------------------------------------------------------
 # lane subcommands (Feature 013) — agent/workflow-facing, non-interactive
 # ---------------------------------------------------------------------------
+
+@feature_app.command("use")
+@_handle_errors
+def feature_use(
+    directory: str = typer.Argument(..., help="Feature directory, e.g. specs/026-recovery."),
+) -> None:
+    """Repoint the active feature to DIRECTORY.
+
+    Reports the previous and new directory, which downstream artifacts are not yet
+    present, and any unfinished work left on the outgoing feature. Refuses when
+    SPECIFY_FEATURE_DIRECTORY names somewhere else — the write would have no effect.
+    """
+    root = Path(".")
+    from specops import feature
+    typer.echo(feature.cmd_use(root, directory))
+
 
 @lane_app.command("start")
 @_handle_errors

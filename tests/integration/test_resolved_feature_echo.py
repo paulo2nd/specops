@@ -99,7 +99,11 @@ def test_preflight_names_the_feature_and_summarises_the_suite(
     _all_pass_setup(fake_speckit_repo, test="python -c pass")
     result = cli(fake_speckit_repo, "preflight")
     assert result.returncode == 0, result.stderr
-    assert "feature: 001-demo" in result.stdout
+    # Feature 026: the repo-relative path, matching `consistency` and `status show`.
+    # 0.12.0 emitted the bare directory name here while its own `--json` `feature` key
+    # already carried the relative path — the two disagreed. One rendering now, so a
+    # stale pointer reads the same wherever it surfaces.
+    assert "feature: specs/001-demo" in result.stdout
     # The suite always states how many gates actually executed (#73).
     assert "[gates] " in result.stdout
     assert "executed" in result.stdout
@@ -141,3 +145,63 @@ def test_feature_key_uses_posix_separators(tmp_path: Path) -> None:
     payload = json.loads(cli(root, "consistency", "--json").stdout)
     assert "\\" not in payload["feature"]
     assert payload["feature"] == "specs/001-done"
+
+
+# ---------------------------------------------------------------------------
+# Feature 026 (T050) — an inferred resolution says so, and `--json` names its source
+# ---------------------------------------------------------------------------
+
+
+def test_inferred_resolution_is_labelled(tmp_path: Path) -> None:
+    """FR-014a: SpecOps guesses the newest `specs/NNN-*` where Spec Kit would error.
+
+    The guess is kept — repositories already run without a pointer file and removing
+    it would break them — but a guess presented as an answer is the same silence #75
+    is about, so the echo says which it is.
+    """
+    root = _repo(tmp_path, pointer="specs/001-done", features=("001-done", "002-newer"))
+    (root / "specs" / "002-newer" / "tasks.md").write_text("- [ ] T001 [SC-001] do it\n")
+    (root / ".specify" / "feature.json").unlink()
+
+    result = cli(root, "consistency")
+    assert "feature: specs/002-newer" in result.stdout
+    assert "inferred" in result.stdout
+
+
+def test_pointer_resolution_is_not_labelled(tmp_path: Path) -> None:
+    root = _repo(tmp_path, pointer="specs/001-done", features=("001-done",))
+    result = cli(root, "consistency")
+    assert "feature: specs/001-done" in result.stdout
+    assert "inferred" not in result.stdout
+
+
+def test_consistency_json_carries_the_feature_source(tmp_path: Path) -> None:
+    """Additive per-command key alongside `feature` — no output_version change."""
+    root = _repo(tmp_path, pointer="specs/001-done", features=("001-done",))
+    payload = json.loads(cli(root, "consistency", "--json").stdout)
+    assert payload["feature_source"] == "pointer"
+    assert payload["output_version"] == 1
+
+
+def test_consistency_json_reports_an_inferred_source(tmp_path: Path) -> None:
+    root = _repo(tmp_path, pointer="specs/001-done", features=("001-done",))
+    (root / ".specify" / "feature.json").unlink()
+    payload = json.loads(cli(root, "consistency", "--json").stdout)
+    assert payload["feature_source"] == "inferred"
+
+
+def test_override_resolution_is_reported_as_the_source(tmp_path: Path) -> None:
+    """With Spec Kit's override set, SpecOps must resolve — and name — the same feature
+    Spec Kit resolves from identical repository state (FR-009a)."""
+    import os
+
+    root = _repo(tmp_path, pointer="specs/001-done", features=("001-done", "002-newer"))
+    (root / "specs" / "002-newer" / "tasks.md").write_text("- [ ] T001 [SC-001] do it\n")
+    env = {**os.environ, "SPECIFY_FEATURE_DIRECTORY": "specs/002-newer"}
+    result = subprocess.run(
+        ["specops", "consistency", "--json"], cwd=root, capture_output=True,
+        text=True, env=env,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["feature"] == "specs/002-newer"
+    assert payload["feature_source"] == "override"

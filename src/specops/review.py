@@ -461,8 +461,13 @@ def run_gates(root: Path) -> str:
     # Name the feature the suite ran against (#75). Part of the rendered report rather
     # than a separate echo, so it rides the same stream as the verdict — stdout on a
     # pass, stderr on a failure — keeping the "failure evidence is stderr-only" contract.
-    feature_dir = speckit.resolve_feature_dir(root)
-    header = f"feature: {feature_dir.name}\n" if feature_dir is not None else ""
+    resolved = speckit.resolve_feature(root)
+    header = (
+        # Feature 026 (FR-014a): the same rendering `status show` and `consistency`
+        # use, so an inferred resolution is labelled identically everywhere.
+        f"feature: {speckit.describe(root, resolved)}\n"
+        if resolved.path is not None else ""
+    )
     rendered = header + report.render()
     warning = digest_drift_warning(root)
     suffix = f"\n[warning] {warning}" if warning else ""

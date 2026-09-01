@@ -47,19 +47,32 @@ class ResolvedFeature:
     error: str | None = None
 
 
-def _from_override(root: Path) -> ResolvedFeature | None:
-    """Level 1: the explicit environment override, or None when unset/empty.
+def override_value(root: Path) -> Path | None:
+    """The environment override as a resolved path, or None when unset/empty.
 
-    An exported-but-empty value is not a selection — Spec Kit's `if ($env:...)` is
-    falsy for an empty string, so resolution must fall through to the pointer file.
+    Exposed so a command can tell whether writing the pointer file would have any
+    effect — the override outranks it (see :func:`resolve_feature`). Returns the path
+    whether or not it exists; existence is the caller's question to ask.
     """
     raw = os.environ.get(FEATURE_DIR_ENV)
     if not raw:
         return None
     candidate = Path(raw)
     if not candidate.is_absolute():
-        candidate = root / candidate  # Spec Kit joins a relative value to the repo root
-    candidate = candidate.resolve()
+        candidate = root / candidate
+    return candidate.resolve()
+
+
+def _from_override(root: Path) -> ResolvedFeature | None:
+    """Level 1: the explicit environment override, or None when unset/empty.
+
+    An exported-but-empty value is not a selection — Spec Kit's `if ($env:...)` is
+    falsy for an empty string, so resolution must fall through to the pointer file.
+    """
+    candidate = override_value(root)  # Spec Kit joins a relative value to the repo root
+    if candidate is None:
+        return None
+    raw = os.environ[FEATURE_DIR_ENV]
     if candidate.is_dir():
         return ResolvedFeature(candidate, "override")
     return ResolvedFeature(
@@ -432,3 +445,23 @@ def host_prompt_paths(root: Path) -> list[Path]:
             if p is not None:
                 paths.append(p)
     return paths
+
+
+def describe(root: Path, resolved: ResolvedFeature | None = None) -> str:
+    """Render the resolved feature for human output, labelling an inferred answer.
+
+    One rendering for every echo (`status show`, `consistency`, `preflight`) so the
+    label cannot drift between them. Returns "(unresolved)" when nothing resolved.
+    """
+    resolved = resolved or resolve_feature(root)
+    if resolved.path is None:
+        return resolved.error or "(unresolved)"
+    try:
+        rel = resolved.path.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        rel = resolved.path.as_posix()
+    if resolved.source == "inferred":
+        return (
+            f"{rel} (inferred — no {FEATURE_DIR_ENV} and no usable .specify/feature.json)"
+        )
+    return rel
