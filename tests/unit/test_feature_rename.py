@@ -378,3 +378,29 @@ def test_a_malformed_pointer_aborts_before_the_identity_is_written(repo: Path) -
 
     assert _ledger(repo / OLD)["feature"] == "026-old-name"
     assert "`026-old-name`" in (repo / OLD / "spec.md").read_text()
+
+
+def test_a_short_branch_name_does_not_match_inside_words(repo: Path) -> None:
+    """A ledger recorded on `main` must not turn every "remaining"/"domain" in the
+    artifacts into a stale reference — the scan matches whole identifiers only."""
+    data = _ledger(repo / OLD)
+    data["branch"] = "main"
+    (repo / OLD / "status.yaml").write_text(yaml.dump(data), encoding="utf-8")
+    (repo / OLD / "plan.md").write_text("# Plan\nremaining work in this domain\n")
+    (repo / OLD / "checklists" / "requirements.md").write_text("maintainable\n")
+
+    out = feature.cmd_rename(repo, OLD, NEW)
+    assert "remaining reference" not in out
+
+    # A real whole-word mention is still reported.
+    (repo / NEW / "plan.md").write_text("# Plan\nbased on main\n")
+    out = feature.cmd_rename(repo, NEW, "specs/028-third")
+    assert "plan.md:2" in out
+
+
+def test_branch_is_not_silently_dropped_when_the_feature_has_no_ledger(repo: Path) -> None:
+    """--branch has nothing to record without a ledger; saying so beats exit 0 and
+    a caller believing the reference was updated."""
+    (repo / OLD / "status.yaml").unlink()
+    out = feature.cmd_rename(repo, OLD, NEW, branch="027-new-name")
+    assert "not recorded" in out

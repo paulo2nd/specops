@@ -175,7 +175,12 @@ def cmd_use(root: Path, target: str) -> str:
     if previous is not None and (root / previous).resolve() == resolved:
         return f"Active feature already: {rel} (no change)."
 
+    # With no pointer file, resolution *infers* the newest specs/NNN-* — which can be
+    # the very directory being pointed at. Reporting its own open work as "left behind"
+    # would be a plain lie, so an outgoing feature identical to the incoming one is none.
     outgoing = speckit.resolve_feature_dir(root)
+    if outgoing is not None and outgoing.resolve() == resolved:
+        outgoing = None
     _write_pointer(root, rel)
 
     lines = [f"Active feature: {previous or '(none)'} → {rel}"]
@@ -255,11 +260,16 @@ def _validate_rename(root: Path, source: str, target: str) -> tuple[Path, Path]:
 def _stale_references(feature_dir: Path, old_name: str, old_branch: str | None) -> list[str]:
     """Every remaining mention of the old identity, as ``<relpath>:<line>`` (FR-016b).
 
-    A plain literal scan: its false positives — a deliberate reference to the old
-    feature — are exactly the cases a human must judge, which is why the result is
-    informational and never fails the rename.
+    A literal scan bounded to whole identifiers: its false positives — a deliberate
+    reference to the old feature — are exactly the cases a human must judge, which is
+    why the result is informational and never fails the rename. Unbounded substring
+    matching is a different thing entirely: a ledger recorded on ``main`` would make
+    every "remaining", "domain" and "maintain" in the artifacts a stale reference.
     """
-    needles = {n for n in (old_name, old_branch) if n}
+    needles = [re.escape(n) for n in {n for n in (old_name, old_branch) if n}]
+    if not needles:
+        return []
+    pattern = re.compile(rf"(?<![\w-])(?:{'|'.join(needles)})(?![\w-])")
     hits: list[str] = []
     for path in sorted(feature_dir.rglob("*.md")):
         try:
@@ -269,7 +279,7 @@ def _stale_references(feature_dir: Path, old_name: str, old_branch: str | None) 
         rel = path.relative_to(feature_dir).as_posix()
         hits.extend(
             f"{rel}:{n}" for n, line in enumerate(lines, start=1)
-            if any(needle in line for needle in needles)
+            if pattern.search(line)
         )
     return hits
 
@@ -335,10 +345,14 @@ def cmd_rename(
         # rewrite of recorded facts this command promises never to touch.
         fsutil.atomic_write(ledger_path, ledger.dump(data))
 
-    previous_header = _rewrite_identity_header(src / "spec.md", new_name)
-    stale = _stale_references(src, old_name, old_branch)
-
+    # Everything after the ledger write shares one rollback: an unwritable spec.md is
+    # as capable of aborting the rename as a failed move, and it would otherwise leave
+    # the source directory carrying the *new* identity under its old name — the exact
+    # half-renamed state the ordering exists to prevent.
+    previous_header: str | None = None
     try:
+        previous_header = _rewrite_identity_header(src / "spec.md", new_name)
+        stale = _stale_references(src, old_name, old_branch)
         os.rename(src, dst)
     except OSError as exc:
         # Undo the two in-place writes so the pre-rename state is exactly restored.
@@ -346,7 +360,7 @@ def cmd_rename(
             fsutil.atomic_write(ledger_path, ledger_backup)
         if previous_header is not None:
             _rewrite_identity_header(src / "spec.md", previous_header)
-        raise SpecopsError(f"Could not move {src_rel} to {dst_rel}: {exc}") from None
+        raise SpecopsError(f"Could not rename {src_rel} to {dst_rel}: {exc}") from None
 
     lines = [f"Renamed: {src_rel} → {dst_rel}"]
     if ledger_backup is not None:
@@ -359,6 +373,13 @@ def cmd_rename(
             f"branch reference unchanged ({old_branch or 'unset'}) — pass --branch to update it."
         )
         lines.append(identity)
+    elif branch:
+        # No ledger to carry the reference: say so rather than accept --branch and
+        # silently drop it, which reads as "recorded" to the caller.
+        lines.append(
+            f"No ledger in {dst_rel} — --branch '{branch}' was not recorded "
+            "(run 'specops status init-spec' first)."
+        )
     if previous_header is not None:
         lines.append("spec.md: **Feature Branch** header updated.")
 

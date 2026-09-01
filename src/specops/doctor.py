@@ -311,8 +311,11 @@ def _selection_finding(root: Path, resolved: speckit.ResolvedFeature) -> Finding
         )
     # A stored pointer that does not resolve is a *stated* selection that cannot be
     # honoured. Resolution still falls back (existing repositories depend on it) —
-    # doctor is where that fallback stops being invisible.
-    stated = _stated_pointer(root)
+    # doctor is where that fallback stops being invisible. Only when the pointer is
+    # actually consulted, though: a live override outranks it, so a stale pointer
+    # underneath one changes nothing and blocking on it would report a healthy
+    # repository as broken — and skip every identity check behind the early return.
+    stated = None if resolved.source == "override" else _stated_pointer(root)
     if stated is not None and not (root / stated).is_dir():
         return _finding(
             BLOCKING, "selection",

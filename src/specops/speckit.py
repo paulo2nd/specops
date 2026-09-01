@@ -117,7 +117,10 @@ def _from_inference(root: Path) -> ResolvedFeature | None:
         key=_numeric_key,
         reverse=True,
     )
-    return ResolvedFeature(candidates[0], "inferred") if candidates else None
+    # Resolved like the other two levels: an unresolved path breaks `relative_to` in
+    # `describe` whenever the repo root sits behind a symlink (macOS `/tmp`, a linked
+    # home), and the echo then prints an absolute path instead of a repo-relative one.
+    return ResolvedFeature(candidates[0].resolve(), "inferred") if candidates else None
 
 
 def resolve_feature(root: Path) -> ResolvedFeature:

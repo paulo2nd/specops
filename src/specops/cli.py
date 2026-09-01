@@ -345,8 +345,10 @@ def _run_gate(command_name: str, json_out: bool, soft: bool, sarif: bool) -> Non
         _emit_sarif(root)
         return
     _ov = gateprofiles.OUTPUT_VERSION
-    feature, _described, source = _feature_echo(root)
     if json_out:
+        # Only the JSON envelope needs the echo here; the human path gets its own
+        # (single) resolution inside `review.run_gates`, which renders the header.
+        feature, _described, source = _feature_echo(root)
         try:
             report = review_mod.evaluate(root)
         except (LedgerParseError, SpecopsError) as exc:

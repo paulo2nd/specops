@@ -247,3 +247,25 @@ def test_outside_a_git_repository_is_refused(tmp_path: Path) -> None:
     (root / "specs" / "001-x" / "spec.md").write_text("# x\n")
     with pytest.raises(SpecopsError, match="[Gg]it"):
         feature.cmd_use(root, "specs/001-x")
+
+
+# ---------------------------------------------------------------------------
+# Review fix — the feature being pointed AT is never its own "outgoing" feature
+# ---------------------------------------------------------------------------
+
+def test_first_pointer_write_does_not_report_the_target_as_outgoing(repo: Path) -> None:
+    """With no pointer file, resolution *infers* the newest specs/NNN-*. Pointing at
+    that same directory must not report its own open work as "left behind"."""
+    (repo / ".specify" / "feature.json").unlink()
+    second = repo / "specs" / "002-second"          # the newest, so what inference picks
+    make_v1_ledger(second, feature="002-second")
+    data = yaml.safe_load((second / "status.yaml").read_text(encoding="utf-8"))
+    data["tasks"] = [{"id": "T001", "status": "IN_PROGRESS"}]
+    (second / "status.yaml").write_text(yaml.dump(data), encoding="utf-8")
+
+    out = feature.cmd_use(repo, "specs/002-second")
+    assert _pointer(repo) == "specs/002-second"
+    assert "unfinished" not in out.lower()
+
+    # The guard is scoped to identity, not disabled: leaving 002 for 001 still reports it.
+    assert "T001 IN_PROGRESS" in feature.cmd_use(repo, "specs/001-first")

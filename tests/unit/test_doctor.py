@@ -293,3 +293,18 @@ def test_genuinely_absent_feature_is_still_ok(tmp_path: Path) -> None:
     dom = _domains(root)["feature_identity"]
     assert dom["severity"] == doctor.OK
     assert dom["findings"][0]["next_action_code"] == doctor.NA_START_OR_SELECT_FEATURE
+
+
+def test_a_live_override_outranks_a_dangling_pointer_underneath_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pointer is never consulted while the override resolves, so a stale one
+    changes nothing. Blocking on it would call a healthy repo broken — and the early
+    return would skip every identity check behind it."""
+    root = _resolution_repo(tmp_path, pointer="specs/999-gone")
+    monkeypatch.setenv("SPECIFY_FEATURE_DIRECTORY", "specs/002-newer")
+
+    dom = _domains(root)["feature_identity"]
+    assert dom["severity"] == doctor.OK
+    assert "999-gone" not in dom["findings"][0]["message"]
+    assert "SPECIFY_FEATURE_DIRECTORY" in dom["findings"][0]["message"]
