@@ -752,7 +752,9 @@ branch yourself with `git branch -m` and pass the new name via `--branch`. Witho
 the flag the ledger's branch reference is left as recorded and the output says so.
 With it, the next command fails closed on the identity check until the Git branch
 actually matches — correct behaviour, which the output warns you about rather than
-letting it surface later as an inexplicable refusal.
+letting it surface later as an inexplicable refusal. A feature with no ledger has
+nothing for `--branch` to record; the output says the flag was not recorded rather
+than accepting it silently.
 
 **Artifact prose is never rewritten.** Only the `**Feature Branch**` header in
 `spec.md` — the one structured identity token SpecOps owns — is updated. Every other

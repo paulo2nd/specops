@@ -345,16 +345,18 @@ def cmd_rename(
         # rewrite of recorded facts this command promises never to touch.
         fsutil.atomic_write(ledger_path, ledger.dump(data))
 
-    # Everything after the ledger write shares one rollback: an unwritable spec.md is
-    # as capable of aborting the rename as a failed move, and it would otherwise leave
-    # the source directory carrying the *new* identity under its old name — the exact
-    # half-renamed state the ordering exists to prevent.
+    # Everything after the ledger write shares one rollback: an unreadable or unwritable
+    # spec.md is as capable of aborting the rename as a failed move, and it would
+    # otherwise leave the source directory carrying the *new* identity under its old
+    # name — the exact half-renamed state the ordering exists to prevent. A spec.md
+    # that is not UTF-8 raises UnicodeDecodeError, not OSError, and is caught for the
+    # same reason `_stale_references` catches it: artifacts are not always well-formed.
     previous_header: str | None = None
     try:
         previous_header = _rewrite_identity_header(src / "spec.md", new_name)
         stale = _stale_references(src, old_name, old_branch)
         os.rename(src, dst)
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         # Undo the two in-place writes so the pre-rename state is exactly restored.
         if ledger_backup is not None:
             fsutil.atomic_write(ledger_path, ledger_backup)

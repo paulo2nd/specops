@@ -404,3 +404,19 @@ def test_branch_is_not_silently_dropped_when_the_feature_has_no_ledger(repo: Pat
     (repo / OLD / "status.yaml").unlink()
     out = feature.cmd_rename(repo, OLD, NEW, branch="027-new-name")
     assert "not recorded" in out
+
+
+def test_a_non_utf8_spec_rolls_the_ledger_identity_back(repo: Path) -> None:
+    """An undecodable spec.md aborts the rename with UnicodeDecodeError, not OSError.
+    Uncaught it left status.yaml stamped with the NEW identity under the OLD directory
+    — the half-renamed state the ordering exists to prevent."""
+    (repo / OLD / "spec.md").write_bytes(
+        b"# Spec\n\n**Feature Branch**: `026-old`\n\xff\xfe not utf-8\n"
+    )
+    before = (repo / OLD / "status.yaml").read_text(encoding="utf-8")
+
+    with pytest.raises(SpecopsError):
+        feature.cmd_rename(repo, OLD, NEW)
+
+    assert (repo / OLD).is_dir() and not (repo / NEW).exists()
+    assert (repo / OLD / "status.yaml").read_text(encoding="utf-8") == before

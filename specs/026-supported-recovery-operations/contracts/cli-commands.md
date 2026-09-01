@@ -92,7 +92,10 @@ Active feature pointer followed the rename.
 
 Without `--branch`, line 2 reads `branch reference unchanged (026-y) — pass
 --branch to update it`. When the renamed feature was not active, line 4 reads
-`Active feature pointer unchanged (points at specs/024-z).`
+`Active feature pointer unchanged (points at specs/024-z).` When the feature has no
+ledger there is nothing for `--branch` to record, and line 2 says so rather than
+accepting the flag silently: `No ledger in specs/027-y — --branch '027-y' was not
+recorded (run 'specops status init-spec' first).`
 
 **Refusals (exit 1)**:
 
