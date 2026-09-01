@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from specops import doctor, ledger
@@ -177,3 +178,118 @@ def test_active_feature_scope_ignores_other_features(doctor_healthy_repo: Path) 
     assert result.status == doctor.OK  # still healthy — 002-other is not scanned
     blob = doctor.doctor_json(result)
     assert "002-other" not in blob
+
+
+# ---------------------------------------------------------------------------
+# Feature 026 — doctor names the active-feature resolution, and fails on a broken one
+# ---------------------------------------------------------------------------
+
+
+def _resolution_repo(tmp_path: Path, *, pointer: str | None,
+                     features: tuple[str, ...] = ("001-old", "002-newer")) -> Path:
+    """A Spec Kit layout with `features` present and `pointer` as the stored value."""
+    import json as _json
+    import subprocess as _sp
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    _sp.run(["git", "init", str(root)], check=True, capture_output=True)
+    _sp.run(["git", "config", "user.email", "t@t.com"], cwd=root, check=True)
+    _sp.run(["git", "config", "user.name", "T"], cwd=root, check=True)
+    (root / "README.md").write_text("# t\n")
+    _sp.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    _sp.run(["git", "commit", "-m", "i"], cwd=root, check=True, capture_output=True)
+
+    (root / ".specify" / "templates").mkdir(parents=True)
+    for name in features:
+        d = root / "specs" / name
+        d.mkdir(parents=True)
+        (d / "spec.md").write_text("# x\n")
+    if pointer is not None:
+        (root / ".specify" / "feature.json").write_text(
+            _json.dumps({"feature_directory": pointer})
+        )
+    return root
+
+
+def test_unresolvable_override_is_blocking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression guard for the state Feature 026 itself created.
+
+    Before SpecOps honoured `SPECIFY_FEATURE_DIRECTORY`, a broken one was inert:
+    doctor resolved through the pointer and answered correctly. Once the override
+    takes precedence, an unresolvable one made doctor report `ok — no active
+    SpecOps feature` and advise `status init-spec`, while a perfectly good pointer
+    sat unused. Advice derived from the wrong diagnosis is worse than no advice.
+    """
+    root = _resolution_repo(tmp_path, pointer="specs/001-old")
+    monkeypatch.setenv("SPECIFY_FEATURE_DIRECTORY", "specs/999-gone")
+
+    dom = _domains(root)["feature_identity"]
+    assert dom["severity"] == doctor.BLOCKING
+    finding = dom["findings"][0]
+    assert "SPECIFY_FEATURE_DIRECTORY" in finding["message"]
+    assert "999-gone" in finding["message"]
+    assert finding["next_action_code"] == doctor.NA_RESOLVE_FEATURE_SELECTION
+    assert doctor.cmd_doctor(root).exit_code != 0
+
+
+def test_dangling_pointer_is_blocking_not_silently_replaced(tmp_path: Path) -> None:
+    """A pointer naming a missing directory is a *stated* selection that cannot be
+    honoured. Falling through to the newest `specs/NNN-*` answers about a different
+    feature and calls it healthy — #75's failure mode inside the command whose job
+    is to catch it."""
+    root = _resolution_repo(tmp_path, pointer="specs/999-gone")
+
+    dom = _domains(root)["feature_identity"]
+    assert dom["severity"] == doctor.BLOCKING
+    finding = dom["findings"][0]
+    assert "999-gone" in finding["message"]
+    assert "002-newer" not in finding["message"]   # never answers about another feature
+    assert finding["next_action_code"] == doctor.NA_RESOLVE_FEATURE_SELECTION
+
+
+def test_inferred_resolution_is_a_warning(tmp_path: Path) -> None:
+    """FR-014a: the inference is reported *wherever* the resolved feature is echoed,
+    and doctor echoes it. A guess presented as a fact is the silence #75 is about."""
+    root = _resolution_repo(tmp_path, pointer=None)
+
+    dom = _domains(root)["feature_identity"]
+    assert dom["severity"] == doctor.WARNING
+    finding = dom["findings"][0]
+    assert "002-newer" in finding["message"]
+    assert "inferred" in finding["message"]
+    assert finding["next_action_code"] == doctor.NA_RESOLVE_FEATURE_SELECTION
+
+
+def test_pointer_resolution_stays_ok_and_unlabelled(tmp_path: Path) -> None:
+    """The healthy path is byte-identical to before: no new noise on a good repo."""
+    root = _resolution_repo(tmp_path, pointer="specs/002-newer")
+
+    dom = _domains(root)["feature_identity"]
+    assert dom["severity"] == doctor.OK
+    assert dom["findings"][0]["message"] == "active feature: 002-newer"
+
+
+def test_override_resolution_is_reported_as_the_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A *working* override is healthy — but naming it explains why doctor answers
+    about a feature the pointer file does not name."""
+    root = _resolution_repo(tmp_path, pointer="specs/001-old")
+    monkeypatch.setenv("SPECIFY_FEATURE_DIRECTORY", "specs/002-newer")
+
+    dom = _domains(root)["feature_identity"]
+    assert dom["severity"] == doctor.OK
+    assert "002-newer" in dom["findings"][0]["message"]
+    assert "SPECIFY_FEATURE_DIRECTORY" in dom["findings"][0]["message"]
+
+
+def test_genuinely_absent_feature_is_still_ok(tmp_path: Path) -> None:
+    """No pointer and no `specs/` at all remains a supported resting state — this
+    change must not turn "nothing started yet" into a failure."""
+    root = _resolution_repo(tmp_path, pointer=None, features=())
+    dom = _domains(root)["feature_identity"]
+    assert dom["severity"] == doctor.OK
+    assert dom["findings"][0]["next_action_code"] == doctor.NA_START_OR_SELECT_FEATURE

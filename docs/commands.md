@@ -415,8 +415,10 @@ that visible. `--json` carries the same value as the additive `feature` key.
 Read-only diagnostic (Feature 014). Inspects every SpecOps-specific surface for the
 **active feature only** and reports a per-domain, severity-classified result with a
 deterministic next action. Ten domains: environment readiness, CLI/extension
-compatibility, integration, legacy artifacts, configuration, feature identity, ledger
-schema + integrity, context-map health, workflow/ledger divergence, and preflight gate
+compatibility, integration, legacy artifacts, configuration, feature identity
+(including **how** the active feature was selected — a broken pointer or an
+unresolvable `SPECIFY_FEATURE_DIRECTORY` is blocking, an inferred answer is a
+warning), ledger schema + integrity, context-map health, workflow/ledger divergence, and preflight gate
 availability. It mutates nothing, runs fully offline, and never executes `specify` or a
 gate command — it *defers* to the native `specify check` / `specify workflow status` by
 pointing at them.

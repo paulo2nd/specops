@@ -95,7 +95,7 @@ Roadmap status uses four values:
 | 024 | Test Execution Only at the Review Gate | MERGED | 012, 021 | Review Integrity |
 | 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
 | 026 | Supported Recovery Operations | MERGED | 006, 010, 021 | Field Hardening |
-| 027 | Cross-Round Review Coverage & Resolution Diagnostics | PLANNED | 025, 026 | Field Hardening |
+| 027 | Cross-Round Review Coverage | PLANNED | 025, 026 | Field Hardening |
 
 ### Build sequence (dependency review — 2026-07-23)
 
@@ -237,24 +237,7 @@ Triage, verified against `main` @ `bfaf85b`:
   conflict with 027.
 - **027** second — it revises Feature 025's own coverage model, and its recovery
   story (an approval blocked by a never-read baseline file) reads better once
-  026 has given the ledger a supported correction path. It also **must** follow
-  026: the resolution diagnostics it adds report the `override` / `pointer` /
-  `inferred` vocabulary 026 introduces, and cover states only 026's `feature
-  rename` can produce.
-
-> **Scope added to 027 during 026's implementation (2026-09-01)**
-
-`doctor` reports `ok` on a broken active-feature pointer — verified against the
-026 branch, both cases below. It lands in 027 rather than a new feature because it
-is the same defect shape as #76 (a surface that reports health about a question it
-answered wrongly) and because 027 is the last feature of Field Hardening; splitting
-it out would close the milestone with a known blind spot open.
-
-| State | What `doctor` does today | What it should do |
-|---|---|---|
-| `.specify/feature.json` names a missing directory | `[ok] active feature: 002-newer`, exit 0 — the inference fallback answers about a **different** feature | blocking finding naming the dangling pointer; next action `feature use` |
-| `SPECIFY_FEATURE_DIRECTORY` names a missing directory, pointer valid | `[ok] no active SpecOps feature`, exit 0, advises `status init-spec` — acting on the wrong diagnosis | blocking finding naming the override; next action: unset it |
-| resolution fell back to inference | reported as an ordinary active feature | warning naming the inference |
+  026 has given the ledger a supported correction path.
 
 Release point: **`0.12.0`** for all five reproduced defects plus the #72 invariant
 test. A `0.11.1` patch was prepared for the first three (PR #79, on the `0.5.1`
@@ -1458,7 +1441,7 @@ precondition failures (the #72 invariant).
 > artifacts, and ledger identity — all recording, never validating, and never
 > mutating or deleting a prior evidence entry.
 
-## Feature 027 — Cross-Round Review Coverage & Resolution Diagnostics
+## Feature 027 — Cross-Round Review Coverage
 
 ### Objective
 
@@ -1472,12 +1455,6 @@ more confident the process looks while its coverage narrows (#76). An adopter's
 out-of-band full-feature review has already caught, in this blind spot, two
 blocking defects in one feature and a cross-tenant data leak in another, the
 latter after four rounds including one that ended APPROVED.
-
-The feature also closes a second blind spot of the same shape, found while
-implementing Feature 026: `doctor` reports `ok` on a broken active-feature
-pointer. Both are cases where a surface whose job is to detect a problem reports
-health instead — the review loop about its own coverage, the health command about
-its own resolution — so they are fixed together rather than in sequence.
 
 ### Required outcomes
 
@@ -1495,29 +1472,11 @@ its own resolution — so they are fixed together rather than in sequence.
 - The reviewer directive states the tradeoff explicitly: if a round declines to
   read part of the baseline for context-budget reasons, that decision is the
   reviewer's to record, not the tool's to make silently.
-- **`doctor` reports the active-feature resolution, and fails on a broken one.**
-  Verified against `0.13.0` (Feature 026): a pointer naming a directory that does
-  not exist makes `doctor` print `[ok] feature_identity: active feature: 002-newer`
-  and exit 0 — the inference fallback silently answers about a *different* feature,
-  which is #75's failure mode inside the command that exists to catch it. An
-  unresolvable `SPECIFY_FEATURE_DIRECTORY` is worse: `doctor` reports `[ok] no
-  active SpecOps feature` and advises `status init-spec`, while a perfectly valid
-  pointer sits unused — advice that acts on the wrong diagnosis. `doctor` must name
-  the resolution source (`override` / `pointer` / `inferred`, the vocabulary Feature
-  026 already added), raise a blocking finding on an unresolvable override or a
-  dangling pointer, and warn — not pass silently — when the answer is inferred.
-  `feature use` is the next action for both.
-- The recovery operations Feature 026 added leave states `doctor` cannot see: a
-  rename interrupted between the directory move and the pointer write, and a
-  feature whose ledger identity no longer matches its directory name. Both are
-  observable from the same resolution and identity data `doctor` already loads.
 
 ### Explicit non-goals
 
 - No re-reading mandate: the feature records what was covered, it does not
   prescribe how a reviewer spends its context.
-- No new recovery *commands*: Feature 026 shipped the write side. This feature only
-  makes the resulting states visible, and points at the command that fixes each.
 - No change to the round cap, the finding lifecycle, or the deterministic gate
   suite.
 - No path-similarity heuristics — coverage stays derived from commit reach, as
@@ -1530,10 +1489,7 @@ baseline-changed file fails closed on approval and names that file; the same
 sequence with an anchor round covering it approves; a ledger with no
 reviewed-scope records still closes through the prior behavior; and
 `record-scope` on a corrective round emits both the priority set and the
-not-yet-re-verified full set. Separately: `doctor` exits non-zero and names the
-cause on a dangling `.specify/feature.json` and on an unresolvable
-`SPECIFY_FEATURE_DIRECTORY`, warns when the resolution was inferred, and reports
-the resolution source in both its human and `--json` output.
+not-yet-re-verified full set.
 
 ### `/speckit.specify` brief
 
@@ -1543,10 +1499,6 @@ the resolution source in both its human and `--json` output.
 > paths no round has ever read, and APPROVED fails closed while that never-read
 > set is non-empty — degrading to today's behavior on ledgers with no
 > reviewed-scope records, and never prescribing how a reviewer spends its context.
-> In the same feature, make `doctor` report the active-feature resolution source
-> and fail on a broken one: today a dangling pointer or an unresolvable
-> `SPECIFY_FEATURE_DIRECTORY` both report `ok`, so the health command answers about
-> the wrong feature — or about none — while claiming health.
 
 ## Dependency and Replanning Policy
 

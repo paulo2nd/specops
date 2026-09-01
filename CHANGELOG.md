@@ -59,9 +59,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SpecOps resolution is read-only.
 - **An inferred feature resolution says so.** When neither source resolves, SpecOps
   falls back to the newest `specs/NNN-*` where Spec Kit would error. The fallback stays
-  — repositories already run without a pointer file — but `status show`, `consistency`
-  and `preflight` now label it, and the two gates carry the source as an additive
-  `feature_source` JSON key (`override` | `pointer` | `inferred`).
+  — repositories already run without a pointer file — but `status show`, `consistency`,
+  `preflight` and `doctor` now label it, and the two gates carry the source as an
+  additive `feature_source` JSON key (`override` | `pointer` | `inferred`).
+- **`doctor` fails on a broken active-feature selection** instead of reporting `ok`.
+  Three states passed silently before:
+  - An **unresolvable `SPECIFY_FEATURE_DIRECTORY`** made `doctor` report `no active
+    SpecOps feature` and advise `status init-spec` while a perfectly valid pointer sat
+    unused — advice derived from the wrong diagnosis. This state did not exist before
+    this release (SpecOps ignored the variable entirely, so a broken one was inert), so
+    the fix ships with the change that created it.
+  - A **`.specify/feature.json` naming a directory that does not exist** let resolution
+    fall through to the newest `specs/NNN-*`, so `doctor` reported health about a
+    *different* feature — #75's failure mode inside the command whose job is to catch
+    it. Resolution still falls back (existing repositories depend on it); `doctor` is
+    where that fallback stops being invisible.
+  - An **inferred** answer was presented as an ordinary active feature.
+
+  The first two are blocking with the new `resolve_feature_selection` next-action code
+  (additive under `output_version: 1`); the third is a warning. A healthy repository's
+  output is unchanged, and "no feature started yet" remains a supported `ok` state.
 
 ### Changed
 
