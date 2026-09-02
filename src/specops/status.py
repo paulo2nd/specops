@@ -1125,7 +1125,9 @@ def _gate_review_coverage(data: records.LedgerDocument, repo: gitops.Repository)
     rewrite orphaned, credited for a span nothing can verify) and names the files;
     they catch what it misses (a path re-touched after the last round is still a
     member of the reached set, so a set difference is blind to it). Every state that
-    blocked before still blocks, with its message unchanged.
+    blocked before still blocks; because the new branch runs first, a ledger that
+    previously failed on `has_anchor` or `unreviewed_tail` now gets the never-reached
+    message instead — more specific, since it names the files.
     """
     cycles = data.get("review_cycles") or []
     if not reviewscope.has_any_scope(cycles):
@@ -1149,8 +1151,9 @@ def _gate_review_coverage(data: records.LedgerDocument, repo: gitops.Repository)
         raise SpecopsError(
             f"Cannot enter DONE: {total} product path(s) changed since the baseline "
             f"have never been reviewed by any recorded round: {', '.join(named)}"
-            f"{suffix}. Run 'specops handoff record-scope' to re-anchor the review "
-            "scope over them before approving."
+            f"{suffix}. Record a review round whose range reaches them before "
+            "approving — 'specops handoff record-scope' re-anchors over "
+            "baseline..HEAD when the previous round's HEAD no longer resolves."
         )
     # The Feature 025 chain checks stay: a set difference cannot see a path that was
     # reached by an earlier round and re-touched after the last one, and cannot see

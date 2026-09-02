@@ -1,7 +1,7 @@
 """Frozen-shape contract test — status.yaml ledger, v9 (021/025/026). [SC-002][SC-007]
 
 Locks the required-field set of each ledger record and pins the schema baseline at
-CURRENT_SCHEMA == 8 (the migrated, written shape — NOT the template literal). A removal,
+CURRENT_SCHEMA == 9 (the migrated, written shape — NOT the template literal). A removal,
 rename, or retype of a required field, or an unversioned schema bump, fails here.
 
 Feature 025 (v8) added optional-only fields (``reviewed_range``/``review_role`` on a

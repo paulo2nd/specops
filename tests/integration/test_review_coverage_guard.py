@@ -296,3 +296,37 @@ def test_guard_never_reads_a_findings_merit(handoff_repo) -> None:
     cli(root, "handoff", "record-scope")
     r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_a_plain_rename_does_not_falsely_block(handoff_repo, tmp_git_repo: Path) -> None:
+    """Regression: rename detection is similarity-based and NOT transitive across
+    nested ranges. `git mv src/a.py src/b.py` (round 1, seen as a pure rename → only
+    `src/b.py`) followed by a rewrite of `src/b.py` (round 2) makes `baseline..HEAD`
+    report `src/a.py` as deleted — a path in the target set and in no round's reach.
+    That is a benign rename, and it used to block approval permanently: re-running
+    `record-scope` cannot clear it, because the chain start still resolves.
+    """
+    # `handoff_repo` builds on `tmp_git_repo` in place, so writing the file first puts
+    # it in the scaffolding commit the baseline points at.
+    (tmp_git_repo / "src").mkdir(parents=True, exist_ok=True)
+    (tmp_git_repo / "src" / "a.py").write_text("\n".join(f"line {i}" for i in range(60)))
+    root = handoff_repo(review_cycles=[make_cycle(round=1)])
+    assert root == tmp_git_repo
+    git(root, "mv", "src/a.py", "src/b.py")
+    git(root, "commit", "-m", "rename")
+    assert cli(root, "handoff", "record-scope").returncode == 0  # anchor: pure rename
+
+    (root / "src" / "b.py").write_text("\n".join(f"rewritten {i}" for i in range(60)))
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "rewrite")
+    fp = root / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(fp.read_text())
+    data["review_cycles"][0]["result"] = "REJECTED"
+    data["review_cycles"].append(make_cycle(round=2))
+    fp.write_text(yaml.dump(data))
+    obj = json.loads(cli(root, "handoff", "record-scope", "--json").stdout)
+    assert obj["never_reached_paths"] == []
+
+    r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _ledger(root)["current_phase"] == "DONE"

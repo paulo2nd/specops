@@ -20,6 +20,17 @@ never_reached = sorted(target − reached)
 `gitops.name_only_diff` runs `git diff --name-only A B` — a **two-dot tree
 comparison**, not a commit walk (`gitops.py:343-348`).
 
+> **Caveat found in code review (2026-09-02), and it is load-bearing.** The
+> transitivity argument below is about *blob* identity, but `--name-only` does not
+> report raw differing paths: git's **rename detection** is on by default and is
+> similarity-based, so it is not transitive across nested ranges. Verified directly:
+> `git mv a.py b.py` then rewrite `b.py` makes the segment `A..M` report `b.py`
+> alone while the wide `A..H` reports `a.py` *and* `b.py` — putting `a.py` in the
+> target and in no segment. That is a permanent `never_reached` block on a benign
+> rename, and `record-scope` cannot clear it because the chain start still resolves.
+> Every coverage diff therefore passes `--no-renames`, funnelled through the single
+> `reviewscope.changed_paths` helper. The argument holds only with that flag set.
+
 **Rationale**. Soundness on an intact chain is a transitivity argument on tree
 comparison, not an assumption about commit reach: if the rounds chain
 `baseline → t₁ → … → tₙ = HEAD` and file `F` differs between `baseline` and

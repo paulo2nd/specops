@@ -573,9 +573,7 @@ def cmd_record_scope(root: Path) -> HandoffResult:
         return HandoffResult(cmd, SCOPE_UNRESOLVABLE, f"{cmd}: cannot resolve HEAD")
 
     feature_name = str(data.get("feature") or "") or None
-    changed = reviewscope.product_paths(
-        gitops.name_only_diff(repo, dr.from_commit, head), feature_name
-    )
+    changed = reviewscope.changed_paths(repo, dr.from_commit, head, feature_name)
     if not changed and dr.review_role == reviewscope.ANCHOR:
         return HandoffResult(
             cmd, BAD_ARGS, f"{cmd}: no effective diff since baseline — nothing to review"
@@ -596,10 +594,12 @@ def cmd_record_scope(root: Path) -> HandoffResult:
     # past, not a boundary the tool enforces invisibly (#76). Derived per call and
     # never persisted (FR-002/FR-010): a stored copy is a second coverage record
     # able to disagree with the derivation.
-    baseline_paths = (
-        reviewscope.product_paths(gitops.name_only_diff(repo, baseline, head), feature_name)
-        if baseline and gitops.commit_exists(repo, baseline) else list(scope_paths)
-    )
+    if dr.from_commit == baseline:
+        baseline_paths = list(changed)  # the anchor range IS the baseline range
+    elif baseline and gitops.commit_exists(repo, baseline):
+        baseline_paths = reviewscope.changed_paths(repo, baseline, head, feature_name)
+    else:
+        baseline_paths = list(scope_paths)
     in_scope = set(scope_paths)
     not_reverified = [p for p in baseline_paths if p not in in_scope]
 

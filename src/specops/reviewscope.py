@@ -57,6 +57,24 @@ def product_paths(paths: list[str], feature_name: str | None) -> list[str]:
     ]
 
 
+def changed_paths(
+    repo: gitops.Repository, frm: str, to: str, feature_name: str | None
+) -> list[str]:
+    """The product paths changed between *frm* and *to* — the single diff shape every
+    coverage set (target, per-round reach, tail, the printed scope) is derived from.
+
+    Rename detection is **off** (``--no-renames``). It is similarity-based and so not
+    transitive across nested ranges: a ``git mv`` followed by a rewrite makes
+    ``baseline..HEAD`` report the old path as deleted *and* the new path as added,
+    while the round segment containing the rename reports the rename as the new path
+    alone. The old path would then be in the target set and in no round's reach —
+    a permanent, unrecoverable ``never_reached`` block on a benign rename. Comparing
+    paths blob-by-blob restores transitivity: a path that differs from baseline to
+    HEAD must differ across some segment.
+    """
+    return product_paths(gitops.name_only_diff(repo, frm, to, no_renames=True), feature_name)
+
+
 @dataclass(frozen=True)
 class DerivedRange:
     """A round's derived reviewed range: its role and ``<from>..<to>`` endpoints."""
@@ -175,15 +193,12 @@ def assess(
         if isinstance(c, dict) and (ep := _endpoints(c.get("reviewed_range"))) is not None
     ]
     has = bool(recorded)
-    target = (
-        product_paths(gitops.name_only_diff(repo, baseline, head), feature_name)
-        if baseline else []
-    )
+    target = changed_paths(repo, baseline, head, feature_name) if baseline else []
     has_anchor = bool(baseline) and any(frm == baseline for frm, _to in recorded)
     frontier = recorded[-1][1] if recorded else None
     frontier_resolves = frontier is not None and gitops.commit_exists(repo, frontier)
     tail = (
-        product_paths(gitops.name_only_diff(repo, frontier, head), feature_name)
+        changed_paths(repo, frontier, head, feature_name)
         if frontier_resolves and frontier is not None else []
     )
     reached: set[str] = set()
@@ -193,7 +208,7 @@ def assess(
         # leaning on `name_only_diff` returning [] on a non-zero git exit, because
         # "contributes no coverage" is a stated contract, not a happy accident.
         if gitops.commit_exists(repo, frm) and gitops.commit_exists(repo, to):
-            reached.update(product_paths(gitops.name_only_diff(repo, frm, to), feature_name))
+            reached.update(changed_paths(repo, frm, to, feature_name))
     return Assessment(
         has, not target, has_anchor, frontier, frontier_resolves, tail,
         sorted(set(target) - reached),

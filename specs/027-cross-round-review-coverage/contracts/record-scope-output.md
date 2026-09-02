@@ -49,8 +49,13 @@ US1 ships the first two keys; `never_reached_paths` arrives with US2's derivatio
 Each addition is independently additive — a consumer reading only `scope_paths`
 is unaffected by either.
 
-All three are sorted, deduplicated, and repo-relative. All three are **derived
-per call and never persisted** (FR-010).
+All three are deduplicated and repo-relative, and all three are **derived per call
+and never persisted** (FR-010). `never_reached_paths` is sorted; `scope_paths` and
+`baseline_paths` keep git's diff order, because the anchor-round identity
+`scope_paths == baseline_paths` has to hold and `scope_paths` is unchanged from
+Feature 025. Rename detection is **off** for every set: it is similarity-based and
+therefore not transitive across nested ranges, so leaving it on would let a plain
+`git mv` put a path in the baseline set and in no round's reach.
 
 ## Anchor round
 
