@@ -590,20 +590,56 @@ def cmd_record_scope(root: Path) -> HandoffResult:
                 if isinstance(fp, str) and fp and fp not in scope_paths:
                     scope_paths.append(fp)
 
+    # Feature 027 (FR-001): the priority set above narrows; what the reviewer SEES
+    # must not. Emit the whole baseline set too, with the part this round is not
+    # prioritising labelled as unverified — a recommendation the reviewer can see
+    # past, not a boundary the tool enforces invisibly (#76). Derived per call and
+    # never persisted (FR-002/FR-010): a stored copy is a second coverage record
+    # able to disagree with the derivation.
+    baseline_paths = (
+        reviewscope.product_paths(gitops.name_only_diff(repo, baseline, head), feature_name)
+        if baseline and gitops.commit_exists(repo, baseline) else list(scope_paths)
+    )
+    in_scope = set(scope_paths)
+    not_reverified = [p for p in baseline_paths if p not in in_scope]
+
     cycle["reviewed_range"] = dr.range_str
     cycle["review_role"] = dr.review_role
     status.finalize(feature_dir, data, base_rev, base_violations)
+
+    # The history's holes, reported where the reviewer can act on them: paths no
+    # recorded, still-resolvable round reaches. Derived AFTER this round's own range
+    # is recorded — otherwise the round would report its own scope as unreached —
+    # and never persisted (FR-010).
+    never_reached = (
+        reviewscope.assess(repo, baseline, head, _cycles(data), feature_name).never_reached
+        if baseline else []
+    )
 
     header = (
         f"review scope: {dr.review_role} round {cycle.get('round')} — "
         f"{len(scope_paths)} file(s) over {dr.range_str}"
     )
-    human = "\n".join([header, *scope_paths])
+    blocks = [[header, *scope_paths]]
+    if not_reverified:
+        blocks.append([
+            f"not yet re-verified this round ({len(not_reverified)} of "
+            f"{len(baseline_paths)} baseline file(s)):",
+            *not_reverified,
+        ])
+    if never_reached:
+        blocks.append([
+            f"never reviewed by any round ({len(never_reached)}):", *never_reached,
+        ])
+    human = "\n\n".join("\n".join(b) for b in blocks)
     return HandoffResult(cmd, SCOPE_RECORDED, human, {
         "round": cycle.get("round"),
         "review_role": dr.review_role,
         "reviewed_range": dr.range_str,
         "scope_paths": scope_paths,
+        "baseline_paths": baseline_paths,
+        "not_reverified_paths": not_reverified,
+        "never_reached_paths": never_reached,
     })
 
 

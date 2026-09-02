@@ -26,16 +26,35 @@ ANCHOR = "anchor"
 CORRECTIVE = "corrective"
 
 
-def product_paths(paths: list[str], feature_name: str | None) -> list[str]:
-    """Drop SpecOps/Speckit-managed artifacts (``.specify/``, ``specops.json``, the
-    active feature's ``specs/<feature>/`` dir) from *paths*.
+# Spec Kit's feature-artifact root. Hardcoded to match :func:`trace.is_managed`'s
+# own ``specs/<feature>/`` hardcode; a repository that relocates the directory via
+# ``SPECIFY_FEATURE_DIRECTORY`` keeps the narrower active-feature exclusion (a known
+# limit — widening both is a separate change with the drift gate in its blast radius).
+_SPEC_ROOT = "specs/"
 
-    Reuses the drift gate's exclusion (:func:`trace.is_managed`) so the reviewed
+
+def product_paths(paths: list[str], feature_name: str | None) -> list[str]:
+    """Drop SpecOps/Speckit-managed artifacts from *paths*.
+
+    Reuses the drift gate's exclusion (:func:`trace.is_managed`: ``.specify/``,
+    ``specops.json``, the active feature's ``specs/<feature>/`` dir) so the reviewed
     scope and its coverage cover **product** code only — methodology bookkeeping
     (the ledger writes ``status.yaml`` every round) is neither reviewed nor able
     to block approval.
+
+    Feature 027 widens it **for coverage only** to every ``specs/`` path, not just
+    the active feature's. ``is_managed`` resolves the feature name at call time and
+    the ledger keeps no rename history, so after ``specops feature rename`` the old
+    directory's paths would read as product code and park themselves in the
+    never-reached set — blocking approval on methodology prose. A Spec Kit feature
+    directory is never product code, so the narrower rule was always more specific
+    than review coverage needs. :func:`trace.is_managed` itself is unchanged, so the
+    drift gate still sees another feature's artifacts.
     """
-    return [p for p in paths if not trace.is_managed(p, feature_name)]
+    return [
+        p for p in paths
+        if not trace.is_managed(p, feature_name) and not p.startswith(_SPEC_ROOT)
+    ]
 
 
 @dataclass(frozen=True)
@@ -101,6 +120,13 @@ class Assessment:
     frontier: str | None        # the last recorded round's `to` endpoint
     frontier_resolves: bool     # that endpoint still exists in this clone
     unreviewed_tail: list[str]  # product paths changed after the frontier (frontier..HEAD)
+    # Feature 027: product paths changed since the baseline that NO recorded,
+    # still-resolvable round reaches. Sorted, and ADDITIVE to the four fields above —
+    # it does not subsume them. It sees what they cannot (a middle range a rewrite
+    # orphaned, credited for a span nothing can verify); they see what it cannot (a
+    # re-touch of an already-reached path after the last round is still a set member,
+    # so a set difference is blind to it).
+    never_reached: list[str]
 
 
 def assess(
@@ -110,21 +136,39 @@ def assess(
     cycles: list[records.ReviewCycleRecord],
     feature_name: str | None = None,
 ) -> Assessment:
-    """Assess whole-feature review coverage by COMMIT reach, not by path names.
+    """Assess whole-feature review coverage per PATH, derived from commit ranges.
 
-    Each round reviews the full effective diff of its ``from..to`` range, and the
-    rounds chain (an anchor's ``from`` = the baseline; a corrective's ``from`` =
-    the prior round's ``to``), so the recorded rounds jointly cover
-    ``baseline..frontier`` where ``frontier`` is the **last** recorded ``to``. The
-    feature is fully reviewed iff an anchor exists (the chain starts at the current
-    baseline) and no product change lands after the frontier (``frontier..HEAD`` is
-    empty). Only product paths count (managed methodology artifacts excluded via
-    :func:`product_paths`).
+    A product path changed since the baseline is **reached** when it appears in the
+    diff of at least one recorded round whose range still resolves in this clone;
+    ``never_reached`` is the rest. Only product paths count (managed methodology
+    artifacts excluded via :func:`product_paths`).
 
-    This is robust both ways — the two defects a path-set union had: a pruned
-    INTERMEDIATE review HEAD is never re-diffed (no false block on a benign rewrite),
-    and a commit landing on an already-reviewed file *after* the last review is
-    caught by the tail (no false pass on unreviewed code).
+    Soundness on an intact chain is a transitivity argument on tree comparison, not
+    an assumption about how a reviewer spent its context: the rounds chain (an
+    anchor's ``from`` = the baseline, a corrective's ``from`` = the prior round's
+    ``to``), and if a file were identical across every segment it would be identical
+    from baseline to HEAD — so a file that changed must show up in some segment, and
+    ``never_reached`` is empty. No false block on a healthy history.
+
+    This is **additive to** Feature 025's chain checks, not a replacement for them,
+    and the two are genuinely complementary:
+
+    - ``never_reached`` sees what the chain checks cannot: a middle range whose
+      endpoints a squash or amend orphaned used to be credited for its whole span
+      even though nothing could verify it (issue #76's silent-credit half). Such a
+      range now contributes nothing and the paths it alone accounted for are named.
+    - The chain checks see what ``never_reached`` cannot: a path already reached by
+      an earlier round and then **re-touched** after the last one is still a member
+      of the reached set, so a set difference is blind to it. ``unreviewed_tail``
+      catches exactly that, and ``frontier_resolves`` fails closed when the tail
+      cannot be computed at all.
+
+    Dropping either half would reintroduce a false pass. The ``never_reached`` block
+    is a deliberate narrowing of the Principle II carve-out; recovery is one
+    ``handoff record-scope`` on the open round, which re-anchors over
+    ``baseline..HEAD`` (orphaning always hits a chain *suffix*, so the fallback in
+    :func:`specops.handoff.cmd_record_scope` always fires) — a rewrite costs a
+    re-scope, never a re-review.
     """
     recorded = [
         ep for c in cycles
@@ -142,4 +186,15 @@ def assess(
         product_paths(gitops.name_only_diff(repo, frontier, head), feature_name)
         if frontier_resolves and frontier is not None else []
     )
-    return Assessment(has, not target, has_anchor, frontier, frontier_resolves, tail)
+    reached: set[str] = set()
+    for frm, to in recorded:
+        # FR-004: credit a round only with what is still verifiable. An endpoint the
+        # rewrite orphaned contributes nothing — checked explicitly rather than
+        # leaning on `name_only_diff` returning [] on a non-zero git exit, because
+        # "contributes no coverage" is a stated contract, not a happy accident.
+        if gitops.commit_exists(repo, frm) and gitops.commit_exists(repo, to):
+            reached.update(product_paths(gitops.name_only_diff(repo, frm, to), feature_name))
+    return Assessment(
+        has, not target, has_anchor, frontier, frontier_resolves, tail,
+        sorted(set(target) - reached),
+    )

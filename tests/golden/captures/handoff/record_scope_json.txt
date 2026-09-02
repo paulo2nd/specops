@@ -1,0 +1,8 @@
+$ specops handoff record-scope --json
+--- exit_code ---
+0
+--- stdout ---
+{"command": "handoff record-scope", "outcome": "ok", "class": "pass", "status": "scope_recorded", "output_version": 1, "round": 2, "review_role": "corrective", "reviewed_range": "<HEX>..<HEX>", "scope_paths": ["src/b.py"], "baseline_paths": ["src/a.py", "src/b.py", "src/never.py"], "not_reverified_paths": ["src/a.py", "src/never.py"], "never_reached_paths": ["src/never.py"]}
+
+--- stderr ---
+

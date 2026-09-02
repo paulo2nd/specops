@@ -456,3 +456,28 @@ def test_drift_gate_skipped_without_basis(trace_repo) -> None:
     # to SKIPPED instead of retroactively rejecting (Feature 010, Finding 6).
     root = trace_repo(plan_paths=[], changed={"src/surprise.py": "y\n"})
     assert review._drift_gate(root).status == "SKIPPED"
+
+
+# ---------------------------------------------------------------------------
+# Feature 027 US1 (FR-012) — the corrective round's narrowing is a PRIORITY,
+# not a boundary the directive enforces on the reviewer's behalf.
+# ---------------------------------------------------------------------------
+
+
+def _review_template() -> str:
+    from specops import status as _status
+
+    return (Path(_status.__file__).parent / "templates" / "review.md").read_text()
+
+
+def test_directive_no_longer_forbids_re_reading_the_baseline() -> None:
+    """The instruction that produced #76's blind spot is gone."""
+    assert "re-hunt unchanged, already-reviewed code" not in _review_template()
+
+
+def test_directive_states_the_context_budget_tradeoff() -> None:
+    """The reviewer is told the remainder is unverified this round and that
+    declining to read it is its own decision to record — not the tool's to make."""
+    text = _review_template()
+    assert "not yet re-verified this round" in text
+    assert "yours to make and to record" in text
