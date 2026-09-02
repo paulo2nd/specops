@@ -1566,3 +1566,23 @@ no redundant per-story runs, the terminal gate reuses the soft gate's result
 approval is anchored to a recorded full `baseline..HEAD` defect hunt, corrective
 rounds are scoped to their delta, and a configurable round cap halts to a human
 rather than looping unbounded (025, released `0.10.0`).
+
+### Field Hardening complete
+
+Features 026–027 are merged. This milestone was driven by **external adoption**
+rather than internal audit — an adopter running `0.11.0` on a real multi-round
+feature filed #69 and #71–#77 — so both features close gaps that only showed up
+in use.
+
+The ledger has a supported way to be corrected: a DONE task can be amended with
+audited provenance instead of hand-editing the files the ledger exists to make
+trustworthy, and the active feature can be repointed or renamed without
+destroying its history (026, released `0.13.0`).
+
+Multi-round review accumulates coverage instead of narrowing it. A corrective
+round's delta is now a stated *priority* rather than a boundary: `record-scope`
+also prints the full `baseline..HEAD` set with the remainder marked as not yet
+re-verified, so a defect an earlier round missed can no longer be hidden from
+later rounds by the tool. Approval fails closed on any product path no recorded
+round has ever reached, and names it; a round is credited only with what can
+still be verified (027, released `0.13.0`).
