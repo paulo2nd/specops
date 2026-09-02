@@ -15,6 +15,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Review rounds accumulate coverage instead of narrowing it
+  ([#76](https://github.com/paulo2nd/specops/issues/76)).** From round 2 onward the
+  tool printed only the delta and the directive told the reviewer not to look
+  elsewhere, so a defect an earlier round missed was structurally invisible to every
+  round that followed — the more rounds a feature needed, the more confident the
+  process looked while its visible surface shrank. An adopter's out-of-band
+  full-baseline review found two blocking defects in one feature inside that blind
+  spot, and a cross-tenant data leak in another after four rounds, one of which ended
+  `APPROVED`.
+  - **`handoff record-scope` prints the whole feature, not just the delta.** The
+    priority set (`prev_to..HEAD` plus open findings' files) is unchanged and still
+    leads; alongside it the command now emits the full `baseline..HEAD` product set
+    with the remainder marked **not yet re-verified this round**, plus any path **no**
+    recorded round has ever reached. Three additive JSON keys — `baseline_paths`,
+    `not_reverified_paths`, `never_reached_paths`; `output_version` stays `1`. Nothing
+    new is persisted: the ledger stays at `schema_version: 9` and needs no migration.
+  - **The directive states the tradeoff instead of forbidding the re-read.** The
+    corrective round's narrowing is now a stated priority, not a boundary. Declining
+    to read part of the baseline for context-budget reasons stays legitimate — the
+    reviewer is asked to *record* that decision rather than have the tool make it
+    silently.
+  - **Approval fails closed on a path no round ever reached, and names it.** Bounded
+    at ten paths with the total always stated. This is additive to the existing
+    coverage checks, which all remain: a path reached by an earlier round and
+    re-touched after the last one is still a member of the reached set, so a set
+    difference alone would be blind to it.
+  - **A round is credited only with what can still be verified.** A `reviewed_range`
+    whose endpoints a rebase or squash orphaned used to be counted as covering its
+    span even though nothing could check it; it now contributes no coverage. Recovery
+    is one `specops handoff record-scope` on the round already open, which re-anchors
+    over `baseline..HEAD` and consumes no review round — a rewrite costs a re-scope,
+    never a re-review. `reconcile` still does not verify these endpoints.
+  - **Coverage excludes every `specs/` directory, not only the active feature's.**
+    `specops feature rename` leaves no rename history, so the old directory's paths
+    would otherwise read as product code and block approval on methodology prose.
+    Scoped to review coverage; the drift gate's own exclusion is unchanged.
+  - Constitution amended to `1.13.0` (Principle IV, with the directive change) and
+    `1.14.0` (Principle II carve-out narrowed, Principle IV coverage clause).
+
 - **The ledger has a supported way to be corrected
   ([#74](https://github.com/paulo2nd/specops/issues/74),
   [#75](https://github.com/paulo2nd/specops/issues/75)).** Two states an interrupted

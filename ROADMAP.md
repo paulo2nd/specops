@@ -95,7 +95,7 @@ Roadmap status uses four values:
 | 024 | Test Execution Only at the Review Gate | MERGED | 012, 021 | Review Integrity |
 | 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
 | 026 | Supported Recovery Operations | MERGED | 006, 010, 021 | Field Hardening |
-| 027 | Cross-Round Review Coverage | PLANNED | 025, 026 | Field Hardening |
+| 027 | Cross-Round Review Coverage | MERGED | 025, 026 | Field Hardening |
 
 ### Build sequence (dependency review — 2026-07-23)
 
@@ -1462,7 +1462,8 @@ latter after four rounds including one that ended APPROVED.
   files as the round's **priority**, but also emits the full `baseline..HEAD` set
   marked as not yet re-verified this round. The narrowing becomes a
   recommendation the reviewer can see past, not a boundary the tool enforces
-  invisibly. (Shipped ahead of this feature in `0.12.0` as the additive half.)
+  invisibly. Not yet shipped — the `0.12.0` release notes claim no part of it, and
+  `record-scope` still emits the priority set alone; this is the feature's first slice.
 - The ledger tracks, across rounds, which baseline product paths have been read by
   *some* round and which have never been read by any — derived from recorded
   ranges, never self-reported.

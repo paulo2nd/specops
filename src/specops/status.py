@@ -1104,14 +1104,30 @@ def _require_approved_cycle(cycles: list[records.ReviewCycleRecord]) -> None:
         )
 
 
+# How many never-reached paths the blocked-approval message names. A fail-closed
+# message that scrolls a terminal is not actionable and a rebaselined feature can
+# produce hundreds; the count is always stated in full. Mirrors the count-plus-sample
+# shape the CODE_DIFF evidence summary already uses for a path list.
+_NEVER_REACHED_SHOWN = 10
+
+
 def _gate_review_coverage(data: records.LedgerDocument, repo: gitops.Repository) -> None:
-    """Feature 025: block approval unless the recorded reviewed scopes cover the
-    full ``baseline..HEAD`` effective diff.
+    """Block approval while any product path changed since the baseline has never
+    been reached by a recorded review round (Feature 025, per path since 027).
 
     Degrades to a no-op when no round recorded a reviewed scope (legacy ledger /
     review conducted by an older CLI — FR-008). Fails closed when scope records
     exist but the baseline cannot be resolved (Principle VI). Reads only reviewed
     ranges and git diffs — never a finding's merit (FR-004; record, do not validate).
+
+    Feature 027 ADDS the per-path never-reached test ahead of Feature 025's three
+    chain checks; it does not replace them. It catches what they miss (a range a
+    rewrite orphaned, credited for a span nothing can verify) and names the files;
+    they catch what it misses (a path re-touched after the last round is still a
+    member of the reached set, so a set difference is blind to it). Every state that
+    blocked before still blocks; because the new branch runs first, a ledger that
+    previously failed on `has_anchor` or `unreviewed_tail` now gets the never-reached
+    message instead — more specific, since it names the files.
     """
     cycles = data.get("review_cycles") or []
     if not reviewscope.has_any_scope(cycles):
@@ -1127,6 +1143,21 @@ def _gate_review_coverage(data: records.LedgerDocument, repo: gitops.Repository)
     a = reviewscope.assess(repo, baseline, "HEAD", cycles, feature_name)
     if a.target_empty:
         return  # nothing changed since the baseline — no review scope required
+    # Feature 027 first: it is the only branch that can name the files.
+    if a.never_reached:
+        total = len(a.never_reached)
+        named = a.never_reached[:_NEVER_REACHED_SHOWN]
+        suffix = f" ({len(named)} shown of {total})" if total > len(named) else ""
+        raise SpecopsError(
+            f"Cannot enter DONE: {total} product path(s) changed since the baseline "
+            f"have never been reviewed by any recorded round: {', '.join(named)}"
+            f"{suffix}. Record a review round whose range reaches them before "
+            "approving — 'specops handoff record-scope' re-anchors over "
+            "baseline..HEAD when the previous round's HEAD no longer resolves."
+        )
+    # The Feature 025 chain checks stay: a set difference cannot see a path that was
+    # reached by an earlier round and re-touched after the last one, and cannot see
+    # anything at all past an unresolvable frontier.
     if not a.has_anchor:
         raise SpecopsError(
             "Cannot enter DONE: no review round covered the full baseline..HEAD defect "

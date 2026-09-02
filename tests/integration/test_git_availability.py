@@ -108,3 +108,20 @@ def test_cli_command_surface_unchanged() -> None:
 
     assert {c.name for c in app.registered_commands} == _EXPECTED_COMMANDS
     assert {g.name for g in app.registered_groups} == _EXPECTED_GROUPS
+
+
+# The top-level assertions above cannot see a new SUB-command, and the surface a
+# coverage report would most naturally claim is `handoff coverage`. Feature 027
+# FR-001a forbids it: coverage is reported through `record-scope` and the
+# blocked-approval message, never through a new command.
+_EXPECTED_HANDOFF_COMMANDS = {
+    "authorize", "record-scope", "close", "validate", "report", "import", "render",
+}
+_EXPECTED_HANDOFF_GROUPS = {"finding"}
+
+
+def test_handoff_subcommand_surface_unchanged() -> None:
+    from specops.cli import handoff_app
+
+    assert {c.name for c in handoff_app.registered_commands} == _EXPECTED_HANDOFF_COMMANDS
+    assert {g.name for g in handoff_app.registered_groups} == _EXPECTED_HANDOFF_GROUPS

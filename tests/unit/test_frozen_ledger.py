@@ -1,7 +1,7 @@
-"""Frozen-shape contract test — status.yaml ledger, schema v8 (Feature 021/025). [SC-002][SC-007]
+"""Frozen-shape contract test — status.yaml ledger, v9 (021/025/026). [SC-002][SC-007]
 
 Locks the required-field set of each ledger record and pins the schema baseline at
-CURRENT_SCHEMA == 8 (the migrated, written shape — NOT the template literal). A removal,
+CURRENT_SCHEMA == 9 (the migrated, written shape — NOT the template literal). A removal,
 rename, or retype of a required field, or an unversioned schema bump, fails here.
 
 Feature 025 (v8) added optional-only fields (``reviewed_range``/``review_role`` on a
@@ -53,3 +53,19 @@ def test_new_optional_ledger_field_is_additive() -> None:
     additive v8 field would not trip this test (only a required-field change would)."""
     # LedgerDocument is total=False (all-optional); adding an optional key is additive.
     assert set(records.TaskRecord.__required_keys__) <= _TASK_REQUIRED | {"future_opt"}
+
+
+def test_feature_027_persists_nothing_new_on_a_review_cycle() -> None:
+    """SC-007: cross-round coverage is DERIVED at evaluation time, never stored.
+
+    A persisted copy would be a second coverage record able to disagree with the
+    derivation — the class of bug Feature 025 avoided by deriving from ranges. This
+    pins the review-cycle shape so a future change cannot quietly add one, and is
+    why Feature 027 ships no migration: the schema does not move.
+    """
+    assert set(records.ReviewCycleRecord.__optional_keys__) == {
+        "round", "started_at", "completed_at", "result",
+        "context_provenance", "handoff", "reviewed_range", "review_role",
+    }
+    assert records.ReviewCycleRecord.__required_keys__ == frozenset()
+    assert ledger.CURRENT_SCHEMA == 9  # unchanged by Feature 027 — no migration

@@ -202,6 +202,21 @@ nenhum `APPROVED` se apoia em um hunt parcial. Se o review continuar ciclando al
 cap, aprove, ou refaça o baseline para retomar). Ledgers anteriores a esse comportamento
 degradam para o caminho de aprovação anterior.
 
+**Rounds acumulam cobertura; não a estreitam.** O delta de um round corretivo é onde os
+defeitos têm mais chance de estar, mas é uma *prioridade*, não uma fronteira: o
+`record-scope` também imprime o conjunto `baseline..HEAD` completo, com o restante
+marcado como **ainda não re-verificado neste round**, de modo que um defeito que um
+round anterior deixou passar não pode ser escondido dos rounds seguintes pela
+ferramenta. Se seu orçamento de contexto não alcançar o conjunto inteiro, essa é uma
+decisão legítima — a diretiva pede que você a registre, em vez de deixar a ferramenta
+tomá-la silenciosamente. O comando também nomeia qualquer caminho de produto que
+**nenhum** round registrado jamais alcançou, e a aprovação falha fechada enquanto esse
+conjunto não estiver vazio. A cobertura é derivada apenas de ranges de commit, então um
+round só recebe crédito pelo que ainda pode ser verificado: se um rebase ou squash
+órfãou um HEAD de review registrado, um único `specops handoff record-scope` no round
+aberto re-ancora sobre `baseline..HEAD` — uma reescrita custa um re-escopo, nunca um
+re-review.
+
 ## Política de idiomas
 
 Toda a saída operacional do SpecOps (mensagens do CLI, assets injetados) é em

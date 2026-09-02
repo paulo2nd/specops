@@ -1,7 +1,64 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.11.0 → 1.12.0
+Version change: 1.13.0 → 1.14.0
+Rationale (1.14.0, 2026-09-02): MINOR amendment landed during /speckit-implement of
+specs/027-cross-round-review-coverage, User Story 3. TWO principles are touched:
+- Principle II is NARROWED (a documented narrowing of the Feature 025 carve-out, not
+  a removal). That carve-out said the review coverage guard "never blocks on a benign
+  history rewrite". Since Feature 027 the guard credits a round only with what it can
+  still verify: a `reviewed_range` whose endpoints no longer resolve contributes no
+  coverage, so approval fails closed naming the product paths left unaccounted for.
+  Silently crediting a range nothing can verify was the silent-credit half of issue
+  #76. The narrowing is bounded and the bound is structural: a rewrite orphans a chain
+  SUFFIX, so `derive_range` always falls back to a full re-anchor, and the guard raises
+  before `finalize` so the round is still open on disk — recovery is one
+  `specops handoff record-scope` on that round, consuming no review round. A rewrite
+  costs a re-scope, never a re-review. `reconcile` still does NOT verify these
+  endpoints; that half of the carve-out is untouched.
+- Principle IV (Token-Optimized Review) is BROADENED: approval's coverage test is now
+  stated per path — it fails closed while any product path changed since the baseline
+  has never been reached by a recorded round, and names them (bounded at ten, with the
+  total always stated). This test is ADDITIVE to Feature 025's chain checks, which
+  remain: a set difference cannot see a path reached by an earlier round and re-touched
+  after the last one, so the anchor / frontier-resolvable / unreviewed-tail checks stay
+  exactly as they were, with their messages unchanged.
+No principle is removed or redefined. Ledger schema stays v9, no migration; nothing
+new is persisted (coverage is derived at evaluation time). `specops preflight` stays
+byte-for-byte read-only, and the round cap, finding lifecycle and gate suite are
+untouched. MINOR bump: one principle narrowed, one broadened, neither removed. No
+Principle IV directive or template asset changes in this amendment (the directive
+change landed in 1.13.0 with its template edit, as Governance requires). Verified by
+the feature's own fixtures, never against this repository (No Self-Application).
+
+Previous entry (1.12.0 → 1.13.0):
+Rationale (1.13.0, 2026-09-02): MINOR amendment landed during /speckit-implement of
+specs/027-cross-round-review-coverage (Cross-Round Review Coverage), User Story 1.
+ONE principle is touched, and only its emission clause:
+- Principle IV (Token-Optimized Review) is BROADENED. The clause read that a
+  corrective round covers "prev_to..HEAD plus open findings' files"; that is no
+  longer all `specops handoff record-scope` emits. It stays the round's stated
+  **priority**, and the command now also prints the full `baseline..HEAD` product
+  set with the remainder labelled **not yet re-verified this round**. The narrowing
+  becomes a recommendation the reviewer can see past instead of a boundary the tool
+  enforces invisibly: a defect an earlier round missed was structurally invisible to
+  every round that followed (issue #76 — an adopter's out-of-band full-baseline review
+  found two blocking defects in one feature inside that blind spot, and a cross-tenant
+  data leak in another after four rounds, one of which ended APPROVED). Declining to
+  read part of the baseline for context-budget reasons stays legitimate; the directive
+  now requires the reviewer to record that decision rather than letting the tool make
+  it silently.
+No principle is removed or redefined; nothing is persisted and no gate behavior
+changes in this amendment (the coverage guard is untouched here — it is narrowed
+separately in User Story 3). Ledger schema stays v9, no migration. The `record-scope`
+JSON gains two optional keys (`baseline_paths`, `not_reverified_paths`) — additive
+under the Feature 021 stability policy, so `handoff.OUTPUT_VERSION` stays 1.
+MINOR bump: materially expanded guidance on a non-removed principle; the additive/
+never-destructive intent is preserved. Templates updated in the same change set:
+src/specops/templates/review.md (Step 3 corrective-round scoping). Verified by the
+feature's own fixtures, never against this repository (No Self-Application).
+
+Previous entry (1.11.0 → 1.12.0):
 Rationale (1.12.0, 2026-08-02): MINOR amendment landed during /speckit-implement of
 specs/025-review-round-integrity (Review Round Integrity). Feature 025 hardens the
 multi-round semantic review; TWO principles are touched, both additively:
@@ -439,9 +496,17 @@ branch; `specops reconcile` verifies this and MUST block execution (exit code 1)
 on any divergence. A single narrow, documented exception (Feature 025): a review
 round's `reviewed_range` endpoints are historical review HEADs that an ordinary
 rebase or squash can orphan, so — like the `(human)` sentinel — they are
-deliberately NOT verified by `reconcile`; the review coverage guard tolerates an
-unresolvable endpoint by re-deriving against the current baseline/HEAD, so SpecOps
-never blocks on a benign history rewrite.
+deliberately NOT verified by `reconcile`, which therefore never blocks on a benign
+history rewrite. Since Feature 027 the review **coverage guard** is narrower than
+`reconcile` here: it credits a round only with what it can still verify, so an
+unresolvable endpoint contributes no coverage and approval fails closed naming the
+product paths left unaccounted for. Crediting a range nothing can verify was a
+silent coverage claim, which is precisely what this ledger exists to prevent. The
+narrowing is bounded by construction — a rewrite orphans a chain *suffix*, so scope
+derivation always falls back to a full re-anchor, and the guard raises before the
+ledger write so the round is still open: recovery is one `specops handoff
+record-scope` on that round, consuming no review round. A rewrite costs a re-scope,
+never a re-review.
 
 **Rationale**: agents hallucinate state; a Git-verifiable ledger is what
 makes progress auditable and recovery deterministic — the core advantage
@@ -523,7 +588,17 @@ sourced identically from the SpecOps templates. The directives are:
   git-derived **reviewed scope** (`specops handoff record-scope` — an *anchor* round
   covers `baseline..HEAD`, a *corrective* round `prev_to..HEAD` plus open findings'
   files), and approval (`status transition-phase DONE`) fails closed unless the union
-  of recorded scopes covers `baseline..HEAD`. The coverage guard **records and checks
+  of recorded scopes covers `baseline..HEAD`. Since Feature 027 the corrective
+  narrowing is the round's stated **priority, not a boundary**: `record-scope` also
+  emits the full `baseline..HEAD` product set with the remainder marked **not yet
+  re-verified this round**, so a defect an earlier round missed cannot be hidden from
+  later rounds by the tool. Declining to read part of that remainder for
+  context-budget reasons is the reviewer's decision **to record**, never the tool's
+  to make silently. The approval test is also stated **per path**: it fails closed
+  while any product path changed since the baseline has never been reached by a
+  recorded round, and names them. That test is additive to the chain checks above,
+  which still catch what a set difference cannot — a path reached by an earlier round
+  and re-touched after the last one. The coverage guard **records and checks
   scope only — it never judges a finding's merit** (record, do not validate). A
   configurable `review_round_cap` (default 10) bounds the loop: exceeding it is a
   Stop-and-Ask halt recorded as a `review_halt` marker, never a fabricated verdict.
@@ -677,4 +752,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.12.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-08-02
+**Version**: 1.14.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-09-02

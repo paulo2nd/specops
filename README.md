@@ -189,6 +189,19 @@ hunt. If the review keeps cycling past `review_round_cap`, SpecOps halts and ask
 rather than looping unbounded (raise the cap, approve, or rebaseline to resume). Ledgers
 that predate this behavior degrade to the prior approval path.
 
+**Rounds accumulate coverage; they do not narrow it.** A corrective round's delta is
+where the defects are most likely to be, but it is a *priority*, not a boundary:
+`record-scope` also prints the full `baseline..HEAD` set with the remainder marked
+**not yet re-verified this round**, so a defect an earlier round missed cannot be
+hidden from later rounds by the tool. If your context budget will not stretch to the
+whole set, that is a legitimate call — the directive asks you to record it rather than
+letting the tool make it silently. The command also names any product path that **no**
+recorded round has ever reached, and approval fails closed while that set is non-empty.
+Coverage is derived from commit ranges only, so a round is credited only with what can
+still be verified: if a rebase or squash orphaned a recorded review HEAD, one
+`specops handoff record-scope` on the open round re-anchors over `baseline..HEAD` — a
+rewrite costs a re-scope, never a re-review.
+
 ## Language policy
 
 All SpecOps operational output (CLI messages, injected assets) is in English.

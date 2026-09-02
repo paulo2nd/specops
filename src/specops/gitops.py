@@ -340,9 +340,22 @@ def path_in_history(repo: Repository, path: str) -> bool:
     return proc.returncode == 0 and bool(proc.stdout.strip())
 
 
-def name_only_diff(repo: Repository, start_sha: str, end_sha: str = "HEAD") -> list[str]:
-    """Return deduplicated list of changed file paths between *start_sha* and *end_sha*."""
-    proc = _git(repo.root, ["diff", "--name-only", start_sha, end_sha])
+def name_only_diff(
+    repo: Repository, start_sha: str, end_sha: str = "HEAD", *, no_renames: bool = False
+) -> list[str]:
+    """Return deduplicated list of changed file paths between *start_sha* and *end_sha*.
+
+    *no_renames* disables git's rename detection, so a renamed file reports both its
+    old (deleted) and new (added) path. Callers that compare the path sets of NESTED
+    ranges need it: rename detection is similarity-based and therefore not transitive
+    — ``A..C`` can report ``old`` + ``new`` while ``A..B`` reports the rename as
+    ``new`` alone — so a path can appear in the wide range and in none of its
+    segments (see :func:`specops.reviewscope.changed_paths`).
+    """
+    proc = _git(
+        repo.root,
+        ["diff", "--name-only", *(["--no-renames"] if no_renames else []), start_sha, end_sha],
+    )
     if proc.returncode != 0:
         return []
     return [f for f in proc.stdout.splitlines() if f]

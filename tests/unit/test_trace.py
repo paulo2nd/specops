@@ -591,3 +591,22 @@ def test_trace_report_omits_the_keys_for_an_ordinary_close(trace_repo) -> None:
     t2 = next(t for t in graph["tasks"] if t["id"] == "T002")
     assert "evidence_amended" not in t2
     assert "evidence_history" not in t2
+
+
+# ---------------------------------------------------------------------------
+# Feature 027 containment: the drift gate's exclusion is NOT widened
+# ---------------------------------------------------------------------------
+
+
+def test_is_managed_keeps_the_narrow_active_feature_exclusion() -> None:
+    """Feature 027 widens the exclusion for review COVERAGE only
+    (`reviewscope.product_paths`). `trace.is_managed` — which the drift gate reads —
+    must keep dropping only the ACTIVE feature's spec dir, so a change to another
+    feature's artifacts stays visible to drift."""
+    assert trace.is_managed(".specify/memory/constitution.md")
+    assert trace.is_managed("specops.json")
+    assert trace.is_managed("specs/027-active/spec.md", "027-active")
+    # The narrow behavior: another feature's spec dir is NOT managed here.
+    assert not trace.is_managed("specs/003-other/spec.md", "027-active")
+    assert not trace.is_managed("specs/003-other/spec.md", None)
+    assert not trace.is_managed("src/product.py", "027-active")

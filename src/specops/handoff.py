@@ -573,9 +573,7 @@ def cmd_record_scope(root: Path) -> HandoffResult:
         return HandoffResult(cmd, SCOPE_UNRESOLVABLE, f"{cmd}: cannot resolve HEAD")
 
     feature_name = str(data.get("feature") or "") or None
-    changed = reviewscope.product_paths(
-        gitops.name_only_diff(repo, dr.from_commit, head), feature_name
-    )
+    changed = reviewscope.changed_paths(repo, dr.from_commit, head, feature_name)
     if not changed and dr.review_role == reviewscope.ANCHOR:
         return HandoffResult(
             cmd, BAD_ARGS, f"{cmd}: no effective diff since baseline — nothing to review"
@@ -590,20 +588,58 @@ def cmd_record_scope(root: Path) -> HandoffResult:
                 if isinstance(fp, str) and fp and fp not in scope_paths:
                     scope_paths.append(fp)
 
+    # Feature 027 (FR-001): the priority set above narrows; what the reviewer SEES
+    # must not. Emit the whole baseline set too, with the part this round is not
+    # prioritising labelled as unverified — a recommendation the reviewer can see
+    # past, not a boundary the tool enforces invisibly (#76). Derived per call and
+    # never persisted (FR-002/FR-010): a stored copy is a second coverage record
+    # able to disagree with the derivation.
+    if dr.from_commit == baseline:
+        baseline_paths = list(changed)  # the anchor range IS the baseline range
+    elif baseline and gitops.commit_exists(repo, baseline):
+        baseline_paths = reviewscope.changed_paths(repo, baseline, head, feature_name)
+    else:
+        baseline_paths = list(scope_paths)
+    in_scope = set(scope_paths)
+    not_reverified = [p for p in baseline_paths if p not in in_scope]
+
     cycle["reviewed_range"] = dr.range_str
     cycle["review_role"] = dr.review_role
     status.finalize(feature_dir, data, base_rev, base_violations)
+
+    # The history's holes, reported where the reviewer can act on them: paths no
+    # recorded, still-resolvable round reaches. Derived AFTER this round's own range
+    # is recorded — otherwise the round would report its own scope as unreached —
+    # and never persisted (FR-010).
+    never_reached = (
+        reviewscope.assess(repo, baseline, head, _cycles(data), feature_name).never_reached
+        if baseline else []
+    )
 
     header = (
         f"review scope: {dr.review_role} round {cycle.get('round')} — "
         f"{len(scope_paths)} file(s) over {dr.range_str}"
     )
-    human = "\n".join([header, *scope_paths])
+    blocks = [[header, *scope_paths]]
+    if not_reverified:
+        blocks.append([
+            f"not yet re-verified this round ({len(not_reverified)} of "
+            f"{len(baseline_paths)} baseline file(s)):",
+            *not_reverified,
+        ])
+    if never_reached:
+        blocks.append([
+            f"never reviewed by any round ({len(never_reached)}):", *never_reached,
+        ])
+    human = "\n\n".join("\n".join(b) for b in blocks)
     return HandoffResult(cmd, SCOPE_RECORDED, human, {
         "round": cycle.get("round"),
         "review_role": dr.review_role,
         "reviewed_range": dr.range_str,
         "scope_paths": scope_paths,
+        "baseline_paths": baseline_paths,
+        "not_reverified_paths": not_reverified,
+        "never_reached_paths": never_reached,
     })
 
 

@@ -279,6 +279,27 @@ def build_handoff_report_clean(root: Path) -> None:
     ])])
 
 
+def build_handoff_record_scope(root: Path) -> None:
+    """Feature 027: a corrective round with a baseline set wider than its priority
+    set, so the capture pins all three emitted subsets. Round 1's recorded range
+    starts AFTER the baseline, which is the shape `record-scope` cannot self-heal —
+    it makes `never_reached_paths` non-empty and deterministic."""
+    _handoff_build(root, review_cycles=[make_cycle(round=1, result="REJECTED"),
+                                        make_cycle(round=2)])
+    fd = _feature(root)
+    shas = []
+    for name in ("never", "a", "b"):
+        (root / "src").mkdir(exist_ok=True)
+        (root / "src" / f"{name}.py").write_text("x")
+        git(root, "add", "-A")
+        git(root, "commit", "-m", f"add {name}")
+        shas.append(git(root, "rev-parse", "HEAD"))
+    led = yaml.safe_load((fd / "status.yaml").read_text())
+    led["review_cycles"][0]["reviewed_range"] = f"{shas[0]}..{shas[1]}"
+    led["review_cycles"][0]["review_role"] = "anchor"
+    (fd / "status.yaml").write_text(yaml.dump(led))
+
+
 def build_handoff_validate_blocked(root: Path) -> None:
     _handoff_build(root, review_cycles=[make_cycle(findings=[
         make_finding("R1-F01", severity="blocking", state="OPEN"),
@@ -413,6 +434,10 @@ SCENARIOS: list[Scenario] = [
     # handoff (Feature 011)
     Scenario("handoff", "report_human", ("handoff", "report"), build_handoff_report_clean),
     Scenario("handoff", "report_json", ("handoff", "report", "--json"), build_handoff_report_clean),
+    Scenario("handoff", "record_scope_human",
+             ("handoff", "record-scope"), build_handoff_record_scope),
+    Scenario("handoff", "record_scope_json",
+             ("handoff", "record-scope", "--json"), build_handoff_record_scope),
     Scenario("handoff", "validate_human",
              ("handoff", "validate"), build_handoff_validate_blocked),
     Scenario("handoff", "validate_json",

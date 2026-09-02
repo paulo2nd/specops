@@ -143,3 +143,190 @@ def test_unresolvable_baseline_fails_closed(tmp_git_repo: Path) -> None:
         raised = True
         assert "baseline" in str(exc).lower()
     assert raised
+
+
+# ---------------------------------------------------------------------------
+# Feature 027 US3 — approval fails closed on a path NO round ever reached,
+# and says which one. Roadmap acceptance gate.
+# ---------------------------------------------------------------------------
+
+
+def _rejected_rejected_repo(handoff_repo):
+    """Two REJECTED rounds and an open third, with `src/never.py` changed before the
+    recorded chain starts — the rebaselined-feature shape, which `record-scope`
+    cannot self-heal (its chain start still resolves)."""
+    root = handoff_repo(review_cycles=[
+        make_cycle(round=1, result="REJECTED"),
+        make_cycle(round=2, result="REJECTED"),
+        make_cycle(round=3),
+    ])
+    _commit(root, "src/never.py")
+    h_gap = git(root, "rev-parse", "HEAD")
+    _commit(root, "src/a.py")
+    h1 = git(root, "rev-parse", "HEAD")
+    _commit(root, "src/b.py")
+    h2 = git(root, "rev-parse", "HEAD")
+    fp = root / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(fp.read_text())
+    data["review_cycles"][0].update(reviewed_range=f"{h_gap}..{h1}", review_role="anchor")
+    data["review_cycles"][1].update(reviewed_range=f"{h1}..{h2}", review_role="corrective")
+    fp.write_text(yaml.dump(data))
+    return root, data["baseline"], h_gap
+
+
+def test_never_reached_path_fails_approval_closed_and_names_it(handoff_repo) -> None:
+    """SC-004 / the roadmap acceptance gate: REJECTED -> REJECTED -> APPROVED where
+    no round ever reached `src/never.py`."""
+    root, _baseline, _h = _rejected_rejected_repo(handoff_repo)
+    cli(root, "handoff", "record-scope")
+    r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+
+    assert r.returncode == 1
+    out = r.stdout + r.stderr
+    assert "src/never.py" in out
+    assert "never been reviewed by any recorded round" in out
+    assert _ledger(root)["current_phase"] == "REVIEW"
+
+
+def test_an_anchor_round_covering_it_approves(handoff_repo) -> None:
+    """SC-004, the other half of the gate: the same sequence with a round whose range
+    reaches the file approves."""
+    root, baseline, _h = _rejected_rejected_repo(handoff_repo)
+    fp = root / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(fp.read_text())
+    data["review_cycles"][0]["reviewed_range"] = (
+        f"{baseline}..{data['review_cycles'][0]['reviewed_range'].split('..')[1]}"
+    )
+    fp.write_text(yaml.dump(data))
+    cli(root, "handoff", "record-scope")
+
+    r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _ledger(root)["current_phase"] == "DONE"
+
+
+def test_empty_target_still_approves(handoff_repo) -> None:
+    """No product change since the baseline — coverage is vacuously satisfied."""
+    root = handoff_repo(review_cycles=[make_cycle(round=1)])
+    _commit(root, "specs/001-demo/notes.md")  # managed artifact only
+    fp = root / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(fp.read_text())
+    data["review_cycles"][0].update(
+        reviewed_range=f"{data['baseline']}..{git(root, 'rev-parse', 'HEAD')}",
+        review_role="anchor",
+    )
+    fp.write_text(yaml.dump(data))
+    r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_blocked_message_is_bounded_at_ten_paths(handoff_repo) -> None:
+    """R6/SC-004: the count is always stated; at most 10 paths are named."""
+    root = handoff_repo(review_cycles=[make_cycle(round=1, result="REJECTED"),
+                                       make_cycle(round=2)])
+    for i in range(37):
+        _commit(root, f"src/f{i:02d}.py")
+    h_gap = git(root, "rev-parse", "HEAD")
+    _commit(root, "src/tail.py")
+    h1 = git(root, "rev-parse", "HEAD")
+    fp = root / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(fp.read_text())
+    data["review_cycles"][0].update(reviewed_range=f"{h_gap}..{h1}", review_role="anchor")
+    fp.write_text(yaml.dump(data))
+    cli(root, "handoff", "record-scope")
+
+    blocked = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    out = blocked.stdout + blocked.stderr
+    assert "37 product path(s)" in out
+    assert "(10 shown of 37)" in out
+    assert out.count("src/f") == 10
+    # sorted order, so the first ten are f00..f09
+    assert "src/f00.py" in out and "src/f09.py" in out and "src/f10.py" not in out
+
+
+def test_blocked_message_names_them_all_when_few(handoff_repo) -> None:
+    root, _baseline, _h = _rejected_rejected_repo(handoff_repo)
+    cli(root, "handoff", "record-scope")
+    blocked = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    out = blocked.stdout + blocked.stderr
+    assert "1 product path(s)" in out
+    assert "shown of" not in out
+
+
+def test_orphaned_chain_suffix_recovers_in_one_record_scope(handoff_repo) -> None:
+    """Research R2, all three facts. A squash/amend orphans the recorded review HEAD;
+    approval blocks; ONE `record-scope` on the still-open round re-anchors over
+    baseline..HEAD and the retry approves — with no new round consumed."""
+    root = handoff_repo(review_cycles=[make_cycle(round=1)])
+    _commit(root, "src/a.py")
+    cli(root, "handoff", "record-scope")
+    # Fact 1: a rewrite orphans a SUFFIX of the chain — here the whole of it.
+    fp = root / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(fp.read_text())
+    data["review_cycles"][0]["reviewed_range"] = f"{data['baseline']}..{'0' * 40}"
+    fp.write_text(yaml.dump(data))
+
+    blocked = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert blocked.returncode == 1
+    assert "src/a.py" in blocked.stdout + blocked.stderr
+
+    # Fact 3: the guard raised before finalize, so the round is still open on disk.
+    after_block = _ledger(root)
+    assert after_block["review_cycles"][-1]["result"] is None
+    assert len(after_block["review_cycles"]) == 1
+
+    # Fact 2: derive_range falls back to ANCHOR because the prior `to` is orphaned.
+    rescope = json.loads(cli(root, "handoff", "record-scope", "--json").stdout)
+    assert rescope["review_role"] == "anchor"
+    assert rescope["never_reached_paths"] == []
+
+    retry = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert retry.returncode == 0, retry.stdout + retry.stderr
+    assert _ledger(root)["current_phase"] == "DONE"
+    assert len(_ledger(root)["review_cycles"]) == 1   # no new round consumed
+
+
+def test_guard_never_reads_a_findings_merit(handoff_repo) -> None:
+    """FR-011: coverage is evaluated from ranges and git only. A round carrying an
+    OPEN advisory finding still approves when coverage is complete — the finding
+    gate is a separate, earlier check."""
+    root = handoff_repo(review_cycles=[make_cycle(
+        round=1, findings=[make_finding("R1-F01", state="OPEN", severity="advisory")])])
+    _commit(root, "src/a.py")
+    cli(root, "handoff", "record-scope")
+    r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_a_plain_rename_does_not_falsely_block(handoff_repo, tmp_git_repo: Path) -> None:
+    """Regression: rename detection is similarity-based and NOT transitive across
+    nested ranges. `git mv src/a.py src/b.py` (round 1, seen as a pure rename → only
+    `src/b.py`) followed by a rewrite of `src/b.py` (round 2) makes `baseline..HEAD`
+    report `src/a.py` as deleted — a path in the target set and in no round's reach.
+    That is a benign rename, and it used to block approval permanently: re-running
+    `record-scope` cannot clear it, because the chain start still resolves.
+    """
+    # `handoff_repo` builds on `tmp_git_repo` in place, so writing the file first puts
+    # it in the scaffolding commit the baseline points at.
+    (tmp_git_repo / "src").mkdir(parents=True, exist_ok=True)
+    (tmp_git_repo / "src" / "a.py").write_text("\n".join(f"line {i}" for i in range(60)))
+    root = handoff_repo(review_cycles=[make_cycle(round=1)])
+    assert root == tmp_git_repo
+    git(root, "mv", "src/a.py", "src/b.py")
+    git(root, "commit", "-m", "rename")
+    assert cli(root, "handoff", "record-scope").returncode == 0  # anchor: pure rename
+
+    (root / "src" / "b.py").write_text("\n".join(f"rewritten {i}" for i in range(60)))
+    git(root, "add", "-A")
+    git(root, "commit", "-m", "rewrite")
+    fp = root / "specs" / "001-demo" / "status.yaml"
+    data = yaml.safe_load(fp.read_text())
+    data["review_cycles"][0]["result"] = "REJECTED"
+    data["review_cycles"].append(make_cycle(round=2))
+    fp.write_text(yaml.dump(data))
+    obj = json.loads(cli(root, "handoff", "record-scope", "--json").stdout)
+    assert obj["never_reached_paths"] == []
+
+    r = cli(root, "status", "transition-phase", "DONE", "-r", "APPROVED")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _ledger(root)["current_phase"] == "DONE"

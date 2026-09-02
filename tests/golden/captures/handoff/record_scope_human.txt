@@ -1,0 +1,16 @@
+$ specops handoff record-scope
+--- exit_code ---
+0
+--- stdout ---
+review scope: corrective round 2 — 1 file(s) over <HEX>..<HEX>
+src/b.py
+
+not yet re-verified this round (2 of 3 baseline file(s)):
+src/a.py
+src/never.py
+
+never reviewed by any round (1):
+src/never.py
+
+--- stderr ---
+
