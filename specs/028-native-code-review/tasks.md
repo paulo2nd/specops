@@ -28,7 +28,7 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at th
 
 **Purpose**: Establish a known-green baseline.
 
-- [ ] T001 Confirm the baseline suite is green by running `conda run -n specops pytest -q`, `conda run -n specops mypy src` and `conda run -n specops ruff check src tests`, and record the pass counts in the task evidence
+- [X] T001 Confirm the baseline suite is green by running `conda run -n specops pytest -q`, `conda run -n specops mypy src` and `conda run -n specops ruff check src tests`, and record the pass counts in the task evidence
 
 **Checkpoint**: baseline recorded.
 
@@ -38,12 +38,12 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at th
 
 **Purpose**: One render function, used by both install paths, with the placeholder in the template. After this phase the output is still today's behavior: the placeholder renders to the current paragraph. Each story then changes what it renders to.
 
-- [ ] T002 Create `src/specops/nativereview.py` with `render_review(root: Path, integration: str) -> str`. It reads `templates/review.md` and fills it through `fsutil.render_template(text, {"native_review": step_3a(root, integration)})`. For now, `step_3a` returns the existing native paragraph verbatim. Add a module docstring stating its purpose: the per-integration native-review map, `native_review` config resolution, and the Step 3a render (Feature 028).
-- [ ] T003 In `src/specops/templates/review.md`, replace the Step 3a paragraph that begins "If your environment provides a native code-review capability" with a line holding only `{{native_review}}`. Leave the rest of the template byte-identical.
-- [ ] T004 [P] In `src/specops/initializer.py` `run_init`, replace `review_content = _read_template("review.md")` and the per-target `install_review(review_path, review_content, sep)` with `install_review(review_path, nativereview.render_review(root, target["integration"]), sep)`. Before step 4 (`config.create_or_merge`), render every target once into a dict keyed by integration. An invalid `native_review` then raises before `specops.json` or any prompt file is written, and step 5 installs from that dict.
-- [ ] T005 [P] In `src/specops/extension.py` `register_commands`, render every target first into a list of `(target, content)` via `nativereview.render_review(root, target["integration"])`, and only then loop over `initializer.install_review(...)`. A render error must leave no file written (plan Constraints).
-- [ ] T006 Run `tests/unit/test_review.py` and `tests/unit/test_refusal_exit_contract.py`. They read the raw `review.md`, but their phrases lie outside Step 3a: no test references the replaced paragraph (checked 2026-09-29), so they must pass unchanged.
-- [ ] T007 Add `tests/unit/test_nativereview.py` with (a) the rendered output contains no `{{`, and (b) the text written by `specops init` equals the text written by `extension.install` for the same fixture (Principle IV parity).
+- [X] T002 Create `src/specops/nativereview.py` with `render_review(root: Path, integration: str) -> str`. It reads `templates/review.md` and fills it through `fsutil.render_template(text, {"native_review": step_3a(root, integration)})`. For now, `step_3a` returns the existing native paragraph verbatim. Add a module docstring stating its purpose: the per-integration native-review map, `native_review` config resolution, and the Step 3a render (Feature 028).
+- [X] T003 In `src/specops/templates/review.md`, replace the Step 3a paragraph that begins "If your environment provides a native code-review capability" with a line holding only `{{native_review}}`. Leave the rest of the template byte-identical.
+- [X] T004 [P] In `src/specops/initializer.py` `run_init`, replace `review_content = _read_template("review.md")` and the per-target `install_review(review_path, review_content, sep)` with `install_review(review_path, nativereview.render_review(root, target["integration"]), sep)`. Before step 4 (`config.create_or_merge`), render every target once into a dict keyed by integration. An invalid `native_review` then raises before `specops.json` or any prompt file is written, and step 5 installs from that dict.
+- [X] T005 [P] In `src/specops/extension.py` `register_commands`, render every target first into a list of `(target, content)` via `nativereview.render_review(root, target["integration"])`, and only then loop over `initializer.install_review(...)`. A render error must leave no file written (plan Constraints).
+- [X] T006 Run `tests/unit/test_review.py` and `tests/unit/test_refusal_exit_contract.py`. They read the raw `review.md`, but their phrases lie outside Step 3a: no test references the replaced paragraph (checked 2026-09-29), so they must pass unchanged.
+- [X] T007 Add `tests/unit/test_nativereview.py` with (a) the rendered output contains no `{{`, and (b) the text written by `specops init` equals the text written by `extension.install` for the same fixture (Principle IV parity).
 
 **Checkpoint**: full suite green. The installed text is unchanged apart from placeholder plumbing.
 
@@ -57,13 +57,13 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at th
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] In `tests/unit/test_nativereview.py`, test that `render_review(root, "claude")` contains `/code-review`, `the Skill tool`, `Skill(skill: "code-review", args: "high `, `reviewed_range`, `ultra`, `--fix`, `If you delegate this review to a subagent, that subagent must have the Skill tool`, `native review not run`, `--rule "native-review-not-run"`, `specops handoff finding add --severity blocking` and `import-json`. It must NOT contain `If your environment provides` or `e.g. the /code-review`. Also assert that the built-in map keys are exactly `{"claude"}`, so any new entry forces a test update and a citation in research.md R1 [SC-001, SC-003]
-- [ ] T009 [P] [US1] In `tests/integration/test_extension_lifecycle.py`, test that after `extension.install(root)` the installed Claude review file (path from `speckit.review_command_targets`) contains `/code-review` and `the Skill tool`, and that a second `extension.update(root)` leaves it byte-identical (FR-011 idempotency) [SC-001, SC-004]
-- [ ] T010 [US1] In `tests/integration/test_extension_lifecycle.py`, test that a review file pre-seeded with the old template text (the "If your environment provides…" paragraph) is replaced by `extension.update(root)` [SC-004]
+- [X] T008 [P] [US1] In `tests/unit/test_nativereview.py`, test that `render_review(root, "claude")` contains `/code-review`, `the Skill tool`, `Skill(skill: "code-review", args: "high `, `reviewed_range`, `ultra`, `--fix`, `If you delegate this review to a subagent, that subagent must have the Skill tool`, `native review not run`, `--rule "native-review-not-run"`, `specops handoff finding add --severity blocking` and `import-json`. It must NOT contain `If your environment provides` or `e.g. the /code-review`. Also assert that the built-in map keys are exactly `{"claude"}`, so any new entry forces a test update and a citation in research.md R1 [SC-001, SC-003]
+- [X] T009 [P] [US1] In `tests/integration/test_extension_lifecycle.py`, test that after `extension.install(root)` the installed Claude review file (path from `speckit.review_command_targets`) contains `/code-review` and `the Skill tool`, and that a second `extension.update(root)` leaves it byte-identical (FR-011 idempotency) [SC-001, SC-004]
+- [X] T010 [US1] In `tests/integration/test_extension_lifecycle.py`, test that a review file pre-seeded with the old template text (the "If your environment provides…" paragraph) is replaced by `extension.update(root)` [SC-004]
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] In `src/specops/nativereview.py`, add the built-in map as one dict entry for `claude`, with the data-model Entity 1 fields: `command="/code-review"`, `mechanism="the Skill tool"`, `invocation='Skill(skill: "code-review", args: "{effort} <from>...<head>")'`, `efforts=("low","medium","high","xhigh","max")`, `default_effort="high"`. Make `step_3a` render variant A from `contracts/review-step-3a.md` for a mapped integration, including the `native-review-not-run` `finding add` block.
+- [X] T011 [US1] In `src/specops/nativereview.py`, add the built-in map as one dict entry for `claude`, with the data-model Entity 1 fields: `command="/code-review"`, `mechanism="the Skill tool"`, `invocation='Skill(skill: "code-review", args: "{effort} <from>...<head>")'`, `efforts=("low","medium","high","xhigh","max")`, `default_effort="high"`. Make `step_3a` render variant A from `contracts/review-step-3a.md` for a mapped integration, including the `native-review-not-run` `finding add` block.
 
 **Checkpoint**: US1 is independently shippable. Claude projects get the unconditional instruction. Other integrations still render the old paragraph until US2. Commit.
 

@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from specops import compat, config, fsutil, gitops, initializer, speckit
+from specops import compat, config, fsutil, gitops, initializer, nativereview, speckit
 from specops.errors import SpecopsError
 
 OWNER = "specops"
@@ -185,12 +185,17 @@ def register_commands(root: Path) -> list[dict]:
     """Install the `/specops-review` command file per integration and return
     their manifest command records. These are SpecOps-owned files, never listed
     in the host integration manifest (SC-006)."""
-    review_content = (_templates_dir() / "review.md").read_text(encoding="utf-8")
+    # Render every target before the first write (Feature 028): an invalid
+    # `native_review` block then leaves no review file half-installed.
+    rendered = [
+        (target, nativereview.render_review(root, target["integration"]))
+        for target in speckit.review_command_targets(root)
+    ]
     commands: list[dict] = []
-    for target in speckit.review_command_targets(root):
+    for target, content in rendered:
         review_path: Path = target["review_path"]
         sep = target["separator"]
-        initializer.install_review(review_path, review_content, sep)
+        initializer.install_review(review_path, content, sep)
         commands.append(
             {
                 "id": f"specops{sep}review",

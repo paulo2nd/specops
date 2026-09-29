@@ -507,3 +507,34 @@ def test_migrate_rollback_removes_artifacts_created_during_failed_install(
         "SPECOPS:BEGIN" in p.read_text()
         for p in root.glob(".claude/skills/speckit-*/SKILL.md")
     )
+
+
+# ---------------------------------------------------------------------------
+# Feature 028 — the review command names the integration's native reviewer
+# ---------------------------------------------------------------------------
+
+_CLAUDE_REVIEW = Path(".claude/skills/specops-review/SKILL.md")
+
+
+def test_install_renders_claude_native_reviewer_idempotently(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    extension.install(root)
+    first = (root / _CLAUDE_REVIEW).read_text()
+    assert "/code-review" in first and "the Skill tool" in first
+    extension.update(root)
+    assert (root / _CLAUDE_REVIEW).read_text() == first  # FR-011: idempotent
+
+
+def test_update_replaces_review_installed_by_an_older_version(fake_speckit_repo, compat_ok):
+    """SC-004: an already-installed project gets the new text via the normal update."""
+    root = fake_speckit_repo
+    extension.install(root)
+    path = root / _CLAUDE_REVIEW
+    path.write_text(
+        "If your environment provides a native code-review capability (e.g. the "
+        "`/code-review` skill in Claude Code, …), invoke it.\n"
+    )
+    extension.update(root)
+    text = path.read_text()
+    assert "If your environment provides" not in text
+    assert "**Native code review (mandatory).**" in text
