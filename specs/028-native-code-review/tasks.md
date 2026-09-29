@@ -117,7 +117,6 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at th
 - [X] T023 [P] In `CHANGELOG.md` under `[Unreleased]`, add an entry that covers: `/specops-review` names the integration's native reviewer and makes it mandatory (Claude Code: `/code-review` via the Skill tool, effort `high`); the subagent rule; the `native-review-not-run` advisory finding convention; the new optional `native_review` block in `specops.json`; installed projects receive it with `specops extension update`. Also state that the ledger, commands and gates are unchanged.
 - [X] T024 [P] In `ROADMAP.md`, add Feature 028 "Native Code Review in /specops-review" as `ACTIVE` to the tracking table (depends on 005, 011, 015), plus a short brief section after Feature 027
 - [X] T025 Run the full quickstart §1: `conda run -n specops pytest -q`, `mypy src`, `ruff check src tests`. Confirm that `tests/unit/test_frozen_config.py` passes unmodified [SC-005]
-- [ ] T026 Before release, not in CI: do quickstart §4 in a real Claude Code session (v2.1.246 or later) to confirm `Skill(skill: "code-review", args: "high <sha>...<sha>")` accepts raw commit shas. If it is refused, switch the variant A invocation to pass `scope_paths`, and update `contracts/review-step-3a.md` and T008.
 
 ---
 
@@ -128,7 +127,7 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at th
 - **US1 (Phase 3)**: depends on Phase 2 only. It is the MVP.
 - **US2 (Phase 4)**: depends on Phase 2. It touches `step_3a` in the same file as US1, so run it after US1 to avoid edit conflicts, although the behavior is independent.
 - **US3 (Phase 5)**: depends on US1 (variant A must exist for effort overrides) and on US2 (variant B must exist for `command: null`).
-- **Polish**: T020–T024 in parallel after US3. T025 after all. T026 before release.
+- **Polish**: T020–T024 in parallel after US3. T025 after all.
 
 ### Parallel Opportunities
 

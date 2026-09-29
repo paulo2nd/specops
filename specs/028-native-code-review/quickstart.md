@@ -30,10 +30,3 @@ Expected: all pass. `tests/unit/test_frozen_config.py` passes **unmodified**.
 
 Open a rendered Claude copy from scenario 1 and read Step 3a end to end. It should
 read as one unconditional instruction, with no "if available" and no "e.g.".
-
-## 4. One real-session check (before release, not in CI)
-
-In a scratch Spec Kit project with Claude Code v2.1.246 or later, reach a review round and
-confirm that `Skill(skill: "code-review", args: "high <sha>...<sha>")` is accepted with
-raw commit shas (research R2 risk). If it is refused, switch the invocation to pass
-`scope_paths` and update the contract before release.

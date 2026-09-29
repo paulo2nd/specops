@@ -78,9 +78,9 @@ adding an entry is a one-line change plus its test.
   subagent without it, which is the field failure). The skill is blocked by
   `skillOverrides: user-invocable-only`. The Claude Code version is older than
   v2.1.246. The skill errors.
-- **Risk to validate once in a real session** (quickstart §4): a raw commit-sha range
-  is accepted as a target. The docs show branch names. If shas are refused, the
-  fallback is to pass the paths from `scope_paths`.
+- **Assumption**: the docs show ranges with branch names, and a raw commit-sha range
+  is assumed to be accepted the same way, since both are git refs. If a session ever
+  refuses it, that falls under "native review not run" above and is recorded as such.
 
 ## R3 — Where the render happens
 
