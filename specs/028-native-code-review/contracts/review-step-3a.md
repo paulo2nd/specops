@@ -51,7 +51,7 @@ Same structure as A, with these substitutions:
 ## Variant B — no native review
 
 > **Native code review.** ⟦This integration (`{integration}`) has no native code-review
-> command⟧ known to SpecOps. Perform the code review yourself, directly on the diff. A
+> command⟧ in use. Perform the code review yourself, directly on the diff. A
 > project can declare one in `specops.json` → `native_review`.
 
 Variant B contains no `native-review-not-run` instruction (spec US2-AS2).

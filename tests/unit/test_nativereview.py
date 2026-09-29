@@ -7,15 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from specops import compat, config, extension, initializer, nativereview
+from specops import config, extension, initializer, nativereview
 
 _CLAUDE_REVIEW = Path(".claude/skills/specops-review/SKILL.md")
 _LEGACY_WORDING = ("If your environment provides", "e.g. the `/code-review`")
 
-
-@pytest.fixture()
-def compat_ok(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(compat, "installed_version", lambda: compat.MIN_CLI_VERSION)
 
 
 # --- Phase 2: one render, both install paths --------------------------------------
@@ -143,3 +139,15 @@ def test_native_review_is_not_a_written_default(fake_speckit_repo: Path) -> None
     assert "native_review" not in config._DEFAULTS
     config.create_or_merge(fake_speckit_repo)
     assert "native_review" not in json.loads((fake_speckit_repo / "specops.json").read_text())
+
+
+def test_override_command_is_shell_escaped_in_not_run_snippet(fake_speckit_repo: Path) -> None:
+    _config(fake_speckit_repo, {"gemini": {"command": 'rev "a" `x` $y'}})
+    text = nativereview.render_review(fake_speckit_repo, "gemini")
+    assert 'not run: rev \\"a\\" \\`x\\` \\$y (<reason>)"' in text
+
+
+def test_non_object_specops_json_raises_config_error(fake_speckit_repo: Path) -> None:
+    (fake_speckit_repo / "specops.json").write_text("[]")
+    with pytest.raises(config.ConfigError, match="JSON object"):
+        nativereview.render_review(fake_speckit_repo, "claude")

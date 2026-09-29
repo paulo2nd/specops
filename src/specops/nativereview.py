@@ -62,6 +62,9 @@ _FINDINGS = (
 
 def _required(command: str, invoke: str, subagent: str) -> str:
     """The mandatory-native paragraph shared by built-in and overridden reviewers."""
+    # The command lands inside a double-quoted shell argument: escape what the shell
+    # would still interpret there (a project `command` is free text).
+    quoted = "".join("\\" + c if c in '\\"$`' else c for c in command)
     return (
         f"**Native code review (mandatory).** {invoke} Wait for its report before "
         "continuing.\n\n"
@@ -74,7 +77,7 @@ def _required(command: str, invoke: str, subagent: str) -> str:
         "deliberately — record it and continue with your own review:\n\n"
         "```\n"
         'specops handoff finding add --severity advisory --rule "native-review-not-run" \\\n'
-        f'  --file . --action "Native review not run: {command} (<reason>)"\n'
+        f'  --file . --action "Native review not run: {quoted} (<reason>)"\n'
         "```"
     )
 
@@ -93,8 +96,8 @@ def _builtin(entry: Entry, effort: str) -> str:
 def _none(integration: str) -> str:
     return (
         f"**Native code review.** This integration (`{integration}`) has no native "
-        "code-review command known to SpecOps — perform the code review yourself directly "
-        "on the diff. A project can declare one in `specops.json` → `native_review`."
+        "code-review command in use — perform the code review yourself directly on the "
+        "diff. A project can declare one in `specops.json` → `native_review`."
     )
 
 
@@ -121,7 +124,10 @@ def _project_entry(root: Path, integration: str) -> dict[str, Any] | None:
     """
     if not config.config_path(root).is_file():
         return None
-    block = config.load(root).get("native_review")
+    cfg = config.load(root)
+    if not isinstance(cfg, dict):
+        raise config.ConfigError(f"{config.CONFIG_FILENAME}: must be a JSON object")
+    block = cfg.get("native_review")
     if block is None:
         return None
     if not isinstance(block, dict):

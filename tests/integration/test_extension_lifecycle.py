@@ -34,10 +34,6 @@ def _manifest(root: Path) -> dict:
     return yaml.safe_load((root / ".specify" / "extensions.yml").read_text())
 
 
-@pytest.fixture()
-def compat_ok(monkeypatch):
-    """Pin the CLI-compat gate to satisfied, independent of the ambient install."""
-    monkeypatch.setattr(compat, "installed_version", lambda: compat.MIN_CLI_VERSION)
 
 
 # --- T010: clean install registers hooks + command, zero host modification ---
@@ -569,3 +565,15 @@ def test_invalid_native_review_refuses_install_and_writes_nothing(
     assert result.returncode == 1, result.stdout + result.stderr
     assert "native_review.claude.effort" in result.stdout + result.stderr
     assert snapshot_tree(root) == before
+
+
+def test_update_reports_updated_when_native_review_changes(fake_speckit_repo, compat_ok):
+    """A changed `native_review` rewrites the review command: not "unchanged"."""
+    root = fake_speckit_repo
+    extension.install(root)
+    cfg = json.loads((root / "specops.json").read_text())
+    cfg["native_review"] = {"claude": {"effort": "max"}}
+    (root / "specops.json").write_text(json.dumps(cfg))
+    assert extension.update(root) == "updated"
+    assert 'args: "max ' in (root / _CLAUDE_REVIEW).read_text()
+    assert extension.update(root) == "unchanged"

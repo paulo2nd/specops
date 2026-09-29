@@ -181,30 +181,23 @@ def semantically_equal(a: dict[str, Any], b: dict[str, Any]) -> bool:
 # Command registration (T015) — installs SpecOps-OWNED command files only
 # ---------------------------------------------------------------------------
 
-def register_commands(root: Path) -> list[dict]:
-    """Install the `/specops-review` command file per integration and return
-    their manifest command records. These are SpecOps-owned files, never listed
-    in the host integration manifest (SC-006)."""
+def register_commands(root: Path) -> bool:
+    """Install the `/specops-review` command file per integration. These are
+    SpecOps-owned files, never listed in the host integration manifest (SC-006).
+    Returns True when any command file was created or its content changed."""
     # Render every target before the first write (Feature 028): an invalid
     # `native_review` block then leaves no review file half-installed.
     rendered = [
         (target, nativereview.render_review(root, target["integration"]))
         for target in speckit.review_command_targets(root)
     ]
-    commands: list[dict] = []
+    changed = False
     for target, content in rendered:
-        review_path: Path = target["review_path"]
-        sep = target["separator"]
-        initializer.install_review(review_path, content, sep)
-        commands.append(
-            {
-                "id": f"specops{sep}review",
-                "extension": OWNER,
-                "integration": target["integration"],
-                "path": str(review_path.relative_to(root)),
-            }
+        changed = (
+            initializer.install_review(target["review_path"], content, target["separator"])
+            or changed
         )
-    return commands
+    return changed
 
 
 # ---------------------------------------------------------------------------
@@ -360,12 +353,14 @@ def install(root: Path) -> str:
     already = manifest_path.is_file() and semantically_equal(existing, merged)
 
     # 3. Register command files (idempotent overwrite of SpecOps-owned files).
-    register_commands(root)
+    # A rewritten review command (e.g. a changed `native_review`, Feature 028) is a
+    # real change even when the manifest is semantically equal.
+    cmd_changed = register_commands(root)
     config.create_or_merge(root)
     # 4. Register the SpecOps-owned workflow additively (Feature 007, FR-001a).
     wf_changed = install_workflow(root)
 
-    if already and not wf_changed:
+    if already and not wf_changed and not cmd_changed:
         return "unchanged"
     if not already:
         _atomic_write(manifest_path, _dump(merged))

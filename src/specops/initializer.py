@@ -269,8 +269,10 @@ def run(root: Path, non_interactive: bool = False) -> None:
     typer.echo("specops init: done.")
 
 
-def install_review(review_path: Path, content: str, sep: str) -> None:
-    """Install the review prompt file, wrapping with skills-mode frontmatter when needed."""
+def install_review(review_path: Path, content: str, sep: str) -> bool:
+    """Install the review prompt file, wrapping with skills-mode frontmatter when needed.
+
+    Returns True when the file was created or its content changed."""
     review_path.parent.mkdir(parents=True, exist_ok=True)
     if review_path.name == "SKILL.md":
         frontmatter = (
@@ -280,4 +282,7 @@ def install_review(review_path: Path, content: str, sep: str) -> None:
         full_content = frontmatter + content
     else:
         full_content = content
+    if review_path.is_file() and review_path.read_text(encoding="utf-8") == full_content:
+        return False
     review_path.write_text(full_content, encoding="utf-8")
+    return True
