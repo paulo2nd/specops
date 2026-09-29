@@ -33,6 +33,7 @@ coverage.xml
 # Editors / IDEs
 .idea/
 .vscode/
+*.swp
 
 # macOS
 .DS_Store

@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from specops import compat, extension, initializer, migration
 from specops.cli import app
+from tests.conftest import cli, snapshot_tree
 
 runner = CliRunner()
 
@@ -33,10 +34,6 @@ def _manifest(root: Path) -> dict:
     return yaml.safe_load((root / ".specify" / "extensions.yml").read_text())
 
 
-@pytest.fixture()
-def compat_ok(monkeypatch):
-    """Pin the CLI-compat gate to satisfied, independent of the ambient install."""
-    monkeypatch.setattr(compat, "installed_version", lambda: compat.MIN_CLI_VERSION)
 
 
 # --- T010: clean install registers hooks + command, zero host modification ---
@@ -143,9 +140,8 @@ def test_install_offline(fake_speckit_repo, compat_ok, monkeypatch):
 
 # --- T013: one command registration per installed integration ---
 
-def test_install_registers_every_integration(fake_speckit_repo, compat_ok):
-    root = fake_speckit_repo
-    # Add a second integration 'gemini' (separator '-', different command dir).
+def _add_gemini(root: Path) -> None:
+    """Add a second integration 'gemini' (separator '-', different command dir)."""
     integ = json.loads((root / ".specify" / "integration.json").read_text())
     integ["installed_integrations"].append("gemini")
     integ["integration_settings"]["gemini"] = {"invoke_separator": "-"}
@@ -162,6 +158,10 @@ def test_install_registers_every_integration(fake_speckit_repo, compat_ok):
         json.dumps({"integration": "gemini", "files": gfiles})
     )
 
+
+def test_install_registers_every_integration(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    _add_gemini(root)
     extension.install(root)
 
     data = _manifest(root)
@@ -507,3 +507,75 @@ def test_migrate_rollback_removes_artifacts_created_during_failed_install(
         "SPECOPS:BEGIN" in p.read_text()
         for p in root.glob(".claude/skills/speckit-*/SKILL.md")
     )
+
+
+# ---------------------------------------------------------------------------
+# Feature 028 — the review command names the integration's native reviewer
+# ---------------------------------------------------------------------------
+
+_CLAUDE_REVIEW = Path(".claude/skills/specops-review/SKILL.md")
+
+
+def test_install_renders_claude_native_reviewer_idempotently(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    extension.install(root)
+    first = (root / _CLAUDE_REVIEW).read_text()
+    assert "/code-review" in first and "the Skill tool" in first
+    extension.update(root)
+    assert (root / _CLAUDE_REVIEW).read_text() == first  # FR-011: idempotent
+
+
+def test_update_replaces_review_installed_by_an_older_version(fake_speckit_repo, compat_ok):
+    """SC-004: an already-installed project gets the new text via the normal update."""
+    root = fake_speckit_repo
+    extension.install(root)
+    path = root / _CLAUDE_REVIEW
+    # Written as cp1252 on purpose: "…" becomes byte 0x85, invalid UTF-8. The old
+    # file must be replaced, never crash the comparison (it did on Windows).
+    path.write_bytes(
+        "If your environment provides a native code-review capability (e.g. the "
+        "`/code-review` skill in Claude Code, …), invoke it.\n".encode("cp1252")
+    )
+    extension.update(root)
+    text = path.read_text()
+    assert "If your environment provides" not in text
+    assert "**Native code review (mandatory).**" in text
+
+
+def test_each_integration_copy_names_only_its_own_reviewer(fake_speckit_repo, compat_ok):
+    """SC-002: Claude's copy is the native variant, Gemini's the no-native variant."""
+    root = fake_speckit_repo
+    _add_gemini(root)
+    extension.install(root)
+    claude = (root / _CLAUDE_REVIEW).read_text()
+    gemini = (root / ".gemini" / "commands" / "specops-review.md").read_text()
+    assert "`/code-review`" in claude and "(`claude`) has no native" not in claude
+    assert "(`gemini`) has no native code-review command" in gemini
+    assert "/code-review" not in gemini and "native-review-not-run" not in gemini
+
+
+@pytest.mark.parametrize("command", [("extension", "install"), ("init", "--non-interactive")])
+def test_invalid_native_review_refuses_install_and_writes_nothing(
+    fake_speckit_repo, compat_ok, command
+):
+    """US3-AS3 / FR-010: non-zero exit (1, the ConfigError code) and an untouched tree."""
+    root = fake_speckit_repo
+    bad = {"native_review": {"claude": {"effort": "ultra"}}}
+    (root / "specops.json").write_text(json.dumps(bad))
+    before = snapshot_tree(root)
+    result = cli(root, *command)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "native_review.claude.effort" in result.stdout + result.stderr
+    assert snapshot_tree(root) == before
+
+
+def test_update_reports_updated_when_native_review_changes(fake_speckit_repo, compat_ok):
+    """A changed `native_review` rewrites the review command: not "unchanged"."""
+    root = fake_speckit_repo
+    extension.install(root)
+    cfg = json.loads((root / "specops.json").read_text())
+    cfg["native_review"] = {"claude": {"effort": "max"}}
+    (root / "specops.json").write_text(json.dumps(cfg))
+    assert extension.update(root) == "updated"
+    assert 'args: "max ' in (root / _CLAUDE_REVIEW).read_text()
+    assert extension.update(root) == "unchanged"

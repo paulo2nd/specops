@@ -782,8 +782,31 @@ drives the review agent cheapest-rejection-first:
    selected gate-profile suite — the default `lint`/`test` profile when no
    `gate-profiles.yaml` exists — working tree, drift); any non-zero exit is an
    immediate REJECTED without reading a single line of code.
-3. Surgical review of effective-diff files only.
+3. Surgical review of effective-diff files only. Step 3a first invokes the
+   integration's **native code reviewer** (Feature 028), then the agent's own pass.
 4. Write `revisions/revision-X.md` and record the `APPROVED`/`REJECTED` outcome.
+
+**Native code reviewer (Feature 028).** The command is rendered per installed
+integration from a built-in map plus the optional `specops.json` → `native_review`
+block, so each copy names its own reviewer:
+
+- **Built-in:** `claude` → `/code-review` through the Skill tool, at effort `high`,
+  targeting the round's `reviewed_range` (from `specops handoff record-scope`). Invoking
+  it is mandatory. The map only lists reviewers that are built in, that the agent can
+  invoke itself mid-session, and that can target the round's range. The other Spec Kit
+  integrations render "no native review" and keep the manual review.
+- **Subagents:** a subagent running the review must have the invocation mechanism (the
+  Skill tool for Claude Code). Without it the native review did not run.
+- **Not run:** the reviewer records `specops handoff finding add --severity advisory
+  --rule "native-review-not-run" --file . --action "Native review not run: <command>
+  (<reason>)"` and continues with its own review. SpecOps does not verify that the
+  native reviewer ran; the finding makes a gap visible in `handoff render`.
+- **Overrides:** `{"native_review": {"<integration>": {"command": "<reviewer>" | null,
+  "effort": "<level>"}}}`. `effort` applies only to a built-in reviewer (Claude:
+  `low|medium|high|xhigh|max`; `ultra` is rejected). A `command` string names a
+  project-specific reviewer; `null` turns the native review off. An invalid block makes
+  `specops init` / `specops extension install|update|enable` exit `1` without writing
+  anything. Changes take effect on the next `specops extension update`.
 
 ## Review workflow: where agent and tool findings fit
 

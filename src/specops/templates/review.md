@@ -59,7 +59,7 @@ Read exactly the files it lists. Do not review anything outside them.
 - Security defects introduced by the change (injection, path traversal, unsafe deserialization, secrets).
 - Tests that assert the wrong thing, cannot fail, or leave new behavior uncovered.
 
-If your environment provides a native code-review capability (e.g. the `/code-review` skill in Claude Code, or an equivalent review command in your integration), **invoke it scoped to the effective diff** and carry its confirmed findings into Step 4. The native reviewer complements your own pass — it never replaces it, and it never records the verdict: every finding you accept must become a structured finding (Step 4). Findings emitted as JSON/SARIF by an external tool can be imported wholesale with `specops handoff finding import-json` / `import-sarif` instead of re-entered by hand. If no native capability exists, perform the code review yourself directly on the diff.
+{{native_review}}
 
 **3b — Conformance review.** Review the same diff against:
 - The spec Success Criteria and acceptance conditions.

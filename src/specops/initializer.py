@@ -5,7 +5,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from specops import config, fsutil, gitops, speckit
+from specops import config, fsutil, gitops, nativereview, speckit
 from specops.errors import SpecopsError
 
 # ---------------------------------------------------------------------------
@@ -219,6 +219,12 @@ def run(root: Path, non_interactive: bool = False) -> None:
         typer.echo(f"Manifest resolution failed: {exc}", err=True)
         raise typer.Exit(1) from None
 
+    # Render every review command first (Feature 028): an invalid `native_review`
+    # block raises here, before specops.json or any prompt file is written.
+    reviews = {
+        t["integration"]: nativereview.render_review(root, t["integration"]) for t in targets
+    }
+
     # Step 4: specops.json
     _cfg, created = config.create_or_merge(root)
     config_status = "created" if created else "updated"
@@ -230,7 +236,6 @@ def run(root: Path, non_interactive: bool = False) -> None:
     specify_content = _read_template("directives/specify.md").strip()
     tasks_content = _read_template("directives/tasks.md").strip()
     lite_content = _read_template("directives/lite.md").strip()
-    review_content = _read_template("review.md")
 
     for target in targets:
         sep = target["separator"]
@@ -240,7 +245,7 @@ def run(root: Path, non_interactive: bool = False) -> None:
         tasks_path: Path | None = target.get("tasks_path")
         # Step 5: install review.md
         review_path = speckit.derive_review_path(plan_path, root, sep)
-        install_review(review_path, review_content, sep)
+        install_review(review_path, reviews[target["integration"]], sep)
         typer.echo(f"  {review_path.relative_to(root)}: installed review command")
 
         # Step 6: inject directive blocks (specify/tasks are best-effort)
@@ -264,8 +269,10 @@ def run(root: Path, non_interactive: bool = False) -> None:
     typer.echo("specops init: done.")
 
 
-def install_review(review_path: Path, content: str, sep: str) -> None:
-    """Install the review prompt file, wrapping with skills-mode frontmatter when needed."""
+def install_review(review_path: Path, content: str, sep: str) -> bool:
+    """Install the review prompt file, wrapping with skills-mode frontmatter when needed.
+
+    Returns True when the file was created or its content changed."""
     review_path.parent.mkdir(parents=True, exist_ok=True)
     if review_path.name == "SKILL.md":
         frontmatter = (
@@ -275,4 +282,12 @@ def install_review(review_path: Path, content: str, sep: str) -> None:
         full_content = frontmatter + content
     else:
         full_content = content
+    # errors="replace": an existing file that is not valid UTF-8 (hand-edited, or
+    # written in a legacy code page) just compares unequal and is rewritten.
+    if (
+        review_path.is_file()
+        and review_path.read_text(encoding="utf-8", errors="replace") == full_content
+    ):
+        return False
     review_path.write_text(full_content, encoding="utf-8")
+    return True

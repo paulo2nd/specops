@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from specops import ledger
+from specops import compat, ledger
 
 # Product directive templates — the single source for both delivery paths
 # (native extension hooks and legacy marker-block injection).
@@ -56,6 +56,12 @@ def tmp_git_repo(tmp_path: Path) -> Path:
         cwd=tmp_path, check=True, capture_output=True,
     )
     return tmp_path
+
+
+@pytest.fixture()
+def compat_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the CLI-compat gate to satisfied, independent of the ambient install."""
+    monkeypatch.setattr(compat, "installed_version", lambda: compat.MIN_CLI_VERSION)
 
 
 @pytest.fixture()

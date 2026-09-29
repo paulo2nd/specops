@@ -11,9 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from specops import compat, extension
+from specops import extension
 from tests.conftest import make_v1_ledger
 
 # The complete, documented SpecOps hook registry. taskstoissues is deliberately
@@ -47,12 +45,6 @@ def test_hook_registry_equals_documented_set_exactly() -> None:
 def test_no_taskstoissues_directive_template_exists() -> None:
     directives = Path(extension.__file__).parent / "templates" / "directives"
     assert not (directives / "taskstoissues.md").exists()
-
-
-@pytest.fixture()
-def compat_ok(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin the CLI-compat gate to satisfied, independent of the ambient install."""
-    monkeypatch.setattr(compat, "installed_version", lambda: compat.MIN_CLI_VERSION)
 
 
 def test_ledger_byte_identical_across_install_and_update(

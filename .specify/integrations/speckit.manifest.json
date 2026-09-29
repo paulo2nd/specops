@@ -1,6 +1,6 @@
 {
   "integration": "speckit",
-  "version": "0.12.4",
+  "version": "1.0.13",
   "installed_at": "2026-07-05T13:45:04.772631+00:00",
   "files": {
     ".specify/scripts/powershell/setup-tasks.ps1": "441f3a6cfa1da236411ed6a68ebf754a391515662df0bb74dd6916106d8caf52",
@@ -12,6 +12,13 @@
     ".specify/templates/checklist-template.md": "c37695297e5d3153d64f82c21223509940b13932046c7961c42d1d669516130c",
     ".specify/templates/tasks-template.md": "fc29a233f6f5a27ca31f1aa46b596af6500c627441c6e62b2bc4a1d721525842",
     ".specify/templates/spec-template.md": "3945437fc35cd30a5b2bf7beea680337c3516826d3efa5a6b92c4a7eca1ba28e",
-    ".specify/templates/plan-template.md": "cc7f7979cf8d8836ec26492785affd80791d3422a2b745062ec695be8c985ef7"
+    ".specify/templates/plan-template.md": "cc7f7979cf8d8836ec26492785affd80791d3422a2b745062ec695be8c985ef7",
+    ".specify/scripts/bash/common.sh": "36597fdbfa8a60c66637c50f91557a5931b55052d42e218151c18e89ef01cf87",
+    ".specify/scripts/bash/setup-plan.sh": "d0bd298c026446f3c63167130d65e49e4aa4485de6bef18bcdfd57b19aa0de96",
+    ".specify/scripts/bash/setup-tasks.sh": "4a33dd1e6c32ddc7d570f4b538572c54069192573eed0ec654d9fb826e31a4fe",
+    ".specify/scripts/bash/check-prerequisites.sh": "daa377146db4fb69912f42611a7b91c5d55873b3e3e27ed33bd8d67505826344",
+    ".specify/scripts/bash/resolve-template.sh": "829e227096abc8bf0889889ec9f792f503ca5d395b7836a8a7eb739ee75214e7",
+    ".specify/scripts/bash/create-new-feature.sh": "7f85da63527be6464b08e79578b35b33d0b259fa7653a61ae64da626a26207e2",
+    ".specify/.gitignore": "8c908410d177a1ef3d0dee16d7ad55f2ac3333df3104c4d4adee1c9b82f1dbc1"
   }
 }
