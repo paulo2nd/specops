@@ -282,7 +282,12 @@ def install_review(review_path: Path, content: str, sep: str) -> bool:
         full_content = frontmatter + content
     else:
         full_content = content
-    if review_path.is_file() and review_path.read_text(encoding="utf-8") == full_content:
+    # errors="replace": an existing file that is not valid UTF-8 (hand-edited, or
+    # written in a legacy code page) just compares unequal and is rewritten.
+    if (
+        review_path.is_file()
+        and review_path.read_text(encoding="utf-8", errors="replace") == full_content
+    ):
         return False
     review_path.write_text(full_content, encoding="utf-8")
     return True

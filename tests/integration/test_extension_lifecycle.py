@@ -530,9 +530,11 @@ def test_update_replaces_review_installed_by_an_older_version(fake_speckit_repo,
     root = fake_speckit_repo
     extension.install(root)
     path = root / _CLAUDE_REVIEW
-    path.write_text(
+    # Written as cp1252 on purpose: "…" becomes byte 0x85, invalid UTF-8. The old
+    # file must be replaced, never crash the comparison (it did on Windows).
+    path.write_bytes(
         "If your environment provides a native code-review capability (e.g. the "
-        "`/code-review` skill in Claude Code, …), invoke it.\n"
+        "`/code-review` skill in Claude Code, …), invoke it.\n".encode("cp1252")
     )
     extension.update(root)
     text = path.read_text()
