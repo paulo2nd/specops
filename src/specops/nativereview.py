@@ -15,8 +15,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from specops import fsutil
+from specops import config, fsutil
 
 _TEMPLATE = Path(__file__).parent / "templates" / "review.md"
 
@@ -97,12 +98,72 @@ def _none(integration: str) -> str:
     )
 
 
-def step_3a(root: Path, integration: str) -> str:
-    """Render the Step 3a native-review paragraph for *integration*."""
-    entry = BUILTIN.get(integration)
+def _override(command: str) -> str:
+    invoke = (
+        f"This project's native reviewer for this integration is `{command}` (configured "
+        "in `specops.json`). Invoke it with your integration's own mechanism (tool, skill "
+        "or shell) before your own pass, scoped to the round's `reviewed_range` from "
+        "`specops handoff record-scope`."
+    )
+    return _required(command, invoke, "be able to invoke it")
+
+
+def _fail(key: str, problem: str) -> config.ConfigError:
+    return config.ConfigError(f"{config.CONFIG_FILENAME}: native_review{key} {problem}")
+
+
+def _project_entry(root: Path, integration: str) -> dict[str, Any] | None:
+    """Return this integration's validated ``native_review`` override, if any.
+
+    ``specops.json`` is optional here (a first install has none yet). Only the
+    integration being rendered is validated, so an entry for an integration that is
+    not installed never breaks an install (data-model Entity 2).
+    """
+    if not config.config_path(root).is_file():
+        return None
+    block = config.load(root).get("native_review")
+    if block is None:
+        return None
+    if not isinstance(block, dict):
+        raise _fail("", "must be an object keyed by integration id")
+    entry = block.get(integration)
+    key = f".{integration}"
     if entry is None:
+        return None
+    if not isinstance(entry, dict):
+        raise _fail(key, "must be an object with optional 'command' and 'effort'")
+    unknown = sorted(set(entry) - {"command", "effort"})
+    if unknown:
+        raise _fail(key, f"has unknown key(s) {', '.join(unknown)} (allowed: command, effort)")
+    command = entry.get("command")
+    if command is not None and (not isinstance(command, str) or not command.strip()):
+        raise _fail(f"{key}.command", "must be a non-empty string or null")
+    return entry
+
+
+def step_3a(root: Path, integration: str) -> str:
+    """Render the Step 3a native-review paragraph for *integration*.
+
+    Raises :class:`config.ConfigError` on an invalid ``native_review`` override.
+    """
+    project = _project_entry(root, integration) or {}
+    # A project `command` (string or null) replaces the built-in entry outright.
+    resolved = project["command"] if "command" in project else BUILTIN.get(integration)
+    if "effort" in project and not isinstance(resolved, Entry):
+        raise _fail(
+            f".{integration}.effort",
+            "only applies to a built-in reviewer; put arguments in 'command'",
+        )
+    if resolved is None:
         return _none(integration)
-    return _builtin(entry, entry.default_effort)
+    if isinstance(resolved, str):
+        return _override(resolved)
+    effort = project.get("effort", resolved.default_effort)
+    if effort not in resolved.efforts:
+        raise _fail(
+            f".{integration}.effort", f"must be one of {', '.join(resolved.efforts)}"
+        )
+    return _builtin(resolved, effort)
 
 
 def render_review(root: Path, integration: str) -> str:

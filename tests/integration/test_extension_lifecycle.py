@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from specops import compat, extension, initializer, migration
 from specops.cli import app
+from tests.conftest import cli, snapshot_tree
 
 runner = CliRunner()
 
@@ -553,3 +554,18 @@ def test_each_integration_copy_names_only_its_own_reviewer(fake_speckit_repo, co
     assert "`/code-review`" in claude and "(`claude`) has no native" not in claude
     assert "(`gemini`) has no native code-review command" in gemini
     assert "/code-review" not in gemini and "native-review-not-run" not in gemini
+
+
+@pytest.mark.parametrize("command", [("extension", "install"), ("init", "--non-interactive")])
+def test_invalid_native_review_refuses_install_and_writes_nothing(
+    fake_speckit_repo, compat_ok, command
+):
+    """US3-AS3 / FR-010: non-zero exit (1, the ConfigError code) and an untouched tree."""
+    root = fake_speckit_repo
+    bad = {"native_review": {"claude": {"effort": "ultra"}}}
+    (root / "specops.json").write_text(json.dumps(bad))
+    before = snapshot_tree(root)
+    result = cli(root, *command)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "native_review.claude.effort" in result.stdout + result.stderr
+    assert snapshot_tree(root) == before
