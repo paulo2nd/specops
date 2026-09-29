@@ -176,8 +176,21 @@ destructive actions — is *not* pierceable; there SpecOps halts and asks a huma
 | `lint_command` | Lint gate run by `specops preflight` (empty = skipped) | `""` |
 | `skills_dir` | Directory the review prompt loads skills from | `.specify/skills` |
 | `review_round_cap` | Max semantic review rounds before SpecOps halts and asks a human | `10` |
+| `native_review` | Optional, per integration: `{"<integration>": {"command": "…" \| null, "effort": "…"}}` — overrides the native code reviewer `/specops-review` invokes. Applied on `specops extension update` | *(absent — built-in map)* |
 
 Unknown keys are preserved on re-init.
+
+### Native code review
+
+`/specops-review` invokes the agent's **native code reviewer** where the integration
+has one the agent can run itself against the round's diff — today Claude Code's
+`/code-review`, through the Skill tool, at effort `high`. The review command is
+rendered per installed integration, so each copy names its own reviewer, or states
+plainly that there is none and the review is manual. When the native reviewer does not
+run (for example a subagent without the Skill tool), the reviewer records an advisory
+`native-review-not-run` finding instead of falling back silently. Use `native_review`
+in `specops.json` to change the effort, name a project-specific reviewer, or turn it off
+for an integration.
 
 ### Review round integrity
 

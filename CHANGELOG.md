@@ -13,6 +13,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`/specops-review` invokes the agent's native code reviewer, by name (Feature 028).**
+  Step 3a used to say "if your environment provides a native code-review capability
+  (e.g. `/code-review`)…". In an adopter run the review executed inside a subagent with
+  no access to Claude Code's Skill tool. `/code-review` never ran, the reviewer fell
+  back to a manual pass without saying so, and three rounds of verdicts carried no
+  trace of it.
+  - **The review command is rendered per installed integration.** For Claude Code,
+    Step 3a now makes `/code-review` mandatory, invoked through the Skill tool at
+    effort `high` against the round's `reviewed_range`. Integrations without a
+    native reviewer that the agent can run against the round's diff say so plainly
+    and keep the manual review. Today that is every Spec Kit integration except
+    Claude Code; the per-tool evidence is in `specs/028-native-code-review/research.md`.
+  - **Subagents.** A subagent running the review must have the invocation mechanism
+    (the Skill tool). A run without it counts as native review not run.
+  - **No silent fallback.** When the native reviewer does not run, the reviewer
+    records an advisory `native-review-not-run` finding (the same shape as
+    `skipped-gate`), so the gap shows in `handoff render`. SpecOps does not try to
+    verify that the native reviewer ran.
+  - **`native_review` in `specops.json`** (optional, per integration):
+    `{"<integration>": {"command": "…" | null, "effort": "…"}}` changes the effort,
+    names a project-specific reviewer, or turns the native review off. An invalid
+    block makes `specops init` / `specops extension install|update|enable` exit `1`
+    without writing anything. The key is not added to the written defaults.
+  - **Upgrading:** installed projects get the new review command with
+    `specops extension update` (or a reinstall). The ledger, the CLI command set,
+    the finding model and the approval gates are unchanged.
+
 ## [0.13.0] - 2026-09-02
 
 ### Added

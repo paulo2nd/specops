@@ -111,12 +111,12 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at th
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T020 [P] Add a `native_review` row to the `specops.json` configuration table in `README.md` (~L171). It is optional, per integration, `{command, effort}`, and takes effect on `specops extension update`. Add a sentence in the review section that `/specops-review` now invokes the agent's native reviewer where one exists (Claude Code: `/code-review`).
-- [ ] T021 [P] Mirror T020 in `README.pt-br.md` (full parity rule)
-- [ ] T022 [P] In `docs/commands.md`, document in the review section the per-integration native reviewer, the `native_review` block, and the `native-review-not-run` advisory convention
-- [ ] T023 [P] In `CHANGELOG.md` under `[Unreleased]`, add an entry that covers: `/specops-review` names the integration's native reviewer and makes it mandatory (Claude Code: `/code-review` via the Skill tool, effort `high`); the subagent rule; the `native-review-not-run` advisory finding convention; the new optional `native_review` block in `specops.json`; installed projects receive it with `specops extension update`. Also state that the ledger, commands and gates are unchanged.
-- [ ] T024 [P] In `ROADMAP.md`, add Feature 028 "Native Code Review in /specops-review" as `ACTIVE` to the tracking table (depends on 005, 011, 015), plus a short brief section after Feature 027
-- [ ] T025 Run the full quickstart §1: `conda run -n specops pytest -q`, `mypy src`, `ruff check src tests`. Confirm that `tests/unit/test_frozen_config.py` passes unmodified [SC-005]
+- [X] T020 [P] Add a `native_review` row to the `specops.json` configuration table in `README.md` (~L171). It is optional, per integration, `{command, effort}`, and takes effect on `specops extension update`. Add a sentence in the review section that `/specops-review` now invokes the agent's native reviewer where one exists (Claude Code: `/code-review`).
+- [X] T021 [P] Mirror T020 in `README.pt-br.md` (full parity rule)
+- [X] T022 [P] In `docs/commands.md`, document in the review section the per-integration native reviewer, the `native_review` block, and the `native-review-not-run` advisory convention
+- [X] T023 [P] In `CHANGELOG.md` under `[Unreleased]`, add an entry that covers: `/specops-review` names the integration's native reviewer and makes it mandatory (Claude Code: `/code-review` via the Skill tool, effort `high`); the subagent rule; the `native-review-not-run` advisory finding convention; the new optional `native_review` block in `specops.json`; installed projects receive it with `specops extension update`. Also state that the ledger, commands and gates are unchanged.
+- [X] T024 [P] In `ROADMAP.md`, add Feature 028 "Native Code Review in /specops-review" as `ACTIVE` to the tracking table (depends on 005, 011, 015), plus a short brief section after Feature 027
+- [X] T025 Run the full quickstart §1: `conda run -n specops pytest -q`, `mypy src`, `ruff check src tests`. Confirm that `tests/unit/test_frozen_config.py` passes unmodified [SC-005]
 - [ ] T026 Before release, not in CI: do quickstart §4 in a real Claude Code session (v2.1.246 or later) to confirm `Skill(skill: "code-review", args: "high <sha>...<sha>")` accepts raw commit shas. If it is refused, switch the variant A invocation to pass `scope_paths`, and update `contracts/review-step-3a.md` and T008.
 
 ---

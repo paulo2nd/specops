@@ -188,8 +188,21 @@ pergunta a um humano.)
 | `lint_command` | Gate de lint executado por `specops preflight` (vazio = pulado) | `""` |
 | `skills_dir` | Diretório de onde o prompt de review carrega skills | `.specify/skills` |
 | `review_round_cap` | Máximo de rounds de review semântico antes de o SpecOps parar e pedir a um humano | `10` |
+| `native_review` | Opcional, por integração: `{"<integração>": {"command": "…" \| null, "effort": "…"}}` — sobrescreve o revisor de código nativo que o `/specops-review` invoca. Aplicado no `specops extension update` | *(ausente — mapa embutido)* |
 
 Chaves desconhecidas são preservadas em um novo `init`.
+
+### Revisão de código nativa
+
+O `/specops-review` invoca o **revisor de código nativo** do agente quando a integração
+tem um que o próprio agente consegue rodar sobre o diff do round — hoje o `/code-review`
+do Claude Code, pela ferramenta Skill, com esforço `high`. O comando de review é
+renderizado por integração instalada, então cada cópia cita o seu próprio revisor, ou
+diz claramente que não há um e que a revisão é manual. Quando o revisor nativo não roda
+(por exemplo, um subagente sem a ferramenta Skill), o revisor registra um finding
+advisory `native-review-not-run` em vez de cair em silêncio para a revisão manual. Use
+`native_review` no `specops.json` para mudar o esforço, indicar um revisor próprio do
+projeto ou desligá-lo para uma integração.
 
 ### Integridade dos rounds de review
 

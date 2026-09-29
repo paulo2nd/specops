@@ -96,6 +96,7 @@ Roadmap status uses four values:
 | 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
 | 026 | Supported Recovery Operations | MERGED | 006, 010, 021 | Field Hardening |
 | 027 | Cross-Round Review Coverage | MERGED | 025, 026 | Field Hardening |
+| 028 | Native Code Review in `/specops-review` | ACTIVE | 005, 011, 015 | Field Hardening |
 
 ### Build sequence (dependency review — 2026-07-23)
 
@@ -1500,6 +1501,52 @@ not-yet-re-verified full set.
 > paths no round has ever read, and APPROVED fails closed while that never-read
 > set is non-empty — degrading to today's behavior on ledgers with no
 > reviewed-scope records, and never prescribing how a reviewer spends its context.
+
+## Feature 028 — Native Code Review in `/specops-review`
+
+### Objective
+
+Make `/specops-review` actually invoke the agent's native code reviewer instead of
+mentioning one as a conditional example. In an adopter run the review executed in a
+subagent without Claude Code's Skill tool: `/code-review` never ran, the reviewer fell
+back to a manual pass without saying so, and three rounds of verdicts carried no trace
+of it.
+
+### Required outcomes
+
+- The review command is rendered per installed integration from a built-in map. Each
+  copy names its own native reviewer and makes invoking it mandatory, or states plainly
+  that there is none.
+- The map lists only reviewers that are built in, that the agent can invoke itself
+  mid-session, and that can target the round's range, each backed by the tool's own
+  documentation. Today that is Claude Code's `/code-review`.
+- The instruction covers delegated subagents (they need the invocation mechanism) and
+  a no-silent-fallback convention: an advisory `native-review-not-run` finding.
+- An optional `specops.json` → `native_review` block overrides the reviewer or its
+  effort per integration, and fails closed on invalid input.
+
+### Explicit non-goals
+
+- No change to the review process, the ledger, the CLI command set, the finding model
+  or the approval gates.
+- No attempt to verify that the native reviewer actually ran.
+
+### Acceptance gate
+
+With Claude Code installed, the rendered review command names `/code-review` and the
+Skill tool with no conditional wording; a second installed integration renders its own
+reviewer or its absence; installed projects receive it through
+`specops extension update`; and the existing review, ledger and approval suites pass
+unchanged.
+
+### `/speckit.specify` brief
+
+> Make `/specops-review` use the configured integration's native code reviewer: render
+> the review command per integration naming the exact command (Claude Code:
+> `/code-review` via the Skill tool, effort high), mandatory where it exists and
+> including delegated subagents, with an advisory `native-review-not-run` finding when
+> it does not run, and per-integration overrides in `specops.json` — without changing
+> the review process or its records.
 
 ## Dependency and Replanning Policy
 
