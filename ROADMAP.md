@@ -1633,3 +1633,19 @@ re-verified, so a defect an earlier round missed can no longer be hidden from
 later rounds by the tool. Approval fails closed on any product path no recorded
 round has ever reached, and names it; a round is credited only with what can
 still be verified (027, released `0.13.0`).
+
+### Native Review complete
+
+Feature 028 is merged. Like Field Hardening, it came from real use: in an adopter's
+multi-round review the native code reviewer was only mentioned as a conditional
+example, a subagent without Claude Code's Skill tool never ran `/code-review`, and
+three rounds of verdicts carried no trace of the silent fallback.
+
+`/specops-review` is now rendered per installed integration. Where the integration
+has a native reviewer the agent can invoke itself against the round's range — today
+Claude Code's `/code-review` through the Skill tool — invoking it is mandatory; a
+delegated subagent must have the invocation mechanism, and a native review that did
+not run is recorded as an advisory `native-review-not-run` finding. Integrations
+without one say so plainly, and projects can override the reviewer or its effort per
+integration in `specops.json`. The review process, ledger and approval gates are
+unchanged (028, released `0.14.0`).
