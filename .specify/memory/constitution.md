@@ -1,7 +1,29 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.13.0 → 1.14.0
+Version change: 1.14.0 → 1.15.0
+Rationale (1.15.0, 2026-09-29): MINOR amendment landed with
+specs/028-native-code-review (Native Code Review in /specops-review). ONE principle is
+touched:
+- Principle IV (Token-Optimized Review) is BROADENED. The review directive mentioned a
+  native code reviewer only as a conditional example ("if your environment provides…,
+  e.g. /code-review"). In an adopter run the review executed in a subagent without
+  Claude Code's Skill tool: /code-review never ran, the reviewer fell back to a manual
+  pass without saying so, and three rounds of verdicts carried no trace of it. The
+  directive is now rendered per installed integration from a built-in map (today only
+  Claude Code's `/code-review` via the Skill tool) plus optional `specops.json` →
+  `native_review` overrides; invoking the native reviewer is mandatory where one
+  exists, a delegated subagent must have the invocation mechanism, and a native review
+  that did not run is recorded as an advisory `native-review-not-run` finding.
+No principle is removed or redefined. Nothing is persisted: ledger stays v9, and the
+CLI command set, finding model and approval gates are unchanged. SpecOps does not
+verify that the native reviewer ran — the clause records, it does not validate.
+MINOR bump: materially expanded guidance on a non-removed principle. Templates updated
+in the same change set: src/specops/templates/review.md (Step 3a becomes the
+`{{native_review}}` placeholder, rendered by src/specops/nativereview.py). Verified by
+the feature's own fixtures, never against this repository (No Self-Application).
+
+Previous entry (1.13.0 → 1.14.0):
 Rationale (1.14.0, 2026-09-02): MINOR amendment landed during /speckit-implement of
 specs/027-cross-round-review-coverage, User Story 3. TWO principles are touched:
 - Principle II is NARROWED (a documented narrowing of the Feature 025 carve-out, not
@@ -602,6 +624,15 @@ sourced identically from the SpecOps templates. The directives are:
   scope only — it never judges a finding's merit** (record, do not validate). A
   configurable `review_round_cap` (default 10) bounds the loop: exceeding it is a
   Stop-and-Ask halt recorded as a `review_halt` marker, never a fabricated verdict.
+  Since Feature 028 the review directive is rendered **per installed integration**:
+  where the integration has a native code reviewer the agent can invoke itself against
+  the round's range (a built-in map — today Claude Code's `/code-review` via the Skill
+  tool — overridable per integration in `specops.json` → `native_review`), invoking it
+  is **mandatory** and its confirmed findings become structured findings. It
+  complements the agent's own pass and never replaces it. A delegated subagent must
+  have the invocation mechanism; a native review that did not run is recorded as an
+  advisory `native-review-not-run` finding, never a silent fallback. SpecOps does not
+  verify that the native reviewer ran (record, do not validate).
 - **Stop-and-Ask Gates (§8.2)**: agents halt and ask the human on persisted
   schema changes (migrations), secrets, public contract breaks, technical
   ambiguities, or when the review round cap is reached (Feature 025 — the loop
@@ -752,4 +783,4 @@ guidance conflicts, the constitution wins.
   with the Core Principles; added complexity MUST be justified against a
   rejected simpler alternative.
 
-**Version**: 1.14.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-09-02
+**Version**: 1.15.0 | **Ratified**: 2026-07-05 | **Last Amended**: 2026-09-29
