@@ -96,7 +96,7 @@ Roadmap status uses four values:
 | 025 | Review Round Integrity | MERGED | 004, 010, 011, 021 | Review Integrity |
 | 026 | Supported Recovery Operations | MERGED | 006, 010, 021 | Field Hardening |
 | 027 | Cross-Round Review Coverage | MERGED | 025, 026 | Field Hardening |
-| 028 | Native Code Review in `/specops-review` | ACTIVE | 005, 011, 015 | Field Hardening |
+| 028 | Native Code Review in `/specops-review` | MERGED | 005, 011, 015 | Native Review |
 
 ### Build sequence (dependency review — 2026-07-23)
 
