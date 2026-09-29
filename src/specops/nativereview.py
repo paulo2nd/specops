@@ -49,18 +49,6 @@ BUILTIN: dict[str, Entry] = {
     ),
 }
 
-_LEGACY = (
-    "If your environment provides a native code-review capability (e.g. the "
-    "`/code-review` skill in Claude Code, or an equivalent review command in your "
-    "integration), **invoke it scoped to the effective diff** and carry its confirmed "
-    "findings into Step 4. The native reviewer complements your own pass — it never "
-    "replaces it, and it never records the verdict: every finding you accept must "
-    "become a structured finding (Step 4). Findings emitted as JSON/SARIF by an "
-    "external tool can be imported wholesale with `specops handoff finding "
-    "import-json` / `import-sarif` instead of re-entered by hand. If no native "
-    "capability exists, perform the code review yourself directly on the diff."
-)
-
 _FINDINGS = (
     "Carry every confirmed finding into Step 4 as a structured finding: record defects "
     "that gate approval individually with `specops handoff finding add --severity "
@@ -101,11 +89,19 @@ def _builtin(entry: Entry, effort: str) -> str:
     return _required(entry.command, invoke, f"have {entry.mechanism}")
 
 
+def _none(integration: str) -> str:
+    return (
+        f"**Native code review.** This integration (`{integration}`) has no native "
+        "code-review command known to SpecOps — perform the code review yourself directly "
+        "on the diff. A project can declare one in `specops.json` → `native_review`."
+    )
+
+
 def step_3a(root: Path, integration: str) -> str:
     """Render the Step 3a native-review paragraph for *integration*."""
     entry = BUILTIN.get(integration)
     if entry is None:
-        return _LEGACY
+        return _none(integration)
     return _builtin(entry, entry.default_effort)
 
 

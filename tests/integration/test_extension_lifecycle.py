@@ -143,9 +143,8 @@ def test_install_offline(fake_speckit_repo, compat_ok, monkeypatch):
 
 # --- T013: one command registration per installed integration ---
 
-def test_install_registers_every_integration(fake_speckit_repo, compat_ok):
-    root = fake_speckit_repo
-    # Add a second integration 'gemini' (separator '-', different command dir).
+def _add_gemini(root: Path) -> None:
+    """Add a second integration 'gemini' (separator '-', different command dir)."""
     integ = json.loads((root / ".specify" / "integration.json").read_text())
     integ["installed_integrations"].append("gemini")
     integ["integration_settings"]["gemini"] = {"invoke_separator": "-"}
@@ -162,6 +161,10 @@ def test_install_registers_every_integration(fake_speckit_repo, compat_ok):
         json.dumps({"integration": "gemini", "files": gfiles})
     )
 
+
+def test_install_registers_every_integration(fake_speckit_repo, compat_ok):
+    root = fake_speckit_repo
+    _add_gemini(root)
     extension.install(root)
 
     data = _manifest(root)
@@ -538,3 +541,15 @@ def test_update_replaces_review_installed_by_an_older_version(fake_speckit_repo,
     text = path.read_text()
     assert "If your environment provides" not in text
     assert "**Native code review (mandatory).**" in text
+
+
+def test_each_integration_copy_names_only_its_own_reviewer(fake_speckit_repo, compat_ok):
+    """SC-002: Claude's copy is the native variant, Gemini's the no-native variant."""
+    root = fake_speckit_repo
+    _add_gemini(root)
+    extension.install(root)
+    claude = (root / _CLAUDE_REVIEW).read_text()
+    gemini = (root / ".gemini" / "commands" / "specops-review.md").read_text()
+    assert "`/code-review`" in claude and "(`claude`) has no native" not in claude
+    assert "(`gemini`) has no native code-review command" in gemini
+    assert "/code-review" not in gemini and "native-review-not-run" not in gemini

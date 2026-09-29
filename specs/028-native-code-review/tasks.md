@@ -77,12 +77,12 @@ Single Python package: `src/specops/`, `tests/unit/`, `tests/integration/` at th
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [US2] In `tests/unit/test_nativereview.py`, test that `render_review(root, "gemini")` and `render_review(root, "some-future-id")` contain `has no native code-review command` and the integration id, and contain none of `/code-review`, `native-review-not-run`, `Skill tool` or `If your environment provides` [SC-002]
-- [ ] T013 [P] [US2] In `tests/integration/test_extension_lifecycle.py`, test that on a claude + gemini install `.gemini/commands/specops-review.md` is variant B, the Claude copy is variant A, and neither mentions the other's reviewer [SC-002]
+- [X] T012 [P] [US2] In `tests/unit/test_nativereview.py`, test that `render_review(root, "gemini")` and `render_review(root, "some-future-id")` contain `has no native code-review command` and the integration id, and contain none of `/code-review`, `native-review-not-run`, `Skill tool` or `If your environment provides` [SC-002]
+- [X] T013 [P] [US2] In `tests/integration/test_extension_lifecycle.py`, test that on a claude + gemini install `.gemini/commands/specops-review.md` is variant B, the Claude copy is variant A, and neither mentions the other's reviewer [SC-002]
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] In `src/specops/nativereview.py`, make `step_3a` return variant B (`contracts/review-step-3a.md`) for any integration absent from the map. Remove the verbatim old paragraph from the module, so no integration renders it any more.
+- [X] T014 [US2] In `src/specops/nativereview.py`, make `step_3a` return variant B (`contracts/review-step-3a.md`) for any integration absent from the map. Remove the verbatim old paragraph from the module, so no integration renders it any more.
 
 **Checkpoint**: every integration renders A or B. Commit.
 

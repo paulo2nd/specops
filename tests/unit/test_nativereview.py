@@ -58,6 +58,19 @@ def test_claude_step_3a_is_unconditional_and_mandatory(fake_speckit_repo: Path) 
         assert legacy not in text
 
 
+# --- US2: integrations without a native reviewer get an honest instruction ------
+
+
+@pytest.mark.parametrize("integration", ["gemini", "some-future-id"])
+def test_unmapped_integration_renders_no_native_review(
+    fake_speckit_repo: Path, integration: str
+) -> None:
+    text = nativereview.render_review(fake_speckit_repo, integration)
+    assert f"This integration (`{integration}`) has no native code-review command" in text
+    for absent in ("/code-review", "native-review-not-run", "Skill tool", *_LEGACY_WORDING):
+        assert absent not in text, absent
+
+
 def test_builtin_map_is_claude_only() -> None:
     """SC-003: every built-in entry is backed by research.md R1. A new entry must
     update that evidence and this assertion together."""
