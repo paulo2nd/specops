@@ -60,7 +60,7 @@ _FINDINGS = (
 )
 
 
-def _required(command: str, invoke: str, subagent: str) -> str:
+def _required(command: str, invoke: str, mechanism: str) -> str:
     """The mandatory-native paragraph shared by built-in and overridden reviewers."""
     # The command lands inside a double-quoted shell argument: escape what the shell
     # would still interpret there (a project `command` is free text).
@@ -68,17 +68,28 @@ def _required(command: str, invoke: str, subagent: str) -> str:
     return (
         f"**Native code review (mandatory).** {invoke} Wait for its report before "
         "continuing.\n\n"
-        f"If you delegate this review to a subagent, that subagent must {subagent}. A "
-        "subagent without it cannot run the native reviewer — that run counts as "
-        "**native review not run**; never substitute a manual pass silently.\n\n"
+        "**Run it from the main session, not from a delegated subagent.** A subagent may "
+        f"lack {mechanism}; even with it, the native reviewer can run in the background "
+        "and report only after the subagent has returned, so its findings never reach the "
+        "verdict. If you are a delegated subagent, do not invoke it: record it as "
+        "**native review not run** (reason: `delegated subagent`) and say in your report "
+        "that the main session must run it over the round's `reviewed_range`. Never "
+        "substitute a manual pass silently.\n\n"
         f"{_FINDINGS}\n\n"
         "If the native reviewer did not run — the invocation mechanism was unavailable, "
-        "the invocation was refused or blocked, the tool errored, or you skipped it "
-        "deliberately — record it and continue with your own review:\n\n"
+        "you are a delegated subagent, the invocation was refused or blocked, the tool "
+        "errored, or you skipped it deliberately — record it and continue with your own "
+        "review:\n\n"
         "```\n"
         'specops handoff finding add --severity advisory --rule "native-review-not-run" \\\n'
         f'  --file . --action "Native review not run: {quoted} (<reason>)"\n'
-        "```"
+        "```\n\n"
+        "**Close earlier gaps.** On a corrective round, if an earlier round's "
+        "`native-review-not-run` finding is still open, also run the native reviewer over "
+        "that round's range (the **Range:** line of its `revisions/revision-<N>.md`), not "
+        "only over this round's `reviewed_range`. Dismiss that finding only once a native "
+        "review has covered its range, citing the range in `--reason` — never as belonging "
+        "to a superseded round."
     )
 
 
@@ -90,7 +101,7 @@ def _builtin(entry: Entry, effort: str) -> str:
         "`reviewed_range` printed by `specops handoff record-scope` (write it with three "
         f"dots). {entry.caution}".rstrip()
     )
-    return _required(entry.command, invoke, f"have {entry.mechanism}")
+    return _required(entry.command, invoke, entry.mechanism)
 
 
 def _none(integration: str) -> str:
@@ -108,7 +119,7 @@ def _override(command: str) -> str:
         "or shell) before your own pass, scoped to the round's `reviewed_range` from "
         "`specops handoff record-scope`."
     )
-    return _required(command, invoke, "be able to invoke it")
+    return _required(command, invoke, "the mechanism to invoke it")
 
 
 def _fail(key: str, problem: str) -> config.ConfigError:
