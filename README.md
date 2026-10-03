@@ -187,10 +187,18 @@ has one the agent can run itself against the round's diff — today Claude Code'
 `/code-review`, through the Skill tool, at effort `high`. The review command is
 rendered per installed integration, so each copy names its own reviewer, or states
 plainly that there is none and the review is manual. When the native reviewer does not
-run (for example a subagent without the Skill tool), the reviewer records an advisory
-`native-review-not-run` finding instead of falling back silently. Use `native_review`
-in `specops.json` to change the effort, name a project-specific reviewer, or turn it off
-for an integration.
+run, the reviewer records an advisory `native-review-not-run` finding instead of
+falling back silently, and the next corrective round runs it over that round's range
+too. Use `native_review` in `specops.json` to change the effort, name a
+project-specific reviewer, or turn it off for an integration.
+
+> **Run `/specops-review` from the main session.** The native reviewer is only
+> reliable there. A delegated subagent may lack the Skill tool, and even with it
+> `/code-review` runs in the background and reports after the subagent has returned,
+> so its findings miss the verdict. A subagent records `native-review-not-run` instead
+> of invoking it. The native reviewer complements the agent's own pass and does not
+> replace it: it follows its own recipe and may skip tests and Markdown (spec, plan,
+> tasks).
 
 ### Review round integrity
 

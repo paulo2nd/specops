@@ -795,8 +795,18 @@ block, so each copy names its own reviewer:
   it is mandatory. The map only lists reviewers that are built in, that the agent can
   invoke itself mid-session, and that can target the round's range. The other Spec Kit
   integrations render "no native review" and keep the manual review.
-- **Subagents:** a subagent running the review must have the invocation mechanism (the
-  Skill tool for Claude Code). Without it the native review did not run.
+- **Main session only:** the native reviewer is only reliable when `/specops-review`
+  runs in the main session. A delegated subagent may lack the invocation mechanism
+  (the Skill tool for Claude Code), and even with it `/code-review` runs as a
+  background fork whose report arrives after the subagent has returned, so its
+  findings miss the verdict. A subagent therefore does not invoke it; it records
+  `native-review-not-run` (reason `delegated subagent`).
+- **Earlier gaps:** on a corrective round, an open `native-review-not-run` from an
+  earlier round makes the reviewer also run the native reviewer over that round's range
+  (the **Range:** line of its revision report). The finding is dismissed only once a
+  native review has covered that range, never as belonging to a superseded round.
+- **Coverage:** the native reviewer follows its own recipe and may skip tests and
+  Markdown (spec, plan, tasks); the agent's own pass still covers them.
 - **Not run:** the reviewer records `specops handoff finding add --severity advisory
   --rule "native-review-not-run" --file . --action "Native review not run: <command>
   (<reason>)"` and continues with its own review. SpecOps does not verify that the

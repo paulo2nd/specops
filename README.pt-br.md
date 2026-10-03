@@ -199,10 +199,18 @@ tem um que o próprio agente consegue rodar sobre o diff do round — hoje o `/c
 do Claude Code, pela ferramenta Skill, com esforço `high`. O comando de review é
 renderizado por integração instalada, então cada cópia cita o seu próprio revisor, ou
 diz claramente que não há um e que a revisão é manual. Quando o revisor nativo não roda
-(por exemplo, um subagente sem a ferramenta Skill), o revisor registra um finding
-advisory `native-review-not-run` em vez de cair em silêncio para a revisão manual. Use
-`native_review` no `specops.json` para mudar o esforço, indicar um revisor próprio do
-projeto ou desligá-lo para uma integração.
+, o revisor registra um finding advisory `native-review-not-run` em vez de cair em
+silêncio para a revisão manual, e o próximo round corretivo roda o revisor também sobre
+o range daquele round. Use `native_review` no `specops.json` para mudar o esforço,
+indicar um revisor próprio do projeto ou desligá-lo para uma integração.
+
+> **Rode o `/specops-review` na sessão principal.** O revisor nativo só é confiável
+> ali. Um subagente delegado pode não ter a ferramenta Skill e, mesmo tendo, o
+> `/code-review` roda em segundo plano e reporta depois que o subagente já retornou,
+> então os findings não chegam ao veredito. Um subagente registra
+> `native-review-not-run` em vez de invocá-lo. O revisor nativo complementa a revisão
+> do próprio agente e não a substitui: segue a sua própria receita e pode pular testes
+> e Markdown (spec, plan, tasks).
 
 ### Integridade dos rounds de review
 

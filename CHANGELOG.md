@@ -13,6 +13,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/specops-review` no longer delegates the native reviewer to a subagent
+  ([#87](https://github.com/paulo2nd/specops/issues/87)).** In an adopter run the
+  review ran in a subagent without the Skill tool, recorded `native-review-not-run`
+  on the anchor round, and a corrective round later dismissed it as superseded while
+  running `/code-review` only over the fix delta. The feature reached `DONE` with the
+  native reviewer never having covered its core. A subagent that does have the Skill
+  tool is no better: `/code-review` runs as a background fork and reports after the
+  subagent has returned.
+  - **Step 3a says to run the native reviewer from the main session.** A delegated
+    subagent records `native-review-not-run` (reason `delegated subagent`) instead of
+    invoking it.
+  - **Earlier gaps get closed.** On a corrective round, an open
+    `native-review-not-run` from an earlier round makes the reviewer also run the
+    native reviewer over that round's range. The finding is dismissed only once that
+    range is covered, never as belonging to a superseded round.
+  - **Documented:** README, README.pt-br and `docs/commands.md` state the main-session
+    requirement and that the native reviewer complements the agent's own pass (it may
+    skip tests and Markdown). Installed projects pick it up with
+    `specops extension update`. No CLI, ledger or gate change: SpecOps still does not
+    verify that the native reviewer ran.
+
 ## [0.14.0] - 2026-09-29
 
 ### Added
